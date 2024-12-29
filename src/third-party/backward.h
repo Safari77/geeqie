@@ -162,7 +162,7 @@
 //    - apt-get install binutils-dev
 //    - g++/clang++ -lbfd ...
 //
-#define BACKWARD_HAS_DWARF 1
+#define BACKWARD_HAS_DWARF 0
 //  - libdwarf gives you the most juicy details out of your stack traces:
 //    - object filename
 //    - function name
@@ -253,8 +253,7 @@
 #if BACKWARD_HAS_DWARF == 1
 #include <algorithm>
 #include <dwarf.h>
-#include "/usr/include/libdwarf/libdwarf.h"
-//~ #include <libdwarf.h>
+#include <libdwarf.h>
 #include <libelf.h>
 #include <map>
 #endif

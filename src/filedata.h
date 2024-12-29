@@ -22,10 +22,11 @@
 #ifndef FILEDATA_H
 #define FILEDATA_H
 
+#undef DEBUG_FILEDATA
+
 #include <memory>
 #include <mutex>
 #include <sys/types.h>
-
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 

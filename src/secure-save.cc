@@ -130,14 +130,6 @@ secure_open_umask(const gchar *file_name)
 			/* Not a regular file, secure_save is disabled. */
 			ssi->secure_save = FALSE;
 		} else {
-#if HAVE_ACCESS
-			/* XXX: access() do not work with setuid programs. */
-			if (access(ssi->file_name, R_OK | W_OK) < 0) {
-				ssi->err = errno;
-				secsave_errno = SS_ERR_ACCESS;
-				return nullptr;
-			}
-#else
 			FILE *f1;
 
 			/* We still have a race condition here between
@@ -151,7 +143,6 @@ secure_open_umask(const gchar *file_name)
 				secsave_errno = SS_ERR_OPEN_READ;
 				return nullptr;
 			}
-#endif
 		}
 	}
 

@@ -95,10 +95,10 @@ static void ptr_array_random_shuffle(GPtrArray *array)
 {
 	guint i;
 	for (i = 0; i < array->len; ++i)
-		{
-		guint p = static_cast<double>(rand()) / (static_cast<double>(RAND_MAX) + 1.0) * array->len;
-		std::swap(g_ptr_array_index(array, i), g_ptr_array_index(array, p));
-		}
+	{
+		std::swap(g_ptr_array_index(array, i),
+			  g_ptr_array_index(array, g_random_int_range(0, array->len)));
+	}
 }
 
 static GList *generate_random_list(SlideShowData *ss)

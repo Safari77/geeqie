@@ -2063,13 +2063,12 @@ static gboolean search_file_next(SearchData *sd)
 
 		if (sd->match_date == SEARCH_MATCH_EQUAL)
 			{
-			struct tm *lt;
+			struct tm lt;
 
-			lt = localtime(&file_date);
-			match = (lt &&
-				 lt->tm_year == sd->search_date_y - 1900 &&
-				 lt->tm_mon == sd->search_date_m - 1 &&
-				 lt->tm_mday == sd->search_date_d);
+			match = (localtime_r(&file_date, &lt) &&
+				 lt.tm_year == sd->search_date_y - 1900 &&
+				 lt.tm_mon == sd->search_date_m - 1 &&
+				 lt.tm_mday == sd->search_date_d);
 			}
 		else if (sd->match_date == SEARCH_MATCH_UNDER)
 			{

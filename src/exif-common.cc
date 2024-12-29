@@ -232,7 +232,7 @@ static gchar *exif_build_formatted_DateTime(ExifData *exif)
 	memset(&tm, 0, sizeof(tm)); /* Uh, strptime could let garbage in tm! */
 	if (text && strptime(text, "%Y:%m:%d %H:%M:%S", &tm))
 		{
-		buflen = strftime(buf, sizeof(buf), "%x %X", &tm);
+		buflen = strftime(buf, sizeof(buf), "%F %X", &tm);
 		if (buflen > 0)
 			{
 			tmp = g_locale_to_utf8(buf, buflen, nullptr, nullptr, &error);
@@ -283,7 +283,7 @@ static gchar *exif_build_formatted_DateTimeDigitized(ExifData *exif)
 	memset(&tm, 0, sizeof(tm)); /* Uh, strptime could let garbage in tm! */
 	if (text && strptime(text, "%Y:%m:%d %H:%M:%S", &tm))
 		{
-		buflen = strftime(buf, sizeof(buf), "%x %X", &tm);
+		buflen = strftime(buf, sizeof(buf), "%F %X", &tm);
 		if (buflen > 0)
 			{
 			tmp = g_locale_to_utf8(buf, buflen, nullptr, nullptr, &error);
@@ -786,7 +786,7 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 	GError *error = nullptr;
 	gchar *time_zone_image;
 	gchar *time_zone_org;
-	struct tm *tm_local;
+	struct tm tm_local;
 	struct tm tm_utc;
 	time_t stamp;
 	gchar *exif_date_time = nullptr;
@@ -806,10 +806,10 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 			stamp = mktime(&tm_utc);	// Convert the struct to a Unix timestamp
 			putenv(time_zone_image);	// Switch to destination time zone
 
-			tm_local = localtime(&stamp);
+			localtime_r(&stamp, &tm_local);
 
 			/* Convert to localtime using locale */
-			buflen = strftime(buf, sizeof(buf), "%x %X", tm_local);
+			buflen = strftime(buf, sizeof(buf), "%F %X", &tm_local);
 			if (buflen > 0)
 				{
 				tmp = g_locale_to_utf8(buf, buflen, nullptr, nullptr, &error);
