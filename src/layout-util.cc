@@ -1459,7 +1459,6 @@ static void layout_menu_foreach_func(
 static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 {
 	gint fd = -1;
-	GPtrArray *array;
 	char * tmp_file;
 	GError *error = nullptr;
 	GIOChannel *channel;
@@ -1468,7 +1467,6 @@ static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 	const char *key_name;
 	char *converted_line;
 	int keymap_index;
-	guint index;
 
 	fd = g_file_open_tmp("geeqie_keymap_XXXXXX.svg", &tmp_file, &error);
 	if (error)
@@ -1478,7 +1476,7 @@ static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 		}
 	else
 		{
-		array = g_ptr_array_new();
+		GPtrArray *array = g_ptr_array_new_with_free_func(g_free);
 
 		gtk_accel_map_foreach(array, layout_menu_foreach_func);
 
@@ -1492,9 +1490,8 @@ static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 				pre_key = g_strsplit(keymap_template[keymap_index],">key:",2);
 				post_key = g_strsplit(pre_key[1],"<",2);
 
-				index=0;
 				key_name = " ";
-				for (index=0; index < array->len-2; index=index+2)
+				for (guint index = 0; index < array->len-1; index += 2)
 					{
 					if (!(g_ascii_strcasecmp(static_cast<const gchar *>(g_ptr_array_index(array,index+1)), post_key[0])))
 						{
@@ -1534,12 +1531,6 @@ static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 		if (error) {log_printf("Warning: Keyboard Map:%s\n",error->message); g_error_free(error);}
 		g_io_channel_unref(channel);
 
-		index=0;
-		for (index=0; index < array->len-2; index=index+2)
-			{
-			g_free(g_ptr_array_index(array,index));
-			g_free(g_ptr_array_index(array,index+1));
-			}
 		g_ptr_array_unref(array);
 
 		view_window_new(file_data_new_simple(tmp_file));
@@ -2495,91 +2486,77 @@ static void layout_menu_view_menu_cb(GtkWidget *, gpointer data)
 	g_list_free(children);
 }
 
+static gchar *create_tmp_config_file()
+{
+	gchar *tmp_file;
+	g_autoptr(GError) error = nullptr;
+
+	gint fd = g_file_open_tmp("geeqie_layout_name_XXXXXX.xml", &tmp_file, &error);
+	if (error)
+		{
+		log_printf("Error: Window layout - cannot create file: %s\n", error->message);
+		return nullptr;
+		}
+
+	close(fd);
+
+	return tmp_file;
+}
+
 static void change_window_id(const gchar *infile, const gchar *outfile)
 {
-	GFile *in_file;
-	GFile *out_file;
-	GFileInputStream *in_file_stream;
-	GFileOutputStream *out_file_stream;
-	GDataInputStream *in_data_stream;
-	GDataOutputStream *out_data_stream;
+	g_autoptr(GFile) in_file = g_file_new_for_path(infile);
+	g_autoptr(GFileInputStream) in_file_stream = g_file_read(in_file, nullptr, nullptr);
+	g_autoptr(GDataInputStream) in_data_stream = g_data_input_stream_new(G_INPUT_STREAM(in_file_stream));
+
+	g_autoptr(GFile) out_file = g_file_new_for_path(outfile);
+	g_autoptr(GFileOutputStream) out_file_stream = g_file_append_to(out_file, G_FILE_CREATE_PRIVATE, nullptr, nullptr);
+	g_autoptr(GDataOutputStream) out_data_stream = g_data_output_stream_new(G_OUTPUT_STREAM(out_file_stream));
+
+	g_autofree gchar *id_name = layout_get_unique_id();
+
 	gchar *line;
-	gchar *id_name;
-
-	id_name = layout_get_unique_id();
-
-	in_file = g_file_new_for_path(infile);
-	in_file_stream = g_file_read(in_file, nullptr, nullptr);
-	in_data_stream = g_data_input_stream_new(G_INPUT_STREAM(in_file_stream));
-
-	out_file = g_file_new_for_path(outfile);
-	out_file_stream = g_file_append_to(out_file, G_FILE_CREATE_PRIVATE, nullptr, nullptr);
-	out_data_stream = g_data_output_stream_new(G_OUTPUT_STREAM(out_file_stream));
-
 	while ((line = g_data_input_stream_read_line(in_data_stream, nullptr, nullptr, nullptr)))
 		{
+		g_data_output_stream_put_string(out_data_stream, line, nullptr, nullptr);
+		g_data_output_stream_put_string(out_data_stream, "\n", nullptr, nullptr);
+
 		if (g_str_has_suffix(line, "<layout"))
 			{
-			g_data_output_stream_put_string(out_data_stream, line, nullptr, nullptr);
-			g_data_output_stream_put_string(out_data_stream, "\n", nullptr, nullptr);
 			g_free(line);
-
 			line = g_data_input_stream_read_line(in_data_stream, nullptr, nullptr, nullptr);
+
 			g_data_output_stream_put_string(out_data_stream, "id = \"", nullptr, nullptr);
 			g_data_output_stream_put_string(out_data_stream, id_name, nullptr, nullptr);
 			g_data_output_stream_put_string(out_data_stream, "\"\n", nullptr, nullptr);
 			}
-		else
-			{
-			g_data_output_stream_put_string(out_data_stream, line, nullptr, nullptr);
-			g_data_output_stream_put_string(out_data_stream, "\n", nullptr, nullptr);
-			}
+
 		g_free(line);
 		}
-
-	g_free(id_name);
-	g_object_unref(out_data_stream);
-	g_object_unref(in_data_stream);
-	g_object_unref(out_file_stream);
-	g_object_unref(in_file_stream);
-	g_object_unref(out_file);
-	g_object_unref(in_file);
 }
 
 static void layout_menu_window_from_current_cb(GtkWidget *, gpointer data)
 {
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint fd_in = -1;
-	gint fd_out = -1;
-	char * tmp_file_in;
-	char * tmp_file_out;
-	GError *error = nullptr;
-
-	fd_in = g_file_open_tmp("geeqie_layout_name_XXXXXX.xml", &tmp_file_in, &error);
-	if (error)
+	g_autofree gchar *tmp_file_in = create_tmp_config_file();
+	if (!tmp_file_in)
 		{
-		log_printf("Error: Window layout - cannot create file:%s\n",error->message);
-		g_error_free(error);
 		return;
 		}
-	close(fd_in);
-	fd_out = g_file_open_tmp("geeqie_layout_name_XXXXXX.xml", &tmp_file_out, &error);
-	if (error)
+
+	g_autofree gchar *tmp_file_out = create_tmp_config_file();
+	if (!tmp_file_out)
 		{
-		log_printf("Error: Window layout - cannot create file:%s\n",error->message);
-		g_error_free(error);
+		unlink_file(tmp_file_in);
 		return;
 		}
-	close(fd_out);
 
+	auto *lw = static_cast<LayoutWindow *>(data);
 	save_config_to_file(tmp_file_in, options, lw);
 	change_window_id(tmp_file_in, tmp_file_out);
 	load_config_from_file(tmp_file_out, FALSE);
 
 	unlink_file(tmp_file_in);
 	unlink_file(tmp_file_out);
-	g_free(tmp_file_in);
-	g_free(tmp_file_out);
 }
 
 static void layout_menu_window_cb(GtkWidget *, gpointer data)
