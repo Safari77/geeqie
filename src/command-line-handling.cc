@@ -26,7 +26,6 @@
 #include "collect-io.h"
 #include "collect.h"
 #include "compat.h"
-#include "debug.h"
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
@@ -501,14 +500,12 @@ void gq_fullscreen(GtkApplication *, GApplicationCommandLine *, GVariantDict *, 
 
 void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *command_line_options_dict, GList *)
 {
-	gchar **geometry;
-	gchar *text;
-
+	const gchar *text;
 	g_variant_dict_lookup(command_line_options_dict, "geometry", "&s", &text);
 
 	if (text[0] == '+')
 		{
-		geometry = g_strsplit_set(text, "+", 3);
+		g_auto(GStrv) geometry = g_strsplit_set(text, "+", 3);
 		if (geometry[1] != nullptr && geometry[2] != nullptr )
 			{
 			gq_gtk_window_move(GTK_WINDOW(lw_id->window), atoi(geometry[1]), atoi(geometry[2]));
@@ -516,7 +513,7 @@ void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 		}
 	else
 		{
-		geometry = g_strsplit_set(text, "+x", 4);
+		g_auto(GStrv) geometry = g_strsplit_set(text, "+x", 4);
 		if (geometry[0] != nullptr && geometry[1] != nullptr)
 			{
 			gtk_window_resize(GTK_WINDOW(lw_id->window), atoi(geometry[0]), atoi(geometry[1]));
@@ -527,8 +524,6 @@ void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 			g_idle_add(wait_cb, GINT_TO_POINTER((atoi(geometry[2]) << 16) + atoi(geometry[3])));
 			}
 		}
-
-	g_strfreev(geometry);
 }
 
 void gq_get_collection(GtkApplication *, GApplicationCommandLine *app_command_line, GVariantDict *command_line_options_dict, GList *)
@@ -894,13 +889,10 @@ void gq_log_file(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 void gq_lua(GtkApplication *, GApplicationCommandLine *app_command_line, GVariantDict *command_line_options_dict, GList *)
 {
 #if HAVE_LUA
-	gchar **lua_command;
-
 	const gchar *text;
 	g_variant_dict_lookup(command_line_options_dict, "lua", "&s", &text);
 
-	lua_command = g_strsplit(text, ",", 2);
-
+	g_auto(GStrv) lua_command = g_strsplit(text, ",", 2);
 	if (lua_command[0] && lua_command[1])
 		{
 		FileData *fd = file_data_new_group(lua_command[0]);
@@ -918,8 +910,6 @@ void gq_lua(GtkApplication *, GApplicationCommandLine *app_command_line, GVarian
 		{
 		g_application_command_line_print(app_command_line, _("lua error: no data\n"));
 		}
-
-	g_strfreev(lua_command);
 #else
 	g_application_command_line_print(app_command_line, _("Lua is not available\n"));
 #endif

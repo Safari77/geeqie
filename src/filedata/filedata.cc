@@ -38,7 +38,6 @@
 #include <config.h>
 
 #include "cache.h"
-#include "debug.h"
 #include "exif.h"
 #include "filefilter.h"
 #include "histogram.h"
@@ -1208,17 +1207,30 @@ gchar *FileData::file_data_get_sidecar_path(FileData *fd, gboolean existing_only
 		{
 		auto sfd = static_cast<FileData *>(work->data);
 		work = work->next;
-		if (g_ascii_strcasecmp(sfd->extension, ".xmp") == 0 || g_ascii_strcasecmp(sfd->extension, extended_extension) == 0)
+		if (options->metadata.sidecar_extended_name)
 			{
-			sidecar_path = g_strdup(sfd->path);
-			break;
+			if (g_ascii_strcasecmp(sfd->extension, extended_extension) == 0)
+				{
+				sidecar_path = g_strdup(sfd->path);
+				break;
+				}
+			}
+		else
+			{
+			if (g_ascii_strcasecmp(sfd->extension, ".xmp") == 0)
+				{
+				sidecar_path = g_strdup(sfd->path);
+				break;
+				}
 			}
 		}
 
 	if (!existing_only && !sidecar_path)
 		{
 		if (options->metadata.sidecar_extended_name)
+			{
 			sidecar_path = g_strconcat(fd->path, ".xmp", NULL);
+			}
 		else
 			{
 			g_autofree gchar *base = g_strndup(fd->path, fd->extension - fd->path);

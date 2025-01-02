@@ -40,7 +40,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
 #include "bar.h"
 #include "compat.h"
-#include "debug.h"
 #include "dnd.h"
 #include "filedata.h"
 #include "intl.h"
@@ -152,8 +151,6 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 	gdouble latitude;
 	gdouble longitude;
 	GString *message;
-	gchar *location;
-	gchar **latlong;
 
 	pgd = static_cast<PaneGPSData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!pgd) return;
@@ -240,16 +237,14 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 
 	if (info == TARGET_TEXT_PLAIN)
 		{
-		location = decode_geo_parameters(reinterpret_cast<const gchar *>(gtk_selection_data_get_data(selection_data)));
+		g_autofree gchar *location = decode_geo_parameters(reinterpret_cast<const gchar *>(gtk_selection_data_get_data(selection_data)));
 		if (!(g_strstr_len(location,-1,"Error")))
 			{
-			latlong = g_strsplit(location, " ", 2);
+			g_auto(GStrv) latlong = g_strsplit(location, " ", 2);
 			champlain_view_center_on(CHAMPLAIN_VIEW(pgd->gps_view),
-							g_ascii_strtod(latlong[0],nullptr),
-							g_ascii_strtod(latlong[1],nullptr));
-			g_strfreev(latlong);
+			                         g_ascii_strtod(latlong[0], nullptr),
+			                         g_ascii_strtod(latlong[1], nullptr));
 			}
-		g_free(location);
 		}
 }
 
@@ -309,7 +304,6 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 	ClutterColor marker_colour = { MARKER_COLOUR };
 	ClutterColor text_colour = { TEXT_COLOUR };
 	ClutterColor thumb_colour = { THUMB_COLOUR };
-	gchar *current_text;
 	ClutterActor *actor;
 	ClutterActor *direction;
 	ClutterActor *current_image;
@@ -317,7 +311,6 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 	gint height;
 	gint width;
 	GdkPixbufRotation rotate;
-	gchar *altitude = nullptr;
 	ThumbLoader *tl;
 
 	if (bevent->button == MOUSE_BUTTON_LEFT)
@@ -334,7 +327,7 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 		 	champlain_label_set_image(CHAMPLAIN_LABEL(label_marker), nullptr);
 			}
 
-		current_text = g_strdup(champlain_label_get_text(CHAMPLAIN_LABEL(label_marker)));
+		g_autofree gchar *current_text = g_strdup(champlain_label_get_text(CHAMPLAIN_LABEL(label_marker)));
 
 		/* If the marker is showing only the text character, replace it with a
 		 * thumbnail and date and altitude
@@ -391,7 +384,8 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 			g_string_append(text, "\n");
 			g_string_append(text, text_from_time(fd->date));
 			g_string_append(text, "\n");
-			altitude = metadata_read_string(fd, "formatted.GPSAltitude", METADATA_FORMATTED);
+
+			g_autofree gchar *altitude = metadata_read_string(fd, "formatted.GPSAltitude", METADATA_FORMATTED);
 			if (altitude != nullptr)
 				{
 				g_string_append(text, altitude);
@@ -402,7 +396,6 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 			champlain_marker_set_selection_color(&thumb_colour);
 			champlain_marker_set_selection_text_color(&text_colour);
 
-			g_free(altitude);
 			g_string_free(text, TRUE);
 
 			parent_marker = clutter_actor_get_parent(label_marker);
@@ -428,8 +421,6 @@ gboolean bar_pane_gps_marker_keypress_cb(GtkWidget *widget, ClutterButtonEvent *
 				clutter_actor_set_opacity(direction, 0);
 				}
 			}
-
-		g_free(current_text);
 
 		return TRUE;
 		}
@@ -859,7 +850,6 @@ gboolean bar_pane_gps_map_keypress_cb(GtkWidget *, GdkEventButton *bevent, gpoin
 	auto pgd = static_cast<PaneGPSData *>(data);
 	GtkWidget *menu;
 	GtkClipboard *clipboard;
-	gchar *geo_coords;
 
 	if (bevent->button == MOUSE_BUTTON_RIGHT)
 		{
@@ -877,12 +867,10 @@ gboolean bar_pane_gps_map_keypress_cb(GtkWidget *, GdkEventButton *bevent, gpoin
 	if (bevent->button == MOUSE_BUTTON_LEFT)
 		{
 		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
-		geo_coords = g_strdup_printf("%f %f",
-		                             champlain_view_y_to_latitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->y),
-		                             champlain_view_x_to_longitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->x));
+		g_autofree gchar *geo_coords = g_strdup_printf("%f %f",
+		                                               champlain_view_y_to_latitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->y),
+		                                               champlain_view_x_to_longitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->x));
 		gtk_clipboard_set_text(clipboard, geo_coords, -1);
-
-		g_free(geo_coords);
 
 		return TRUE;
 		}
@@ -926,7 +914,6 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	ChamplainMarkerLayer *layer;
 	ChamplainView *view;
 	const gchar *slider_list[] = {GQ_ICON_ZOOM_IN, GQ_ICON_ZOOM_OUT, nullptr};
-	const gchar **slider_icons = slider_list;
 
 	pgd = g_new0(PaneGPSData, 1);
 
@@ -952,9 +939,10 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 
 	status = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
 #if HAVE_GTK4
+	const gchar **slider_icons = slider_list;
 	slider = gtk_scale_button_new(1, 17, 1, slider_icons);
 #else
-	slider = gtk_scale_button_new(GTK_ICON_SIZE_SMALL_TOOLBAR, 1, 17, 1, slider_icons);
+	slider = gtk_scale_button_new(GTK_ICON_SIZE_SMALL_TOOLBAR, 1, 17, 1, slider_list);
 #endif
 	gtk_widget_set_tooltip_text(slider, _("Zoom"));
 	gtk_scale_button_set_value(GTK_SCALE_BUTTON(slider), static_cast<gdouble>(zoom));
@@ -1019,8 +1007,8 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 
 GtkWidget *bar_pane_gps_new_from_config(const gchar **attribute_names, const gchar **attribute_values)
 {
-	gchar *title = g_strdup(_("GPS Map"));
-	gchar *map_id = nullptr;
+	g_autofree gchar *title = g_strdup(_("GPS Map"));
+	g_autofree gchar *map_id = nullptr;
 	gboolean expanded = TRUE;
 	gint height = 350;
 	gint zoom = 7;
@@ -1031,8 +1019,7 @@ GtkWidget *bar_pane_gps_new_from_config(const gchar **attribute_names, const gch
 	 */
 	gint int_latitude = 54000000;
 	gint int_longitude = -4000000;
-	gchar *id = g_strdup("gps");
-	GtkWidget *ret;
+	g_autofree gchar *id = g_strdup("gps");
 
 	while (*attribute_names)
 		{
@@ -1062,11 +1049,8 @@ GtkWidget *bar_pane_gps_new_from_config(const gchar **attribute_names, const gch
 	bar_pane_translate_title(PANE_COMMENT, id, &title);
 	latitude = static_cast<gdouble>(int_latitude) / 1000000;
 	longitude = static_cast<gdouble>(int_longitude) / 1000000;
-	ret = bar_pane_gps_new(id, title, map_id, zoom, latitude, longitude, expanded, height);
-	g_free(title);
-	g_free(map_id);
-	g_free(id);
-	return ret;
+
+	return bar_pane_gps_new(id, title, map_id, zoom, latitude, longitude, expanded, height);
 }
 
 void bar_pane_gps_update_from_config(GtkWidget *pane, const gchar **attribute_names,
@@ -1083,7 +1067,7 @@ void bar_pane_gps_update_from_config(GtkWidget *pane, const gchar **attribute_na
 	if (!pgd)
 		return;
 
-	gchar *title = nullptr;
+	g_autofree gchar *title = nullptr;
 
 	while (*attribute_names)
 	{
@@ -1125,7 +1109,6 @@ void bar_pane_gps_update_from_config(GtkWidget *pane, const gchar **attribute_na
 		{
 		bar_pane_translate_title(PANE_COMMENT, pgd->pane.id, &title);
 		gtk_label_set_text(GTK_LABEL(pgd->pane.title), title);
-		g_free(title);
 		}
 
 	gtk_widget_set_size_request(pgd->widget, -1, pgd->height);

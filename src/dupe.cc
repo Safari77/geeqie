@@ -37,7 +37,6 @@
 #include "collect-table.h"
 #include "collect.h"
 #include "compat.h"
-#include "debug.h"
 #include "dnd.h"
 #include "filedata.h"
 #include "history-list.h"
@@ -5103,7 +5102,6 @@ static void export_duplicates_data_save_cb(FileDialog *fdlg, gpointer data)
 	GList *work;
 	GtkTreeSelection *selection;
 	GList *slist;
-	gchar **rank_split;
 	GtkTreePath *tpath;
 	gboolean color_old = FALSE;
 	gboolean color_new = FALSE;
@@ -5165,7 +5163,7 @@ static void export_duplicates_data_save_cb(FileDialog *fdlg, gpointer data)
 
 		g_autofree gchar *rank = nullptr;
 		gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, DUPE_COLUMN_RANK, &rank, -1);
-		rank_split = g_strsplit_set(rank, " [(", -1);
+		g_auto(GStrv) rank_split = g_strsplit_set(rank, " [(", -1);
 		if (rank_split[0] == nullptr)
 			{
 			output_string = g_string_append(output_string, "");
@@ -5175,7 +5173,6 @@ static void export_duplicates_data_save_cb(FileDialog *fdlg, gpointer data)
 			output_string = g_string_append(output_string, rank_split[0]);
 			}
 		output_string = g_string_append(output_string, sep);
-		g_strfreev(rank_split);
 
 		g_string_append_printf(output_string, "%d", di->second + 1);
 		output_string = g_string_append(output_string, sep);
