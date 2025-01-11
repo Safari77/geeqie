@@ -1886,7 +1886,7 @@ static void star_rating_rejected_icon_cb(GtkEntry *, GtkEntryIconPosition pos, G
 static guint star_rating_symbol_test(GtkWidget *, gpointer data)
 {
 	auto hbox = static_cast<GtkContainer *>(data);
-	GString *str = g_string_new(nullptr);
+	g_autoptr(GString) str = g_string_new(nullptr);
 	GtkEntry *hex_code_entry;
 	GList *list;
 	guint64 hex_value = 0;
@@ -1908,8 +1908,6 @@ static guint star_rating_symbol_test(GtkWidget *, gpointer data)
 		}
 	str = g_string_append_unichar(str, static_cast<gunichar>(hex_value));
 	gtk_label_set_text(static_cast<GtkLabel *>(g_list_nth_data(list, 1)), str->str);
-
-	g_string_free(str, TRUE);
 
 	return hex_value;
 }
@@ -1959,7 +1957,6 @@ static void config_tab_general(GtkWidget *notebook)
 	gint remainder;
 	gdouble seconds;
 	GtkWidget *star_rating_entry;
-	GString *str;
 	GNetworkMonitor *net_mon;
 	GSocketConnectable *tz_org;
 	gboolean internet_available = FALSE;
@@ -2029,11 +2026,11 @@ static void config_tab_general(GtkWidget *notebook)
 	c_options->star_rating.star = options->star_rating.star;
 	c_options->star_rating.rejected = options->star_rating.rejected;
 
-	str = g_string_new(nullptr);
+	g_autoptr(GString) star_str = g_string_new(nullptr);
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(hbox, _("Star character: "));
-	str = g_string_append_unichar(str, options->star_rating.star);
-	pref_label_new(hbox, g_strdup(str->str));
+	star_str = g_string_append_unichar(star_str, options->star_rating.star);
+	pref_label_new(hbox, star_str->str);
 	g_autofree gchar *star_rating_symbol = g_strdup_printf("U+%X", options->star_rating.star);
 	star_rating_entry = gtk_entry_new();
 	gq_gtk_entry_set_text(GTK_ENTRY(star_rating_entry), star_rating_symbol);
@@ -2058,13 +2055,11 @@ static void config_tab_general(GtkWidget *notebook)
 						G_CALLBACK(star_rating_star_icon_cb),
 						star_rating_entry);
 
-	g_string_free(str, TRUE);
-
-	str = g_string_new(nullptr);
+	g_autoptr(GString) rejected_str = g_string_new(nullptr);
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(hbox, _("Rejected character: "));
-	str = g_string_append_unichar(str, options->star_rating.rejected);
-	pref_label_new(hbox, g_strdup(str->str));
+	rejected_str = g_string_append_unichar(rejected_str, options->star_rating.rejected);
+	pref_label_new(hbox, rejected_str->str);
 	g_autofree gchar *rejected_rating_symbol = g_strdup_printf("U+%X", options->star_rating.rejected);
 	star_rating_entry = gtk_entry_new();
 	gq_gtk_entry_set_text(GTK_ENTRY(star_rating_entry), rejected_rating_symbol);
@@ -2088,8 +2083,6 @@ static void config_tab_general(GtkWidget *notebook)
 	g_signal_connect(GTK_ENTRY(star_rating_entry), "icon-press",
 						G_CALLBACK(star_rating_rejected_icon_cb),
 						star_rating_entry);
-
-	g_string_free(str, TRUE);
 
 	pref_spacer(group, PREF_PAD_GROUP);
 
@@ -4100,7 +4093,6 @@ void show_about_window(LayoutWindow *lw)
 	GDataInputStream *data_stream;
 	GInputStream *in_stream_authors;
 	GInputStream *in_stream_translators;
-	GString *copyright;
 	ZoneDetect *cd;
 	gchar *author_line;
 	gchar *authors[1000];
@@ -4111,7 +4103,7 @@ void show_about_window(LayoutWindow *lw)
 	gsize size;
 	guint32 flags;
 
-	copyright = g_string_new(_("This program comes with absolutely no warranty.\nGNU General Public License, version 2 or later.\nSee https://www.gnu.org/licenses/old-licenses/gpl-2.0.html\n\n"));
+	g_autoptr(GString) copyright = g_string_new(_("This program comes with absolutely no warranty.\nGNU General Public License, version 2 or later.\nSee https://www.gnu.org/licenses/old-licenses/gpl-2.0.html\n\n"));
 
 	g_autofree gchar *timezone_path = g_build_filename(get_rc_dir(), TIMEZONE_DATABASE_FILE, NULL);
 	if (g_file_test(timezone_path, G_FILE_TEST_EXISTS))
@@ -4178,8 +4170,6 @@ void show_about_window(LayoutWindow *lw)
 	                      "license", copyright->str,
 	                      NULL);
 
-	g_string_free(copyright, TRUE);
-
 	while(n < i_authors)
 		{
 		g_free(authors[n]);
@@ -4211,7 +4201,6 @@ static void image_overlay_set_text_colors()
 
 static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, gpointer data)
 {
-	GError *error = nullptr;
 	auto tz = static_cast<TZData *>(data);
 	FileData *fd;
 
@@ -4220,6 +4209,7 @@ static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, g
 		generic_dialog_close(tz->gd);
 		}
 
+	g_autoptr(GError) error = nullptr;
 	if (g_file_copy_finish(G_FILE(source_object), res, &error))
 		{
 		g_autofree gchar *tmp_filename = g_file_get_path(tz->tmp_g_file);
@@ -4251,7 +4241,7 @@ static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, g
 		file_util_warning_dialog(_("Error: Timezone database download failed"), error->message, GQ_ICON_DIALOG_ERROR, nullptr);
 		}
 
-	g_file_delete(tz->tmp_g_file, nullptr, &error);
+	g_file_delete(tz->tmp_g_file, nullptr, nullptr);
 	g_object_unref(tz->tmp_g_file);
 	tz->tmp_g_file = nullptr;
 	g_object_unref(tz->cancellable);
@@ -4278,7 +4268,6 @@ static void timezone_cancel_button_cb(GenericDialog *, gpointer data)
 static void timezone_database_install_cb(GtkWidget *widget, gpointer data)
 {
 	auto tz = static_cast<TZData *>(data);
-	GError *error = nullptr;
 	GFileIOStream *io_stream;
 
 	if (tz->tmp_g_file)
@@ -4286,13 +4275,13 @@ static void timezone_database_install_cb(GtkWidget *widget, gpointer data)
 		return;
 		}
 
+	g_autoptr(GError) error = nullptr;
 	tz->tmp_g_file = g_file_new_tmp("geeqie_timezone_XXXXXX", &io_stream, &error);
 
 	if (error)
 		{
 		file_util_warning_dialog(_("Timezone database download failed"), error->message, GQ_ICON_DIALOG_ERROR, nullptr);
 		log_printf("Error: Download timezone database failed:\n%s", error->message);
-		g_error_free(error);
 		g_object_unref(tz->tmp_g_file);
 		}
 	else

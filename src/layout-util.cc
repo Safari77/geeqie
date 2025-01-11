@@ -637,7 +637,7 @@ static void layout_menu_write_rotate(GtkToggleAction *, gpointer data, gboolean 
 			}
 		else
 			{
-			GString *message = g_string_new(_("Operation failed:\n"));
+			g_autoptr(GString) message = g_string_new(_("Operation failed:\n"));
 
 			if (run_result == 1)
 				message = g_string_append(message, _("No file extension\n"));
@@ -659,8 +659,6 @@ static void layout_menu_write_rotate(GtkToggleAction *, gpointer data, gboolean 
 			generic_dialog_add_button(gd, GQ_ICON_OK, "OK", nullptr, TRUE);
 
 			gtk_widget_show(gd->dialog);
-
-			g_string_free(message, TRUE);
 			}
 	});
 }
@@ -986,13 +984,12 @@ static void open_with_response_cb(GtkDialog *, gint response_id, gpointer data)
 
 	if (response_id == GTK_RESPONSE_OK)
 		{
-		GError *error = nullptr;
+		g_autoptr(GError) error = nullptr;
 		g_app_info_launch(open_with_data->application, open_with_data->g_file_list, nullptr, &error);
 
 		if (error)
 			{
 			log_printf("Error launching app: %s\n", error->message);
-			g_error_free(error);
 			}
 		}
 
@@ -1010,15 +1007,14 @@ static void open_with_application_selected_cb(GtkAppChooserWidget *, GAppInfo *a
 
 static void open_with_application_activated_cb(GtkAppChooserWidget *, GAppInfo *application, gpointer data)
 {
-	GError *error = nullptr;
 	auto open_with_data = static_cast<OpenWithData *>(data);
 
+	g_autoptr(GError) error = nullptr;
 	g_app_info_launch(application, open_with_data->g_file_list, nullptr, &error);
 
 	if (error)
 		{
 		log_printf("Error launching app.: %s\n", error->message);
-		g_error_free(error);
 		}
 
 	open_with_data_free(open_with_data);
@@ -1447,78 +1443,78 @@ static void layout_menu_foreach_func(
 	g_ptr_array_add(array, key_name);
 }
 
+static gchar *convert_template_line(const gchar *template_line, const GPtrArray *keyboard_map_array)
+{
+	if (!g_strrstr(template_line, ">key:"))
+		{
+		return g_strdup_printf("%s\n", template_line);
+		}
+
+	g_auto(GStrv) pre_key = g_strsplit(template_line, ">key:", 2);
+	g_auto(GStrv) post_key = g_strsplit(pre_key[1], "<", 2);
+
+	const gchar *key_name = post_key[0];
+	const gchar *menu_name = " ";
+	for (guint index = 0; index < keyboard_map_array->len-1; index += 2)
+		{
+		if (!g_ascii_strcasecmp(static_cast<const gchar *>(g_ptr_array_index(keyboard_map_array, index+1)), key_name))
+			{
+			menu_name = static_cast<const gchar *>(g_ptr_array_index(keyboard_map_array, index+0));
+			break;
+			}
+		}
+
+	for (const auto &m : keyboard_map_hardcoded)
+		{
+		if (!g_strcmp0(m.key_name, key_name))
+			{
+			menu_name = m.menu_name;
+			break;
+			}
+		}
+
+	return g_strconcat(pre_key[0], ">", menu_name, "<", post_key[1], "\n", NULL);
+}
+
+static void convert_keymap_template_to_file(const gint fd, const GPtrArray *keyboard_map_array)
+{
+	g_autoptr(GIOChannel) channel = g_io_channel_unix_new(fd);
+
+	int keymap_index = 0;
+	while (keymap_template[keymap_index])
+		{
+		g_autofree gchar *converted_line = convert_template_line(keymap_template[keymap_index], keyboard_map_array);
+
+		g_autoptr(GError) error = nullptr;
+		g_io_channel_write_chars(channel, converted_line, -1, nullptr, &error);
+		if (error) log_printf("Warning: Keyboard Map:%s\n", error->message);
+
+		keymap_index++;
+		}
+
+	g_autoptr(GError) error = nullptr;
+	g_io_channel_flush(channel, &error);
+	if (error) log_printf("Warning: Keyboard Map:%s\n", error->message);
+}
+
 static void layout_menu_kbd_map_cb(GtkAction *, gpointer)
 {
-	gint fd = -1;
 	g_autofree gchar *tmp_file = nullptr;
-	GError *error = nullptr;
-	GIOChannel *channel;
-	int keymap_index;
+	g_autoptr(GError) error = nullptr;
 
-	fd = g_file_open_tmp("geeqie_keymap_XXXXXX.svg", &tmp_file, &error);
+	const gint fd = g_file_open_tmp("geeqie_keymap_XXXXXX.svg", &tmp_file, &error);
 	if (error)
 		{
-		log_printf("Error: Keyboard Map - cannot create file:%s\n",error->message);
-		g_error_free(error);
+		log_printf("Error: Keyboard Map - cannot create file:%s\n", error->message);
+		return;
 		}
-	else
-		{
-		GPtrArray *array = g_ptr_array_new_with_free_func(g_free);
 
-		gtk_accel_map_foreach(array, layout_menu_foreach_func);
+	g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func(g_free);
+	gtk_accel_map_foreach(array, layout_menu_foreach_func);
 
-		channel = g_io_channel_unix_new(fd);
+	convert_keymap_template_to_file(fd, array);
 
-		keymap_index = 0;
-		while (keymap_template[keymap_index])
-			{
-			if (g_strrstr(keymap_template[keymap_index], ">key:"))
-				{
-				g_auto(GStrv) pre_key = g_strsplit(keymap_template[keymap_index], ">key:", 2);
-				g_auto(GStrv) post_key = g_strsplit(pre_key[1], "<", 2);
-
-				const gchar *key_name = post_key[0];
-				const gchar *menu_name = " ";
-				for (guint index = 0; index < array->len-1; index += 2)
-					{
-					if (!g_ascii_strcasecmp(static_cast<const gchar *>(g_ptr_array_index(array, index+1)), key_name))
-						{
-						menu_name = static_cast<const gchar *>(g_ptr_array_index(array, index+0));
-						break;
-						}
-					}
-
-				for (const auto& m : keyboard_map_hardcoded)
-					{
-					if (!g_strcmp0(m.key_name, key_name))
-						{
-						menu_name = m.menu_name;
-						break;
-						}
-					}
-
-				g_autofree gchar *converted_line = g_strconcat(pre_key[0], ">", menu_name, "<", post_key[1], "\n", NULL);
-				g_io_channel_write_chars(channel, converted_line, -1, nullptr, &error);
-				if (error) {log_printf("Warning: Keyboard Map:%s\n",error->message); g_error_free(error);}
-				}
-			else
-				{
-				g_io_channel_write_chars(channel, keymap_template[keymap_index], -1, nullptr, &error);
-				if (error) {log_printf("Warning: Keyboard Map:%s\n",error->message); g_error_free(error);}
-				g_io_channel_write_chars(channel, "\n", -1, nullptr, &error);
-				if (error) {log_printf("Warning: Keyboard Map:%s\n",error->message); g_error_free(error);}
-				}
-			keymap_index++;
-			}
-
-		g_io_channel_flush(channel, &error);
-		if (error) {log_printf("Warning: Keyboard Map:%s\n",error->message); g_error_free(error);}
-		g_io_channel_unref(channel);
-
-		g_ptr_array_unref(array);
-
-		view_window_new(file_data_new_simple(tmp_file));
-		}
+	view_window_new(file_data_new_simple(tmp_file));
 }
 
 static void layout_menu_about_cb(GtkAction *, gpointer data)
@@ -2854,8 +2850,7 @@ static void layout_actions_setup_mark(LayoutWindow *lw, gint mark, const gchar *
 static void layout_actions_setup_marks(LayoutWindow *lw)
 {
 	gint mark;
-	GError *error;
-	GString *desc = g_string_new(
+	g_autoptr(GString) desc = g_string_new(
 				"<ui>"
 				"  <menubar name='MainMenu'>");
 
@@ -2916,14 +2911,12 @@ static void layout_actions_setup_marks(LayoutWindow *lw)
 		}
 	g_string_append(desc,   "</ui>" );
 
-	error = nullptr;
+	g_autoptr(GError) error = nullptr;
 	if (!gq_gtk_ui_manager_add_ui_from_string(lw->ui_manager, desc->str, -1, &error))
 		{
 		g_message("building menus failed: %s", error->message);
-		g_error_free(error);
 		exit(EXIT_FAILURE);
 		}
-	g_string_free(desc, TRUE);
 }
 
 static GList *layout_actions_editor_menu_path(EditorDescription *editor)
@@ -3005,11 +2998,9 @@ static void layout_actions_editor_add(GString *desc, GList *path, GList *old_pat
 
 static void layout_actions_setup_editors(LayoutWindow *lw)
 {
-	GError *error;
 	GList *editors_list;
 	GList *work;
 	GList *old_path;
-	GString *desc;
 
 	if (lw->ui_editors_id)
 		{
@@ -3025,7 +3016,7 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 	gq_gtk_ui_manager_insert_action_group(lw->ui_manager, lw->action_group_editors, 1);
 
 	/* lw->action_group_editors contains translated entries, no translate func is required */
-	desc = g_string_new(
+	g_autoptr(GString) desc = g_string_new(
 				"<ui>"
 				"  <menubar name='MainMenu'>");
 
@@ -3098,19 +3089,19 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 		g_string_append(desc, "</menu>");
 		}
 
-	g_string_append(desc,"  </menubar>"
-				"</ui>" );
+	g_string_append(desc,
+	                "  </menubar>"
+	                "</ui>" );
 
-	error = nullptr;
+	g_autoptr(GError) error = nullptr;
 
 	lw->ui_editors_id = gq_gtk_ui_manager_add_ui_from_string(lw->ui_manager, desc->str, -1, &error);
 	if (!lw->ui_editors_id)
 		{
 		g_message("building menus failed: %s", error->message);
-		g_error_free(error);
 		exit(EXIT_FAILURE);
 		}
-	g_string_free(desc, TRUE);
+
 	g_list_free(editors_list);
 }
 
@@ -3128,8 +3119,6 @@ void create_toolbars(LayoutWindow *lw)
 
 void layout_actions_setup(LayoutWindow *lw)
 {
-	GError *error;
-
 	DEBUG_1("%s layout_actions_setup: start", get_exec_time());
 	if (lw->ui_manager) return;
 
@@ -3171,12 +3160,11 @@ void layout_actions_setup(LayoutWindow *lw)
 	gq_gtk_ui_manager_insert_action_group(lw->ui_manager, lw->action_group, 0);
 
 	DEBUG_1("%s layout_actions_setup: add menu", get_exec_time());
-	error = nullptr;
+	g_autoptr(GError) error = nullptr;
 
 	if (!gq_gtk_ui_manager_add_ui_from_resource(lw->ui_manager, options->hamburger_menu ? GQ_RESOURCE_PATH_UI "/menu-hamburger.ui" : GQ_RESOURCE_PATH_UI "/menu-classic.ui" , &error))
 		{
 		g_message("building menus failed: %s", error->message);
-		g_error_free(error);
 		exit(EXIT_FAILURE);
 		}
 

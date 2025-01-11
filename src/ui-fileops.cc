@@ -79,7 +79,6 @@ static void encoding_dialog(const gchar *path)
 {
 	static gboolean warned_user = FALSE;
 	GenericDialog *gd;
-	GString *string;
 	const gchar *lc;
 	const gchar *bf;
 
@@ -89,7 +88,7 @@ static void encoding_dialog(const gchar *path)
 	lc = getenv("LANG");
 	bf = getenv("G_BROKEN_FILENAMES");
 
-	string = g_string_new(_("One or more filenames are not encoded with the preferred locale character set.\n"));
+	g_autoptr(GString) string = g_string_new(_("One or more filenames are not encoded with the preferred locale character set.\n"));
 	g_string_append_printf(string, _("Operations on, and display of these files with %s may not succeed.\n"), PACKAGE);
 	g_string_append(string, "\n");
 	g_string_append(string, _("If your filenames are not encoded in utf-8, try setting the environment variable G_BROKEN_FILENAMES=1\n"));
@@ -120,8 +119,6 @@ static void encoding_dialog(const gchar *path)
 				   _("Filename encoding locale mismatch"), string->str, TRUE);
 
 	gtk_widget_show(gd->dialog);
-
-	g_string_free(string, TRUE);
 }
 
 #if GQ_DEBUG_PATH_UTF8
@@ -131,10 +128,10 @@ gchar *path_to_utf8(const gchar *path)
 #endif
 {
 	gchar *utf8;
-	GError *error = nullptr;
 
 	if (!path) return nullptr;
 
+	g_autoptr(GError) error = nullptr;
 	utf8 = g_filename_to_utf8(path, -1, nullptr, nullptr, &error);
 	if (error)
 		{
@@ -143,9 +140,9 @@ gchar *path_to_utf8(const gchar *path)
 #else
 		log_printf("Unable to convert filename to UTF-8:\n%s\n%s\n", path, error->message);
 #endif
-		g_error_free(error);
 		encoding_dialog(path);
 		}
+
 	if (!utf8)
 		{
 		/* just let it through, but bad things may happen */
@@ -162,10 +159,10 @@ gchar *path_from_utf8(const gchar *utf8)
 #endif
 {
 	gchar *path;
-	GError *error = nullptr;
 
 	if (!utf8) return nullptr;
 
+	g_autoptr(GError) error = nullptr;
 	path = g_filename_from_utf8(utf8, -1, nullptr, nullptr, &error);
 	if (error)
 		{
@@ -174,8 +171,8 @@ gchar *path_from_utf8(const gchar *utf8)
 #else
 		log_printf("Unable to convert filename to locale from UTF-8:\n%s\n%s\n", utf8, error->message);
 #endif
-		g_error_free(error);
 		}
+
 	if (!path)
 		{
 		/* if invalid UTF-8, text probably still in original form, so just copy it */
@@ -832,7 +829,6 @@ struct WebData
 
 static void web_file_async_ready_cb(GObject *source_object, GAsyncResult *res, gpointer data)
 {
-	GError *error = nullptr;
 	auto web = static_cast<WebData *>(data);
 
 	if (!g_cancellable_is_cancelled(web->cancellable))
@@ -840,6 +836,7 @@ static void web_file_async_ready_cb(GObject *source_object, GAsyncResult *res, g
 		generic_dialog_close(web->gd);
 		}
 
+	g_autoptr(GError) error = nullptr;
 	if (g_file_copy_finish(G_FILE(source_object), res, &error))
 		{
 		g_autofree gchar *tmp_filename = g_file_get_parse_name(web->tmp_g_file); // @todo Is it required?

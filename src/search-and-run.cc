@@ -63,7 +63,6 @@ static void command_store_populate(SarData* sar)
 	GtkAccelKey key;
 	GtkTreeIter iter;
 	GtkTreeSortable *sortable;
-	GString *new_command;
 	gboolean iter_found;
 	gboolean duplicate_command;
 
@@ -106,7 +105,7 @@ static void command_store_populate(SarData* sar)
 
 					g_autofree gchar *accel = gtk_accelerator_get_label(key.accel_key, key.accel_mods);
 
-					new_command = g_string_new(nullptr);
+					g_autoptr(GString) new_command = g_string_new(nullptr);
 					if (!tooltip || g_strcmp0(label, tooltip) == 0)
 						{
 						g_string_append_printf(new_command, "%s : <b>%s</b>",label, accel);
@@ -139,7 +138,6 @@ static void command_store_populate(SarData* sar)
 								SAR_ACTION, action,
 								-1);
 						}
-					g_string_free(new_command, TRUE);
 					}
 				}
 			actions = actions->next;
@@ -220,9 +218,7 @@ static gboolean match_func(GtkEntryCompletion *completion, const gchar *key, Gtk
 	GtkTreeModel *model;
 	GtkAction *action;
 	gchar *label;
-	GString *reg_exp_str;
 	GRegex *reg_exp;
-	GError *error = nullptr;
 
 	model = gtk_entry_completion_get_model(completion);
 	gtk_tree_model_get(GTK_TREE_MODEL(model), iter, SAR_LABEL, &label, -1);
@@ -230,15 +226,14 @@ static gboolean match_func(GtkEntryCompletion *completion, const gchar *key, Gtk
 
 	g_autofree gchar *normalized = g_utf8_normalize(label, -1, G_NORMALIZE_DEFAULT);
 
-	reg_exp_str = g_string_new("\\b(\?=.*:)");
+	g_autoptr(GString) reg_exp_str = g_string_new("\\b(\?=.*:)");
 	reg_exp_str = g_string_append(reg_exp_str, key);
 
+	g_autoptr(GError) error = nullptr;
 	reg_exp = g_regex_new(reg_exp_str->str, G_REGEX_CASELESS, static_cast<GRegexMatchFlags>(0), &error);
 	if (error)
 		{
 		log_printf("Error: could not compile regular expression %s\n%s\n", reg_exp_str->str, error->message);
-		g_error_free(error);
-		error = nullptr;
 		reg_exp = g_regex_new("", static_cast<GRegexCompileFlags>(0), static_cast<GRegexMatchFlags>(0), nullptr);
 		}
 
@@ -251,7 +246,6 @@ static gboolean match_func(GtkEntryCompletion *completion, const gchar *key, Gtk
 		}
 
 	g_regex_unref(reg_exp);
-	g_string_free(reg_exp_str, TRUE);
 
 	return ret;
 }
