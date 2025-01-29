@@ -22,6 +22,8 @@
 #ifndef JPEG_PARSER_H
 #define JPEG_PARSER_H
 
+#include <vector>
+
 #include <glib.h>
 
 #define JPEG_MARKER		0xFF
@@ -45,8 +47,8 @@
 gboolean is_jpeg_container(const guchar *data, guint size);
 
 gboolean jpeg_segment_find(const guchar *data, guint size,
-			    guchar app_marker, const gchar *magic, guint magic_len,
-			    guint *seg_offset, guint *seg_length);
+                           guchar app_marker, const gchar *magic, guint magic_len,
+                           guint &seg_offset, guint &seg_length);
 
 
 struct MPOEntry {
@@ -82,11 +84,10 @@ struct MPOData {
 
 	guint version;
 	guint num_images;
-	MPOEntry *images;
+	std::vector<MPOEntry> images;
 };
 
-MPOData* jpeg_get_mpo_data(const guchar *data, guint size);
-void jpeg_mpo_data_free(MPOData *mpo);
+MPOData jpeg_get_mpo_data(const guchar *data, guint size);
 
 #endif
 
