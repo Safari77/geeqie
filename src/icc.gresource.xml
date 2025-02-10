@@ -1,8 +1,9 @@
-/*
- * Copyright (C) 2020 Andreas Rönnquist <andreas@ronnquist.net>
- * Copyright (C) 2020 The Geeqie Team
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ /*
+ * Copyright (C) 2023 The Geeqie Team
  *
- * Author: John Ellis
+ * Author: Colin Clark
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,9 +19,10 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#ifndef KEYMAP_TEMPLATE_H
-#define KEYMAP_TEMPLATE_H
+-->
 
-extern const char *keymap_template [];
-
-#endif
+<gresources>
+  <gresource prefix="/org/geeqie/icc">
+    <file>ClayRGB1998.icc</file>
+  </gresource>
+</gresources>
