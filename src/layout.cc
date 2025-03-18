@@ -595,7 +595,7 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 	gtk_paned_add2(GTK_PANED(box_folders), lw->dir_view);
 	gtk_widget_show(lw->dir_view);
 
-	scd = shortcuts_new_default(lw);
+	scd = shortcuts_new(lw);
 	DEBUG_NAME(scd);
 	gtk_paned_add1(GTK_PANED(box_folders), scd);
 	gtk_paned_set_position(GTK_PANED(box_folders), lw->options.folder_window.vdivider_pos);
@@ -648,12 +648,6 @@ static void layout_sort_menu_case_cb(GtkWidget *, gpointer data)
 	layout_sort_set_files(lw, lw->options.file_view_list_sort.method, lw->options.file_view_list_sort.ascend, !lw->options.file_view_list_sort.case_sensitive);
 }
 
-static void layout_sort_menu_hide_cb(GtkWidget *widget, gpointer)
-{
-	/* destroy the menu */
-	g_object_unref(widget);
-}
-
 static void layout_sort_button_press_cb(GtkWidget *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
@@ -670,7 +664,7 @@ static void layout_sort_button_press_cb(GtkWidget *, gpointer data)
 	menu_item_add_check(menu, _("Case"), lw->options.file_view_list_sort.case_sensitive, G_CALLBACK(layout_sort_menu_case_cb), lw);
 
 	g_signal_connect(G_OBJECT(menu), "selection_done",
-			 G_CALLBACK(layout_sort_menu_hide_cb), NULL);
+	                 G_CALLBACK(g_object_unref), NULL); // destroy the menu
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 }
@@ -724,12 +718,6 @@ static void layout_scroll_menu_cb(GtkWidget *widget, gpointer data)
 	image_options_sync();
 }
 
-static void layout_zoom_menu_hide_cb(GtkWidget *widget, gpointer)
-{
-	/* destroy the menu */
-	g_object_unref(widget);
-}
-
 static void layout_zoom_button_press_cb(GtkWidget *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
@@ -760,7 +748,7 @@ static void layout_zoom_button_press_cb(GtkWidget *, gpointer data)
 	                    GUINT_TO_POINTER(ScrollReset::NOCHANGE));
 
 	g_signal_connect(G_OBJECT(menu), "selection_done",
-			 G_CALLBACK(layout_zoom_menu_hide_cb), NULL);
+	                 G_CALLBACK(g_object_unref), NULL); // destroy the menu
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 }
