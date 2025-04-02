@@ -672,11 +672,10 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 {
 	gchar buf[128];
 	gint buflen;
-	GError *error = nullptr;
-	struct tm tm_local = {0};
-	struct tm tm_utc = {0};
-	struct tm tm_gmt_res = {0};
-	struct tm tm_loc_res = {0};
+	struct tm tm_local{};
+	struct tm tm_utc{};
+	struct tm tm_gmt_res{};
+	struct tm tm_loc_res{};
 	time_t utc_stamp, local_stamp;
 	double utc_offset;
 	gchar *exif_date_time = nullptr;
