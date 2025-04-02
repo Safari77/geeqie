@@ -60,6 +60,9 @@ struct SortData
 	GtkWidget *bookmarks;
 	LayoutWindow *lw;
 
+	gchar *name;
+	GtkPopover *name_popover;
+
 	FileDialog *dialog;
 	GtkWidget *dialog_name_entry;
 
@@ -540,33 +543,25 @@ static void bar_sort_add_response_cb(GtkFileChooser *chooser, gint response_id, 
 		{
 		if (sd->mode == BAR_SORT_MODE_FOLDER)
 			{
-			GList *list = gtk_container_get_children(GTK_CONTAINER(gtk_file_chooser_get_extra_widget(chooser)));
+			gboolean empty_name = (sd->name == nullptr);
 
-			GList *work = list;
-			g_autofree gchar *name = nullptr;
+			g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+			g_autofree gchar *selected_dir = g_file_get_path(file);
 
-			while (work)
-				{
-				if (GTK_IS_ENTRY(work->data))
-					{
-					name = g_strdup(gtk_entry_get_text(GTK_ENTRY(work->data)));
-					break;
-					}
+			bookmark_list_add(sd->bookmarks, empty_name ? filename_from_path(selected_dir) : sd->name, selected_dir);
 
-				work = work->next;
-				}
-
-			g_list_free(list);
-
-			g_autofree gchar *selected_directory = gtk_file_chooser_get_filename(chooser);
-
-			if (strlen(name) == 0)
-				{
-				name = g_strdup(filename_from_path(selected_directory));
-				}
-
-			bookmark_list_add(sd->bookmarks, name, selected_directory);
+			g_free(sd->name);
+			sd->name = nullptr;
 			}
+		}
+
+	if (response_id == GQ_RESPONSE_NAME_CLICKED)
+		{
+		gtk_popover_popup(GTK_POPOVER(sd->name_popover));
+		gq_gtk_widget_show_all(GTK_WIDGET(sd->name_popover));
+		gtk_widget_grab_focus(GTK_WIDGET(sd->name_popover));
+
+		return;
 		}
 
 	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
@@ -578,6 +573,16 @@ static void bar_sort_add_cancel_cb(FileDialog *, gpointer data)
 	auto sd = static_cast<SortData *>(data);
 
 	bar_sort_add_close(sd);
+}
+
+static void name_entry_activate_cb(GtkEntry *entry, gpointer data)
+{
+	auto sd = static_cast<SortData *>(data);
+
+	g_free(sd->name);
+	sd->name = g_strdup(gtk_entry_get_text(entry));
+
+	gtk_popover_popdown(GTK_POPOVER(sd->name_popover));
 }
 
 static void bar_sort_add_cb(GtkWidget *button, gpointer data)
@@ -594,22 +599,23 @@ static void bar_sort_add_cb(GtkWidget *button, gpointer data)
 
 	if (sd->mode == BAR_SORT_MODE_FOLDER)
 		{
-		GtkFileChooserDialog *dialog;
+		GtkWidget *dialog;
 		GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
 
-		dialog = GTK_FILE_CHOOSER_DIALOG(gtk_file_chooser_dialog_new(_("Add Bookmark - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("Add"), GTK_RESPONSE_ACCEPT, nullptr));
+		dialog = gtk_file_chooser_dialog_new(_("Add Bookmark - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("Add"), GTK_RESPONSE_ACCEPT, _("Name"), GQ_RESPONSE_NAME_CLICKED, nullptr);
 
-		GtkWidget *name_widget_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-
-		GtkWidget *name_label = gtk_label_new(_("Bookmark name (optional):"));
-		gq_gtk_box_pack_start(GTK_BOX(name_widget_box), name_label, FALSE, FALSE, 0);
-		gtk_widget_set_tooltip_text(name_label, _("If none given, the basename of the folder is used"));
+		gtk_widget_set_tooltip_text(gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), GQ_RESPONSE_NAME_CLICKED), _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used"));
 
 		GtkWidget *entry = gtk_entry_new();
-		gq_gtk_box_pack_start(GTK_BOX(name_widget_box), entry, FALSE, FALSE, 0);
-		gtk_widget_set_tooltip_text(entry, _("If none given, the basename of the folder is used"));
+		GtkWidget *name_popover = gtk_popover_new(GTK_WIDGET(gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), GQ_RESPONSE_NAME_CLICKED)));
+		sd->name_popover = GTK_POPOVER(name_popover);
 
-		gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog), name_widget_box);
+		g_signal_connect(GTK_ENTRY(entry), "activate", G_CALLBACK(name_entry_activate_cb), sd);
+
+		gtk_popover_set_position(GTK_POPOVER(name_popover), GTK_POS_BOTTOM);
+		gq_gtk_container_add(GTK_WIDGET(name_popover), entry);
+		gtk_container_set_border_width(GTK_CONTAINER(name_popover), 6);
+
 		gtk_file_chooser_set_create_folders(GTK_FILE_CHOOSER(dialog), TRUE);
 
 		g_signal_connect(dialog, "response", G_CALLBACK(bar_sort_add_response_cb), sd);
@@ -672,8 +678,6 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, SortActionType action,
 	GtkWidget *label;
 	GtkWidget *tbar;
 	GtkWidget *combo;
-	GList *editors_list;
-	GList *work;
 	gboolean have_filter;
 	GtkWidget *button;
 
@@ -729,35 +733,27 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, SortActionType action,
 
 
 	have_filter = FALSE;
-	editors_list = editor_list_get();
-	work = editors_list;
-	while (work)
+	EditorsList editors_list = editor_list_get();
+	for (const EditorDescription *editor : editors_list)
 		{
-		GtkWidget *button;
-		auto editor = static_cast<EditorDescription *>(work->data);
-		gchar *key;
-		gboolean select = FALSE;
-
-		work = work->next;
-
 		if (!editor_is_filter(editor->key)) continue;
 
-		key = g_strdup(editor->key);
-		if (sd->action == BAR_SORT_FILTER && strcmp(key, filter_key) == 0)
+		gchar *key = g_strdup(editor->key);
+
+		gboolean select = (sd->action == BAR_SORT_FILTER && strcmp(key, filter_key) == 0);
+		if (select)
 			{
 			bar_sort_set_action(sd, sd->action, key);
-			select = TRUE;
 			have_filter = TRUE;
 			}
 
-		button = pref_radiobutton_new(sd->folder_group, buttongrp,
-					      editor->name, select,
-					      G_CALLBACK(bar_sort_set_filter_cb), sd);
+		GtkWidget *button = pref_radiobutton_new(sd->folder_group, buttongrp,
+		                                         editor->name, select,
+		                                         G_CALLBACK(bar_sort_set_filter_cb), sd);
 		g_signal_connect(G_OBJECT(button), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
 
 		g_object_set_data_full(G_OBJECT(button), "filter_key", key, g_free);
 		}
-	g_list_free(editors_list);
 
 	if (sd->action == BAR_SORT_FILTER && !have_filter) sd->action = BAR_SORT_COPY;
 
@@ -860,7 +856,7 @@ void bar_sort_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	if (!sd) return;
 
 	WRITE_NL(); WRITE_STRING("<bar_sort ");
-	write_bool_option(outstr, indent, "enabled", gtk_widget_get_visible(bar));
+	write_bool_option(outstr, "enabled", gtk_widget_get_visible(bar));
 	WRITE_INT(*sd, mode);
 	WRITE_INT(*sd, action);
 	WRITE_INT(*sd, selection);

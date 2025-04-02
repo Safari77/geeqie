@@ -142,7 +142,7 @@ void write_indent(GString *str, gint indent)
 	g_string_append_printf(str, "\n%*s", indent * 4, "");
 }
 
-void write_char_option(GString *str, gint, const gchar *label, const gchar *text)
+void write_char_option(GString *str, const gchar *label, const gchar *text)
 {
 	/* this is needed for overlay string, because g_markup_escape_text does not handle \n and such,
 	   ideas for improvement are welcome
@@ -187,16 +187,16 @@ gboolean read_char_option(const gchar *option, const gchar *label, const gchar *
 	return TRUE;
 }
 
-void write_color_option(GString *str, gint indent, const gchar *label, GdkRGBA *color)
+void write_color_option(GString *str, const gchar *label, const GdkRGBA *color)
 {
 	if (color)
 		{
 		g_autofree gchar *colorstring = gdk_rgba_to_string(color);
 
-		write_char_option(str, indent, label, colorstring);
+		write_char_option(str, label, colorstring);
 		}
 	else
-		write_char_option(str, indent, label, "");
+		write_char_option(str, label, "");
 }
 
 /**
@@ -237,7 +237,7 @@ gboolean read_color_option(const gchar *option, const gchar *label, const gchar 
 	return TRUE;
 }
 
-void write_int_option(GString *str, gint, const gchar *label, gint n)
+void write_int_option(GString *str, const gchar *label, gint n)
 {
 	g_string_append_printf(str, "%s = \"%d\" ", label, n);
 }
@@ -282,7 +282,7 @@ gboolean read_ushort_option(const gchar *option, const gchar *label, const gchar
 	return TRUE;
 }
 
-void write_uint_option(GString *str, gint, const gchar *label, guint n)
+void write_uint_option(GString *str, const gchar *label, guint n)
 {
 	g_string_append_printf(str, "%s = \"%u\" ", label, n);
 }
@@ -328,7 +328,7 @@ gboolean read_int_option_clamp(const gchar *option, const gchar *label, const gc
 	return ret;
 }
 
-void write_int_unit_option(GString *str, gint, const gchar *label, gint n, gint subunits)
+void write_int_unit_option(GString *str, const gchar *label, gint n, gint subunits)
 {
 	gint l;
 	gint r;
@@ -378,9 +378,9 @@ gboolean read_int_unit_option(const gchar *option, const gchar *label, const gch
 	return TRUE;
 }
 
-void write_bool_option(GString *str, gint, const gchar *label, gint n)
+void write_bool_option(GString *str, const gchar *label, gboolean value)
 {
-	g_string_append_printf(str, "%s = \"%s\" ", label, n ? "true" : "false");
+	g_string_append_printf(str, "%s = \"%s\" ", label, value ? "true" : "false");
 }
 
 gboolean read_bool_option(const gchar *option, const gchar *label, const gchar *value, gint *n)
@@ -654,8 +654,8 @@ static void write_color_profile(GString *outstr, gint indent)
 {
 	gint i;
 #if !HAVE_LCMS
-	g_string_append_printf(outstr, "<!-- NOTICE: %s was not built with support for color profiles,\n"
-				"		 color profile options will have no effect.\n-->\n", GQ_APPNAME);
+	WRITE_FORMAT_STRING("<!-- NOTICE: %s was not built with support for color profiles,\n"
+	                    "		 color profile options will have no effect.\n-->\n", GQ_APPNAME);
 #endif
 
 	WRITE_NL(); WRITE_STRING("<color_profiles ");
@@ -671,8 +671,8 @@ static void write_color_profile(GString *outstr, gint indent)
 	for (i = 0; i < COLOR_PROFILE_INPUTS; i++)
 		{
 		WRITE_NL(); WRITE_STRING("<profile ");
-		write_char_option(outstr, indent, "input_file", options->color_profile.input_file[i]);
-		write_char_option(outstr, indent, "input_name", options->color_profile.input_name[i]);
+		write_char_option(outstr, "input_file", options->color_profile.input_file[i]);
+		write_char_option(outstr, "input_name", options->color_profile.input_name[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -688,7 +688,7 @@ static void write_marks_tooltips(GString *outstr, gint indent)
 	for (i = 0; i < FILEDATA_MARKS_SIZE; i++)
 		{
 		WRITE_NL();
-		write_char_option(outstr, indent, "<tooltip text", options->marks_tooltips[i]);
+		write_char_option(outstr, "<tooltip text", options->marks_tooltips[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -704,8 +704,8 @@ static void write_class_filter(GString *outstr, gint indent)
 	for (i = 0; i < FILE_FORMAT_CLASSES; i++)
 		{
 		WRITE_NL(); WRITE_STRING("<filter_type ");
-		write_char_option(outstr, indent, "filter", format_class_list[i]);
-		write_bool_option(outstr, indent, "enabled", options->class_filter[i]);
+		write_char_option(outstr, "filter", format_class_list[i]);
+		write_bool_option(outstr, "enabled", options->class_filter[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -733,7 +733,7 @@ static void write_disabled_plugins(GString *outstr, gint indent)
 				g_autofree gchar *desktop_path = nullptr;
 				gtk_tree_model_get(GTK_TREE_MODEL(desktop_file_list), &iter, DESKTOP_FILE_COLUMN_PATH, &desktop_path, -1);
 				WRITE_NL();
-				write_char_option(outstr, indent, "<plugin path", desktop_path);
+				write_char_option(outstr, "<plugin path", desktop_path);
 				WRITE_STRING("/>");
 				}
 			valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(desktop_file_list), &iter);
@@ -764,9 +764,9 @@ gboolean save_config_to_file(const gchar *utf8_path, ConfOptions *options, Layou
 		}
 
 	g_autoptr(GString) outstr = g_string_new("<!--\n");
-	g_string_append(outstr, "######################################################################\n");
-	g_string_append_printf(outstr, "# %30s config file	  version %-10s #\n", GQ_APPNAME, VERSION);
-	g_string_append(outstr, "######################################################################\n");
+	WRITE_STRING("######################################################################\n");
+	WRITE_FORMAT_STRING("# %30s config file	  version %-10s #\n", GQ_APPNAME, VERSION);
+	WRITE_STRING("######################################################################\n");
 	WRITE_SEPARATOR();
 
 	WRITE_STRING("# Note: This file is autogenerated. Options can be changed here,\n");
@@ -838,7 +838,7 @@ gboolean save_config_to_file(const gchar *utf8_path, ConfOptions *options, Layou
 	return TRUE;
 }
 
-gboolean save_default_layout_options_to_file(const gchar *utf8_path, ConfOptions *, LayoutWindow *lw)
+gboolean save_default_layout_options_to_file(const gchar *utf8_path, LayoutWindow *lw)
 {
 	SecureSaveInfo *ssi;
 	gint indent = 0;
@@ -852,9 +852,9 @@ gboolean save_default_layout_options_to_file(const gchar *utf8_path, ConfOptions
 		}
 
 	g_autoptr(GString) outstr = g_string_new("<!--\n");
-	g_string_append(outstr, "######################################################################\n");
-	g_string_append_printf(outstr, "# %8s default layout file	  version %-10s #\n", GQ_APPNAME, VERSION);
-	g_string_append(outstr, "######################################################################\n");
+	WRITE_STRING("######################################################################\n");
+	WRITE_FORMAT_STRING("# %8s default layout file	  version %-10s #\n", GQ_APPNAME, VERSION);
+	WRITE_STRING("######################################################################\n");
 	WRITE_SEPARATOR();
 
 	WRITE_STRING("# Note: This file is autogenerated. Options can be changed here,\n");

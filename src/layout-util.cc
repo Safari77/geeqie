@@ -1050,7 +1050,8 @@ static void open_file_cb(GtkFileChooser *chooser, gint response_id, gpointer)
 {
 	if (response_id == GTK_RESPONSE_ACCEPT)
 		{
-		g_autofree gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+		g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+		g_autofree gchar *filename = g_file_get_path(file);
 
 		layout_set_path(get_current_layout(), filename);
 		}
@@ -1074,7 +1075,8 @@ static void open_recent_file_cb(GtkFileChooser *chooser, gint response_id, gpoin
 static void preview_file_cb(GtkFileChooser *chooser, gpointer data)
 {
 	GtkImage *image_widget = GTK_IMAGE(data);
-	g_autofree gchar *file_name = gtk_file_chooser_get_filename(chooser);
+	g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+	g_autofree gchar *file_name = g_file_get_path(file);
 
 	if (file_name)
 		{
@@ -1119,10 +1121,10 @@ static void preview_file_cb(GtkFileChooser *chooser, gpointer data)
 
 static void layout_menu_open_file_cb(GtkAction *, gpointer)
 {
-	GtkFileChooserDialog *dialog;
+	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 
-	dialog = GTK_FILE_CHOOSER_DIALOG(gtk_file_chooser_dialog_new(_("Geeqie - Open File"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr));
+	dialog = gtk_file_chooser_dialog_new(_("Geeqie - Open File"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr);
 
 	GtkWidget *preview_area = gtk_image_new();
 	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(dialog), preview_area);
@@ -1217,7 +1219,8 @@ static void open_collection_cb(GtkFileChooser *chooser, gint response_id, gpoint
 {
 	if (response_id == GTK_RESPONSE_ACCEPT)
 		{
-		g_autofree gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+		g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+		g_autofree gchar *filename = g_file_get_path(file);
 
 		if (file_extension_match(filename, GQ_COLLECTION_EXT))
 			{
@@ -1230,10 +1233,10 @@ static void open_collection_cb(GtkFileChooser *chooser, gint response_id, gpoint
 
 static void layout_menu_open_collection_cb(GtkWidget *, gpointer)
 {
-	GtkFileChooserDialog *dialog;
+	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 
-	dialog = GTK_FILE_CHOOSER_DIALOG(gtk_file_chooser_dialog_new(_("Open Collection - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr));
+	dialog = gtk_file_chooser_dialog_new(_("Open Collection - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr);
 
 	GtkWidget *preview_area = gtk_image_new();
 	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(dialog), preview_area);
@@ -2630,7 +2633,7 @@ static GtkActionEntry menu_entries[] = {
   { "ClearMarks",            nullptr,                           N_("Clear Marks..."),                                   nullptr,               N_("Clear Marks"),                                     CB(layout_menu_clear_marks_cb) },
   { "CloseWindow",           GQ_ICON_CLOSE,                     N_("C_lose window"),                                    "<control>W",          N_("Close window"),                                    CB(layout_menu_close_cb) },
   { "ColorMenu",             nullptr,                           N_("_Color Management"),                                nullptr,               nullptr,                                               nullptr },
-  { "ConnectZoom100Alt1",    GQ_ICON_ZOOM_100,                  N_("Zoom _1:1"),                                        "<shift>KP_Divide",    N_("Connected Zoom 1:1"),                              CB(layout_menu_connect_zoom_1_1_cb) },                 
+  { "ConnectZoom100Alt1",    GQ_ICON_ZOOM_100,                  N_("Zoom _1:1"),                                        "<shift>KP_Divide",    N_("Connected Zoom 1:1"),                              CB(layout_menu_connect_zoom_1_1_cb) },
   { "ConnectZoom100",        GQ_ICON_ZOOM_100,                  N_("Zoom _1:1"),                                        "<shift>Z",            N_("Connected Zoom 1:1"),                              CB(layout_menu_connect_zoom_1_1_cb) },
   { "ConnectZoom200",        nullptr,                           N_("Zoom _2:1"),                                        nullptr,               N_("Connected Zoom 2:1"),                              CB(layout_menu_connect_zoom_2_1_cb) },
   { "ConnectZoom25",         nullptr,                           N_("Zoom 1:4"),                                         nullptr,               N_("Connected Zoom 1:4"),                              CB(layout_menu_connect_zoom_1_4_cb) },
@@ -2638,14 +2641,14 @@ static GtkActionEntry menu_entries[] = {
   { "ConnectZoom33",         nullptr,                           N_("Zoom 1:3"),                                         nullptr,               N_("Connected Zoom 1:3"),                              CB(layout_menu_connect_zoom_1_3_cb) },
   { "ConnectZoom400",        nullptr,                           N_("Zoom _4:1"),                                        nullptr,               N_("Connected Zoom 4:1"),                              CB(layout_menu_connect_zoom_4_1_cb) },
   { "ConnectZoom50",         nullptr,                           N_("Zoom 1:2"),                                         nullptr,               N_("Connected Zoom 1:2"),                              CB(layout_menu_connect_zoom_1_2_cb) },
-  { "ConnectZoomFillHor",    nullptr,                           N_("Fit _Horizontally"),                                "<shift>H",            N_("Connected Fit Horizontally"),                      CB(layout_menu_connect_zoom_fit_hor_cb) },             
-  { "ConnectZoomFillVert",   nullptr,                           N_("Fit _Vertically"),                                  "<shift>W",            N_("Connected Fit Vertically"),                        CB(layout_menu_connect_zoom_fit_vert_cb) },            
-  { "ConnectZoomFitAlt1",    GQ_ICON_ZOOM_FIT,                  N_("_Zoom to fit"),                                     "<shift>KP_Multiply",  N_("Connected Zoom to fit"),                           CB(layout_menu_connect_zoom_fit_cb) },                 
+  { "ConnectZoomFillHor",    nullptr,                           N_("Fit _Horizontally"),                                "<shift>H",            N_("Connected Fit Horizontally"),                      CB(layout_menu_connect_zoom_fit_hor_cb) },
+  { "ConnectZoomFillVert",   nullptr,                           N_("Fit _Vertically"),                                  "<shift>W",            N_("Connected Fit Vertically"),                        CB(layout_menu_connect_zoom_fit_vert_cb) },
+  { "ConnectZoomFitAlt1",    GQ_ICON_ZOOM_FIT,                  N_("_Zoom to fit"),                                     "<shift>KP_Multiply",  N_("Connected Zoom to fit"),                           CB(layout_menu_connect_zoom_fit_cb) },
   { "ConnectZoomFit",        GQ_ICON_ZOOM_FIT,                  N_("_Zoom to fit"),                                     "<shift>X",            N_("Connected Zoom to fit"),                           CB(layout_menu_connect_zoom_fit_cb) },
-  { "ConnectZoomInAlt1",     GQ_ICON_ZOOM_IN,                   N_("Zoom _in"),                                         "<shift>KP_Add",       N_("Connected Zoom in"),                               CB(layout_menu_connect_zoom_in_cb) },                  
+  { "ConnectZoomInAlt1",     GQ_ICON_ZOOM_IN,                   N_("Zoom _in"),                                         "<shift>KP_Add",       N_("Connected Zoom in"),                               CB(layout_menu_connect_zoom_in_cb) },
   { "ConnectZoomIn",         GQ_ICON_ZOOM_IN,                   N_("Zoom _in"),                                         "plus",                N_("Connected Zoom in"),                               CB(layout_menu_connect_zoom_in_cb) },
   { "ConnectZoomMenu",       nullptr,                           N_("_Connected Zoom"),                                  nullptr,               nullptr,                                               nullptr },
-  { "ConnectZoomOutAlt1",    GQ_ICON_ZOOM_OUT,                  N_("Zoom _out"),                                        "<shift>KP_Subtract",  N_("Connected Zoom out"),                              CB(layout_menu_connect_zoom_out_cb) },                 
+  { "ConnectZoomOutAlt1",    GQ_ICON_ZOOM_OUT,                  N_("Zoom _out"),                                        "<shift>KP_Subtract",  N_("Connected Zoom out"),                              CB(layout_menu_connect_zoom_out_cb) },
   { "ConnectZoomOut",        GQ_ICON_ZOOM_OUT,                  N_("Zoom _out"),                                        "underscore",          N_("Connected Zoom out"),                              CB(layout_menu_connect_zoom_out_cb) },
   { "Copy",                  GQ_ICON_COPY,                      N_("_Copy..."),                                         "<control>C",          N_("Copy..."),                                         CB(layout_menu_copy_cb) },
   { "CopyImage",             nullptr,                           N_("_Copy image to clipboard"),                         nullptr,               N_("Copy image to clipboard"),                         CB(layout_menu_copy_image_cb) },
@@ -2660,8 +2663,8 @@ static GtkActionEntry menu_entries[] = {
   { "DisableGrouping",       nullptr,                           N_("Disable file groupi_ng"),                           nullptr,               N_("Disable file grouping"),                           CB(layout_menu_disable_grouping_cb) },
   { "EditMenu",              nullptr,                           N_("_Edit"),                                            nullptr,               nullptr,                                               nullptr },
   { "EnableGrouping",        nullptr,                           N_("Enable file _grouping"),                            nullptr,               N_("Enable file grouping"),                            CB(layout_menu_enable_grouping_cb) },
-  { "EscapeAlt1",            GQ_ICON_LEAVE_FULLSCREEN,          N_("_Leave full screen"),                               "Q",                   N_("Leave full screen"),                               CB(layout_menu_escape_cb) },                           
-  { "Escape",                GQ_ICON_LEAVE_FULLSCREEN,          N_("_Leave full screen"),                              "Escape",               N_("Leave full screen"),                               CB(layout_menu_escape_cb) },                           
+  { "EscapeAlt1",            GQ_ICON_LEAVE_FULLSCREEN,          N_("_Leave full screen"),                               "Q",                   N_("Leave full screen"),                               CB(layout_menu_escape_cb) },
+  { "Escape",                GQ_ICON_LEAVE_FULLSCREEN,          N_("_Leave full screen"),                              "Escape",               N_("Leave full screen"),                               CB(layout_menu_escape_cb) },
   { "ExifWin",               PIXBUF_INLINE_ICON_EXIF,           N_("_Exif window"),                                     "<control>E",          N_("Exif window"),                                     CB(layout_menu_bar_exif_cb) },
   { "FileDirMenu",           nullptr,                           N_("_Files and Folders"),                               nullptr,               nullptr,                                               nullptr },
   { "FileMenu",              nullptr,                           N_("_File"),                                            nullptr,               nullptr,                                               nullptr },
@@ -2683,12 +2686,12 @@ static GtkActionEntry menu_entries[] = {
   { "HelpSearch",            nullptr,                           N_("On-line help search"),                              nullptr,               N_("On-line help search"),                             CB(layout_menu_help_search_cb) },
   { "HelpShortcuts",         nullptr,                           N_("_Keyboard shortcuts"),                              nullptr,               N_("Keyboard shortcuts"),                              CB(layout_menu_help_keys_cb) },
   { "HideTools",             PIXBUF_INLINE_ICON_HIDETOOLS,      N_("_Hide file list"),                                  "<control>H",          N_("Hide file list"),                                  CB(layout_menu_hide_cb) },
-  { "HistogramChanCycle",    nullptr,                           N_("Cycle through histogram ch_annels"),                "K",                   N_("Cycle through histogram channels"),                CB(layout_menu_histogram_toggle_channel_cb) },                                                         
-  { "HistogramModeCycle",    nullptr,                           N_("Cycle through histogram mo_des"),                   "J",                   N_("Cycle through histogram modes"),                   CB(layout_menu_histogram_toggle_mode_cb) },            
+  { "HistogramChanCycle",    nullptr,                           N_("Cycle through histogram ch_annels"),                "K",                   N_("Cycle through histogram channels"),                CB(layout_menu_histogram_toggle_channel_cb) },
+  { "HistogramModeCycle",    nullptr,                           N_("Cycle through histogram mo_des"),                   "J",                   N_("Cycle through histogram modes"),                   CB(layout_menu_histogram_toggle_mode_cb) },
   { "Home",                  GQ_ICON_HOME,                      N_("_Home"),                                            nullptr,               N_("Home"),                                            CB(layout_menu_home_cb) },
   { "ImageBack",             GQ_ICON_GO_FIRST,                  N_("Image Back"),                                       nullptr,               N_("Back in image history"),                           CB(layout_menu_image_back_cb) },
   { "ImageForward",          GQ_ICON_GO_LAST,                   N_("Image Forward"),                                    nullptr,               N_("Forward in image history"),                        CB(layout_menu_image_forward_cb) },
-  { "ImageOverlayCycle",     nullptr,                           N_("_Cycle through overlay modes"),                     "I",                   N_("Cycle through Overlay modes"),                     CB(layout_menu_overlay_toggle_cb) },                   
+  { "ImageOverlayCycle",     nullptr,                           N_("_Cycle through overlay modes"),                     "I",                   N_("Cycle through Overlay modes"),                     CB(layout_menu_overlay_toggle_cb) },
   { "KeywordAutocomplete",   nullptr,                           N_("Keyword autocomplete"),                             "<alt>K",              N_("Keyword Autocomplete"),                            CB(layout_menu_keyword_autocomplete_cb) },
   { "LastImage",             GQ_ICON_GO_BOTTOM,                 N_("_Last Image"),                                      "End",                 N_("Last Image"),                                      CB(layout_menu_image_last_cb) },
   { "LastPage",              GQ_ICON_NEXT_PAGE,                 N_("_Last Page"),                                       "<control>End",        N_("Last Page of multi-page image"),                   CB(layout_menu_page_last_cb) },
@@ -2970,7 +2973,7 @@ static void layout_actions_setup_marks(LayoutWindow *lw)
 		}
 }
 
-static GList *layout_actions_editor_menu_path(EditorDescription *editor)
+static GList *layout_actions_editor_menu_path(const EditorDescription *editor)
 {
 	g_auto(GStrv) split = g_strsplit(editor->menu_path, "/", 0);
 
@@ -3049,10 +3052,6 @@ static void layout_actions_editor_add(GString *desc, GList *path, GList *old_pat
 
 static void layout_actions_setup_editors(LayoutWindow *lw)
 {
-	GList *editors_list;
-	GList *work;
-	GList *old_path;
-
 	if (lw->ui_editors_id)
 		{
 		gq_gtk_ui_manager_remove_ui(lw->ui_manager, lw->ui_editors_id);
@@ -3076,37 +3075,34 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 		g_string_append(desc, "    <menu action='OpenMenu'>");
 		}
 
-	editors_list = editor_list_get();
+	GList *old_path = nullptr;
 
-	old_path = nullptr;
-	work = editors_list;
-	while (work)
+	GtkWidget *main_toolbar = lw->toolbar[TOOLBAR_MAIN];
+	if (GTK_IS_CONTAINER(main_toolbar))
 		{
-		GList *path;
-		auto editor = static_cast<EditorDescription *>(work->data);
-		GtkActionEntry entry = { editor->key,
-		                         nullptr,
-		                         editor->name,
-		                         editor->hotkey,
-		                         editor->comment ? editor->comment : editor->name,
-		                         G_CALLBACK(layout_menu_edit_cb) };
+		g_autoptr(GList) button_list = gtk_container_get_children(GTK_CONTAINER(main_toolbar));
 
-		if (editor->icon)
+		EditorsList editors_list = editor_list_get();
+		for (const EditorDescription *editor : editors_list)
 			{
-			entry.stock_id = editor->key;
-			}
-		gq_gtk_action_group_add_actions(lw->action_group_editors, &entry, 1, lw);
+			GtkActionEntry entry = { editor->key,
+			                         editor->icon ? editor->key : nullptr,
+			                         editor->name,
+			                         editor->hotkey,
+			                         editor->comment ? editor->comment : editor->name,
+			                         G_CALLBACK(layout_menu_edit_cb) };
 
-		GList *button_list;
-		GList *work_button_list;
+			gq_gtk_action_group_add_actions(lw->action_group_editors, &entry, 1, lw);
 
-		button_list = gtk_container_get_children(GTK_CONTAINER(lw->toolbar[TOOLBAR_MAIN]));
-		work_button_list = button_list;
-
-		while (work_button_list)
-			{
-			if (g_strcmp0(gtk_widget_get_tooltip_text(GTK_WIDGET(work_button_list->data)), editor->key) == 0)
+			for (GList *work = button_list; work; work = work->next)
 				{
+#if HAVE_GTK4
+				const gchar *tooltip = gtk_widget_get_tooltip_text(GTK_WIDGET(work->data));
+#else
+				g_autofree gchar *tooltip = gtk_widget_get_tooltip_text(GTK_WIDGET(work->data));
+#endif
+				if (g_strcmp0(tooltip, editor->key) != 0) continue; // @todo Use g_list_find_custom() if tooltip is unique
+
 				GtkWidget *image = nullptr;
 				if (editor->icon)
 					{
@@ -3116,20 +3112,16 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 					{
 					image = gtk_image_new_from_icon_name(GQ_ICON_MISSING_IMAGE, GTK_ICON_SIZE_BUTTON);
 					}
-				gtk_button_set_image(GTK_BUTTON(work_button_list->data), GTK_WIDGET(image));
-				gtk_widget_set_tooltip_text(GTK_WIDGET(work_button_list->data), editor->name);
+				gtk_button_set_image(GTK_BUTTON(work->data), GTK_WIDGET(image));
+				gtk_widget_set_tooltip_text(GTK_WIDGET(work->data), editor->name);
 				}
-			work_button_list = work_button_list->next;
+
+			GList *path = layout_actions_editor_menu_path(editor);
+			layout_actions_editor_add(desc, path, old_path);
+
+			g_list_free_full(old_path, g_free);
+			old_path = path;
 			}
-
-		g_list_free(button_list);
-
-		path = layout_actions_editor_menu_path(editor);
-		layout_actions_editor_add(desc, path, old_path);
-
-		g_list_free_full(old_path, g_free);
-		old_path = path;
-		work = work->next;
 		}
 
 	layout_actions_editor_add(desc, nullptr, old_path);
@@ -3152,8 +3144,6 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 		g_message("building menus failed: %s", error->message);
 		exit(EXIT_FAILURE);
 		}
-
-	g_list_free(editors_list);
 }
 
 void create_toolbars(LayoutWindow *lw)
@@ -3163,7 +3153,6 @@ void create_toolbars(LayoutWindow *lw)
 	for (i = 0; i < TOOLBAR_COUNT; i++)
 		{
 		layout_actions_toolbar(lw, static_cast<ToolbarType>(i));
-		layout_toolbar_clear(lw, static_cast<ToolbarType>(i));
 		layout_toolbar_add_default(lw, static_cast<ToolbarType>(i));
 		}
 }
@@ -3500,7 +3489,11 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 
 		action_icon = gq_gtk_action_create_icon(action, GTK_ICON_SIZE_SMALL_TOOLBAR);
 
-		gq_gtk_ui_manager_add_ui(lw->ui_manager, lw->toolbar_merge_id[type], path, action_name, action_name, GTK_UI_MANAGER_TOOLITEM, FALSE);
+		/** @FIXME This is a hack to remove run-time errors */
+		if (lw->toolbar_merge_id[type] > 0)
+			{
+			gq_gtk_ui_manager_add_ui(lw->ui_manager, lw->toolbar_merge_id[type], path, action_name, action_name, GTK_UI_MANAGER_TOOLITEM, FALSE);
+			}
 
 		if (GQ_GTK_IS_RADIO_ACTION(action) || GQ_GTK_IS_TOGGLE_ACTION(action))
 			{
@@ -3548,6 +3541,11 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type)
 {
 	if (type >= TOOLBAR_COUNT) return;
+
+	if (layout_window_count() > 0)
+		{
+		return;
+		}
 
 	LayoutWindow *lw_first = layout_window_first();
 	if (lw_first && lw_first->toolbar_actions[type])
@@ -3609,7 +3607,7 @@ void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, GString *ou
 			break;
 		}
 
-	WRITE_NL(); WRITE_STRING("<%s>", name);
+	WRITE_NL(); WRITE_FORMAT_STRING("<%s>", name);
 	indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 	while (work)
@@ -3617,11 +3615,11 @@ void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, GString *ou
 		auto action = static_cast<gchar *>(work->data);
 		work = work->next;
 		WRITE_NL(); WRITE_STRING("<toolitem ");
-		write_char_option(outstr, indent + 1, "action", action);
+		write_char_option(outstr, "action", action);
 		WRITE_STRING("/>");
 		}
 	indent--;
-	WRITE_NL(); WRITE_STRING("</%s>", name);
+	WRITE_NL(); WRITE_FORMAT_STRING("</%s>", name);
 }
 
 void layout_toolbar_add_from_config(LayoutWindow *lw, ToolbarType type, const char **attribute_names, const gchar **attribute_values)

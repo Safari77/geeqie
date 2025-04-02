@@ -22,6 +22,8 @@
 #ifndef EDITORS_H
 #define EDITORS_H
 
+#include <vector>
+
 #include <glib.h>
 #include <gtk/gtk.h>
 
@@ -93,14 +95,13 @@ enum {
 extern GtkListStore *desktop_file_list;
 
 
-extern GHashTable *editors;
-
 void editor_table_finish();
 void editor_table_clear();
 GList *editor_get_desktop_files();
 gboolean editor_read_desktop_file(const gchar *path);
 
-GList *editor_list_get();
+using EditorsList = std::vector<EditorDescription *>;
+EditorsList editor_list_get();
 
 
 /**
@@ -132,7 +133,8 @@ gboolean editor_is_filter(const gchar *key);
 gboolean editor_no_param(const gchar *key);
 const gchar *editor_get_error_str(EditorFlags flags);
 
-gboolean is_valid_editor_command(const gchar *key);
+EditorDescription *get_editor_by_command(const gchar *key);
+bool is_valid_editor_command(const gchar *key);
 gboolean editor_blocks_file(const gchar *key);
 
 EditorFlags editor_command_parse(const EditorDescription *editor, GList *list, gboolean consider_sidecars, gchar **output);

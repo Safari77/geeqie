@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -71,6 +72,8 @@ struct EditorData {
 constexpr gint EDITOR_WINDOW_WIDTH = 500;
 constexpr gint EDITOR_WINDOW_HEIGHT = 300;
 
+GHashTable *editors = nullptr;
+
 } // namespace
 
 static void editor_verbose_window_progress(EditorData *ed, const gchar *text);
@@ -84,7 +87,6 @@ static EditorFlags editor_command_done(EditorData *ed);
  *-----------------------------------------------------------------------------
  */
 
-GHashTable *editors = nullptr;
 GtkListStore *desktop_file_list;
 static gboolean editors_finished = FALSE;
 
@@ -431,8 +433,9 @@ GList *editor_get_desktop_files()
 
 static void editor_list_add_cb(gpointer, gpointer value, gpointer data)
 {
-	auto listp = static_cast<GList **>(data);
 	auto editor = static_cast<EditorDescription *>(value);
+
+	if (editor->disabled) return;
 
 	/* do not show the special commands in any list, they are called explicitly */
 	if (strcmp(editor->key, CMD_COPY) == 0 ||
@@ -441,39 +444,30 @@ static void editor_list_add_cb(gpointer, gpointer value, gpointer data)
 	    strcmp(editor->key, CMD_DELETE) == 0 ||
 	    strcmp(editor->key, CMD_FOLDER) == 0) return;
 
-	if (editor->disabled)
-		{
-		return;
-		}
-
-	*listp = g_list_prepend(*listp, editor);
+	auto *list = static_cast<EditorsList *>(data);
+	list->push_back(editor);
 }
 
-static gint editor_sort(gconstpointer a, gconstpointer b)
+EditorsList editor_list_get()
 {
-	auto ea = static_cast<const EditorDescription *>(a);
-	auto eb = static_cast<const EditorDescription *>(b);
-	gint ret;
+	if (!editors_finished) return {};
 
-	ret = strcmp(ea->menu_path, eb->menu_path);
-	if (ret != 0) return ret;
-
-	g_autofree gchar *caseless_name_ea = g_utf8_casefold(ea->name, -1);
-	g_autofree gchar *caseless_name_eb = g_utf8_casefold(eb->name, -1);
-	g_autofree gchar *collate_key_ea = g_utf8_collate_key_for_filename(caseless_name_ea, -1);
-	g_autofree gchar *collate_key_eb = g_utf8_collate_key_for_filename(caseless_name_eb, -1);
-
-	return g_strcmp0(collate_key_ea, collate_key_eb);
-}
-
-GList *editor_list_get()
-{
-	GList *editors_list = nullptr;
-
-	if (!editors_finished) return nullptr;
-
+	EditorsList editors_list;
 	g_hash_table_foreach(editors, editor_list_add_cb, &editors_list);
-	editors_list = g_list_sort(editors_list, editor_sort);
+
+	static const auto editor_sort = [](const EditorDescription *a, const EditorDescription *b)
+	{
+		gint ret = strcmp(a->menu_path, b->menu_path);
+		if (ret != 0) return ret < 0;
+
+		g_autofree gchar *caseless_name_a = g_utf8_casefold(a->name, -1);
+		g_autofree gchar *caseless_name_b = g_utf8_casefold(b->name, -1);
+		g_autofree gchar *collate_key_a = g_utf8_collate_key_for_filename(caseless_name_a, -1);
+		g_autofree gchar *collate_key_b = g_utf8_collate_key_for_filename(caseless_name_b, -1);
+
+		return g_strcmp0(collate_key_a, collate_key_b) < 0;
+	};
+	std::sort(editors_list.begin(), editors_list.end(), editor_sort);
 
 	return editors_list;
 }
@@ -1252,10 +1246,15 @@ static EditorFlags editor_command_start(const EditorDescription *editor, const g
 	return static_cast<EditorFlags>(editor_errors(flags));
 }
 
-gboolean is_valid_editor_command(const gchar *key)
+EditorDescription *get_editor_by_command(const gchar *key)
 {
-	if (!key) return FALSE;
-	return g_hash_table_lookup(editors, key) != nullptr;
+	if (!key) return nullptr;
+	return static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
+}
+
+bool is_valid_editor_command(const gchar *key)
+{
+	return get_editor_by_command(key) != nullptr;
 }
 
 EditorFlags start_editor_from_filelist_full(const gchar *key, GList *list, const gchar *working_directory, EditorCallback cb, gpointer data)
