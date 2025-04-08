@@ -633,18 +633,15 @@ static gboolean vflist_select_idle_cb(gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
 
-	if (!vf->layout)
+	if (vf->layout)
 		{
-		VFLIST(vf)->select_idle_id = 0;
-		return G_SOURCE_REMOVE;
-		}
+		vf_send_update(vf);
 
-	vf_send_update(vf);
-
-	if (VFLIST(vf)->select_fd)
-		{
-		vflist_select_image(vf, VFLIST(vf)->select_fd);
-		VFLIST(vf)->select_fd = nullptr;
+		if (VFLIST(vf)->select_fd)
+			{
+			vflist_select_image(vf, VFLIST(vf)->select_fd);
+			VFLIST(vf)->select_fd = nullptr;
+			}
 		}
 
 	VFLIST(vf)->select_idle_id = 0;
@@ -1137,8 +1134,6 @@ void vflist_set_star_fd(ViewFile *vf, FileData *fd)
 FileData *vflist_star_next_fd(ViewFile *vf)
 {
 	GtkTreePath *tpath;
-	FileData *fd = nullptr;
-	FileData *nfd = nullptr;
 
 	/* first check the visible files */
 
@@ -1153,63 +1148,33 @@ FileData *vflist_star_next_fd(ViewFile *vf)
 		gtk_tree_path_free(tpath);
 		tpath = nullptr;
 
-		while (!fd && valid && tree_view_row_get_visibility(GTK_TREE_VIEW(vf->listview), &iter, FALSE) == 0)
+		while (valid && tree_view_row_get_visibility(GTK_TREE_VIEW(vf->listview), &iter, FALSE) == 0)
 			{
-			gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &nfd, -1);
+			FileData *fd = nullptr;
+			gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &fd, -1);
 
-			if (nfd && nfd->rating == STAR_RATING_NOT_READ)
+			if (fd && fd->rating == STAR_RATING_NOT_READ)
 				{
-				fd = nfd;
+				return fd;
 				}
 
 			valid = gtk_tree_model_iter_next(store, &iter);
-			}
-
-		if (fd)
-			{
-			vf->stars_filedata = fd;
-
-			if (vf->stars_id == 0)
-				{
-				vf->stars_id = g_idle_add_full(G_PRIORITY_LOW, vf_stars_cb, vf, nullptr);
-				}
 			}
 		}
 
 	/* then find first undone */
 
-	if (!fd)
+	for (GList *work = vf->list; work; work = work->next)
 		{
-		GList *work = vf->list;
+		auto *fd = static_cast<FileData *>(work->data);
 
-		while (work && !fd)
+		if (fd && fd->rating == STAR_RATING_NOT_READ)
 			{
-			auto fd_p = static_cast<FileData *>(work->data);
-
-			if (fd_p && fd_p->rating == STAR_RATING_NOT_READ)
-				{
-				fd = fd_p;
-				}
-			else
-				{
-				fd = nullptr;
-				}
-
-			work = work->next;
-			}
-
-		if (fd)
-			{
-			vf->stars_filedata = fd;
-
-			if (vf->stars_id == 0)
-				{
-				vf->stars_id = g_idle_add_full(G_PRIORITY_LOW, vf_stars_cb, vf, nullptr);
-				}
+			return fd;
 			}
 		}
 
-	return fd;
+	return nullptr;
 }
 
 /*

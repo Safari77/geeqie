@@ -356,21 +356,22 @@ static void tip_hide(ViewFile *vf)
 
 static gboolean tip_schedule_cb(gpointer data)
 {
-	auto vf = static_cast<ViewFile *>(data);
-	GtkWidget *window;
+	auto *vf = static_cast<ViewFile *>(data);
 
-	if (!VFICON(vf)->tip_delay_id) return FALSE;
-
-	window = gtk_widget_get_toplevel(vf->listview);
-
-	if (gtk_widget_get_sensitive(window) &&
-	    gtk_window_has_toplevel_focus(GTK_WINDOW(window)))
+	if (VFICON(vf)->tip_delay_id)
 		{
-		tip_show(vf);
+		GtkWidget *window = gtk_widget_get_toplevel(vf->listview);
+
+		if (gtk_widget_get_sensitive(window) &&
+		    gtk_window_has_toplevel_focus(GTK_WINDOW(window)))
+			{
+			tip_show(vf);
+			}
+
+		VFICON(vf)->tip_delay_id = 0;
 		}
 
-	VFICON(vf)->tip_delay_id = 0;
-	return FALSE;
+	return G_SOURCE_REMOVE;
 }
 
 static void tip_schedule(ViewFile *vf)
@@ -1676,18 +1677,11 @@ FileData *vficon_star_next_fd(ViewFile *vf)
 			GList *list;
 			gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &list, -1);
 
-			for (; list; list = list->next)
+			for (GList *work = list; work; work = work->next)
 				{
-				auto fd = static_cast<FileData *>(list->data);
+				auto *fd = static_cast<FileData *>(work->data);
 				if (fd && fd->rating == STAR_RATING_NOT_READ)
 					{
-					vf->stars_filedata = fd;
-
-					if (vf->stars_id == 0)
-						{
-						vf->stars_id = g_idle_add_full(G_PRIORITY_LOW, vf_stars_cb, vf, nullptr);
-						}
-
 					return fd;
 					}
 				}
@@ -1698,20 +1692,12 @@ FileData *vficon_star_next_fd(ViewFile *vf)
 
 	/* Then iterate through the entire list to load all of them. */
 
-	GList *work;
-	for (work = vf->list; work; work = work->next)
+	for (GList *work = vf->list; work; work = work->next)
 		{
-		auto fd = static_cast<FileData *>(work->data);
+		auto *fd = static_cast<FileData *>(work->data);
 
 		if (fd && fd->rating == STAR_RATING_NOT_READ)
 			{
-			vf->stars_filedata = fd;
-
-			if (vf->stars_id == 0)
-				{
-				vf->stars_id = g_idle_add_full(G_PRIORITY_LOW, vf_stars_cb, vf, nullptr);
-				}
-
 			return fd;
 			}
 		}
