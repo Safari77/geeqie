@@ -38,7 +38,6 @@ struct PanViewFilterUi
 	GtkWidget *filter_button_arrow;
 	GtkWidget *filter_kw_hbox;
 	GtkWidget *filter_check_buttons[FILE_FORMAT_CLASSES];
-	GtkListStore *filter_mode_model;
 	GtkWidget *filter_mode_combo;
 	GList *filter_elements;  /**< List of #PanViewFilterElement. */
 	gint filter_classes;
@@ -52,9 +51,9 @@ PanViewFilterUi *pan_filter_ui_new(PanWindow *pw);
 
 /**
  * @headerfile pan_filter_ui_destroy
- * Destroys the specified #PanViewFilterUi and sets the pointer to NULL.
+ * Destroys the specified #PanViewFilterUi.
  */
-void pan_filter_ui_destroy(PanViewFilterUi **ui);
+void pan_filter_ui_destroy(PanViewFilterUi *ui);
 
 gboolean pan_filter_fd_list(GList **fd_list, GList *filter_elements, gint filter_classes);
 
