@@ -22,6 +22,7 @@
 
 #include <cstring>
 #include <regex>
+#include <cstdint>
 
 #include "image-load.h"
 
