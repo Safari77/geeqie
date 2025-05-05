@@ -20,9 +20,11 @@
 
 #include "image-load-npy.h"
 
+#include <cstdint>
 #include <cstring>
 #include <regex>
 #include <cstdint>
+#include <string>
 
 #include "image-load.h"
 
