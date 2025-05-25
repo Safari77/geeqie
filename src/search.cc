@@ -1858,8 +1858,7 @@ static void search_file_load_done_cb(ImageLoader *, gpointer data)
 	search_file_load_process(sd, sd->img_cd);
 }
 
-static gboolean search_file_do_extra(SearchData *sd, FileData *fd, gint *match,
-				     gint *width, gint *height, gint *simval)
+static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolean &match)
 {
 	gboolean new_data = FALSE;
 	gboolean tmatch = TRUE;
@@ -1869,8 +1868,8 @@ static gboolean search_file_do_extra(SearchData *sd, FileData *fd, gint *match,
 		{
 		new_data = TRUE;
 
-		g_autofree gchar *cd_path = cache_find_location(CACHE_TYPE_SIM, fd->path);
-		if (cd_path && filetime(fd->path) == filetime(cd_path))
+		g_autofree gchar *cd_path = cache_find_location(CACHE_TYPE_SIM, mfd.fd->path);
+		if (cd_path && filetime(mfd.fd->path) == filetime(cd_path))
 			{
 			sd->img_cd = cache_sim_data_load(cd_path);
 			}
@@ -1885,7 +1884,7 @@ static gboolean search_file_do_extra(SearchData *sd, FileData *fd, gint *match,
 		{
 		if ((sd->match_dimensions_enable && !sd->img_cd->dimensions) || (sd->match_similarity_enable && !sd->img_cd->similarity) || sd->match_broken_enable)
 			{
-			sd->img_loader = image_loader_new(fd);
+			sd->img_loader = image_loader_new(mfd.fd);
 			g_signal_connect(G_OBJECT(sd->img_loader), "error", (GCallback)search_file_load_done_cb, sd);
 			g_signal_connect(G_OBJECT(sd->img_loader), "done", (GCallback)search_file_load_done_cb, sd);
 			if (image_loader_start(sd->img_loader))
@@ -1940,8 +1939,6 @@ static gboolean search_file_do_extra(SearchData *sd, FileData *fd, gint *match,
 
 	if (tmatch && sd->match_similarity_enable && sd->img_cd->similarity)
 		{
-		gdouble value = 0.0;
-
 		tmatch = FALSE;
 		tested = TRUE;
 
@@ -1956,23 +1953,21 @@ static gboolean search_file_do_extra(SearchData *sd, FileData *fd, gint *match,
 			if (result >= static_cast<gdouble>(sd->search_similarity))
 				{
 				tmatch = TRUE;
-				value = static_cast<gint>(result);
+				mfd.rank = static_cast<gint>(result);
 				}
 			}
-
-		if (simval) *simval = value;
 		}
 
 	if (sd->img_cd->dimensions)
 		{
-		if (width) *width = sd->img_cd->width;
-		if (height) *height = sd->img_cd->height;
+		mfd.width = sd->img_cd->width;
+		mfd.height = sd->img_cd->height;
 		}
 
 	cache_sim_data_free(sd->img_cd);
 	sd->img_cd = nullptr;
 
-	*match = (tmatch && tested);
+	match = (tmatch && tested);
 
 	return FALSE;
 }
@@ -1983,9 +1978,6 @@ static gboolean search_file_next(SearchData *sd)
 	gboolean match = TRUE;
 	gboolean tested = FALSE;
 	gboolean extra_only = FALSE;
-	gint width = 0;
-	gint height = 0;
-	gint sim = 0;
 
 	if (!sd->search_file_list) return FALSE;
 
@@ -2309,11 +2301,12 @@ static gboolean search_file_next(SearchData *sd)
 			}
 		}
 
+	MatchFileData mfd_extra{fd, 0, 0, 0};
 	if ((match || extra_only) && (sd->match_dimensions_enable || sd->match_similarity_enable || sd->match_broken_enable))
 		{
 		tested = TRUE;
 
-		if (search_file_do_extra(sd, fd, &match, &width, &height, &sim))
+		if (search_file_do_extra(sd, mfd_extra, match))
 			{
 			sd->search_buffer_count += SEARCH_BUFFER_MATCH_LOAD;
 			return TRUE;
@@ -2325,11 +2318,7 @@ static gboolean search_file_next(SearchData *sd)
 	if (tested && match)
 		{
 		auto mfd = g_new(MatchFileData, 1);
-		mfd->fd = fd;
-
-		mfd->width = width;
-		mfd->height = height;
-		mfd->rank = sim;
+		*mfd = mfd_extra;
 
 		sd->search_buffer_list = g_list_prepend(sd->search_buffer_list, mfd);
 		sd->search_buffer_count += SEARCH_BUFFER_MATCH_HIT;
@@ -2911,18 +2900,6 @@ static void search_result_add_column(SearchData * sd, gint n, const gchar *title
 	gtk_tree_view_append_column(GTK_TREE_VIEW(sd->ui.result_view), column);
 }
 
-static void menu_choice_set_visible(GtkWidget *widget, gboolean visible)
-{
-	if (visible)
-		{
-		if (!gtk_widget_get_visible(widget)) gtk_widget_show(widget);
-		}
-	else
-		{
-		if (gtk_widget_get_visible(widget)) gtk_widget_hide(widget);
-		}
-}
-
 static gboolean menu_choice_get_match_type(GtkWidget *combo, MatchType *type)
 {
 	GtkTreeModel *store;
@@ -2940,9 +2917,9 @@ static void menu_choice_path_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->search_type)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.check_recurse),
-	                        (sd->search_type == SEARCH_MATCH_NONE));
-	menu_choice_set_visible(sd->ui.box_collection, (sd->search_type == SEARCH_MATCH_COLLECTION));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.check_recurse),
+	                       sd->search_type == SEARCH_MATCH_NONE);
+	gtk_widget_set_visible(sd->ui.box_collection, sd->search_type == SEARCH_MATCH_COLLECTION);
 }
 
 static void menu_choice_name_cb(GtkWidget *combo, gpointer data)
@@ -2958,8 +2935,8 @@ static void menu_choice_size_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_size)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.spin_size_end),
-	                        (sd->match_size == SEARCH_MATCH_BETWEEN));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_size_end),
+	                       sd->match_size == SEARCH_MATCH_BETWEEN);
 }
 
 static void menu_choice_rating_cb(GtkWidget *combo, gpointer data)
@@ -2968,8 +2945,8 @@ static void menu_choice_rating_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_rating)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.spin_rating_end),
-	                        (sd->match_rating == SEARCH_MATCH_BETWEEN));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_rating_end),
+	                       sd->match_rating == SEARCH_MATCH_BETWEEN);
 }
 
 static void menu_choice_class_cb(GtkWidget *combo, gpointer data)
@@ -2992,8 +2969,8 @@ static void menu_choice_date_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_date)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.date_sel_end),
-	                        (sd->match_date == SEARCH_MATCH_BETWEEN));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.date_sel_end),
+	                       sd->match_date == SEARCH_MATCH_BETWEEN);
 }
 
 static void menu_choice_dimensions_cb(GtkWidget *combo, gpointer data)
@@ -3002,8 +2979,8 @@ static void menu_choice_dimensions_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_dimensions)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.spin_width_end),
-	                        (sd->match_dimensions == SEARCH_MATCH_BETWEEN));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_width_end),
+	                       sd->match_dimensions == SEARCH_MATCH_BETWEEN);
 }
 
 static void menu_choice_keyword_cb(GtkWidget *combo, gpointer data)
@@ -3040,8 +3017,8 @@ static void menu_choice_gps_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_gps)) return;
 
-	menu_choice_set_visible(gtk_widget_get_parent(sd->ui.spin_gps),
-	                        (sd->match_gps != SEARCH_MATCH_NONE));
+	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_gps),
+	                       sd->match_gps != SEARCH_MATCH_NONE);
 }
 
 static GtkWidget *menu_spin(GtkWidget *box, gdouble min, gdouble max, gint value,
