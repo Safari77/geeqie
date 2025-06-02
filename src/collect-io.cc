@@ -43,7 +43,6 @@
 #include "layout-util.h"
 #include "main-defines.h"
 #include "options.h"
-#include "secure-save.h"
 #include "thumb.h"
 #include "ui-fileops.h"
 #include "ui-utildlg.h"
@@ -513,8 +512,6 @@ void collection_load_stop(CollectionData *cd)
 
 static gboolean collection_save_private(CollectionData *cd, const gchar *path)
 {
-	SecureSaveInfo *ssi;
-
 	if (!path && !cd->path) return FALSE;
 
 	if (!path)
@@ -523,36 +520,24 @@ static gboolean collection_save_private(CollectionData *cd, const gchar *path)
 		}
 
 	g_autofree gchar *pathl = path_from_utf8(path);
-	ssi = secure_open(pathl);
-	if (!ssi)
-		{
-		log_printf(_("failed to open collection (write) \"%s\"\n"), path);
-		return FALSE;
-		}
-
-	secure_fprintf(ssi, "%s collection\n", GQ_COLLECTION_MARKER);
-	secure_fprintf(ssi, "#created with %s version %s\n", GQ_APPNAME, VERSION);
+	g_autoptr(GString) gstring = g_string_new(GQ_COLLECTION_MARKER " collection\n#created with " GQ_APPNAME " version " VERSION "\n");
 
 	collection_update_geometry(cd);
 	if (cd->window_read)
 		{
-		secure_fprintf(ssi, "#geometry: %d %d %d %d\n", cd->window.x, cd->window.y, cd->window.width, cd->window.height);
+		g_string_append_printf(gstring, "#geometry: %d %d %d %d\n", cd->window.x, cd->window.y, cd->window.width, cd->window.height);
 		}
 
-	for (GList *work = cd->list; work && secsave_succeed(); work = work->next)
+	for (GList *work = cd->list; work; work = work->next)
 		{
 		auto ci = static_cast<CollectInfo *>(work->data);
-		secure_fprintf(ssi, "\"%s\"\n", ci->fd->path);
+
+		g_string_append_printf(gstring, "\"%s\"\n", ci->fd->path);
 		}
 
-	secure_fprintf(ssi, "#end\n");
+	g_string_append(gstring, "#end\n");
 
-	if (secure_close(ssi))
-		{
-		log_printf(_("error saving collection file: %s\nerror: %s\n"),
-		           path, secsave_strerror());
-		return FALSE;
-		}
+	secure_save(pathl, gstring->str, -1);
 
 	if (!cd->path || strcmp(path, cd->path) != 0)
 		{
@@ -785,11 +770,11 @@ static gboolean collect_manager_process_action(CollectManagerEntry *entry, gchar
 
 static void collect_manager_refresh()
 {
-	GList *list;
 	GList *work;
 	FileData *dir_fd;
 
 	dir_fd = file_data_new_dir(get_collections_dir());
+	g_autoptr(FileDataList) list = nullptr;
 	filelist_read(dir_fd, &list, nullptr);
 	file_data_unref(dir_fd);
 
@@ -836,8 +821,6 @@ static void collect_manager_refresh()
 
 		collect_manager_entry_new(fd->path);
 		}
-
-	filelist_free(list);
 }
 
 static void collect_manager_process_actions(gint max)
@@ -1103,7 +1086,6 @@ void collect_manager_notify_cb(FileData *fd, NotifyType type, gpointer)
 void collect_manager_list(GList **names_exc, GList **names_inc, GList **paths)
 {
 	FileData *dir_fd;
-	GList *list = nullptr;
 
 	if (names_exc == nullptr && names_inc == nullptr && paths == nullptr)
 		{
@@ -1112,6 +1094,7 @@ void collect_manager_list(GList **names_exc, GList **names_inc, GList **paths)
 
 	dir_fd = file_data_new_dir((get_collections_dir()));
 
+	g_autoptr(FileDataList) list = nullptr;
 	filelist_read(dir_fd, &list, nullptr);
 
 	for (GList *work = list; work; work = work->next)
@@ -1138,7 +1121,5 @@ void collect_manager_list(GList **names_exc, GList **names_inc, GList **paths)
 				}
 			}
 		}
-
-	filelist_free(list);
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

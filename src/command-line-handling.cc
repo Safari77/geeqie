@@ -46,7 +46,6 @@
 #include "options.h"
 #include "pixbuf-renderer.h"
 #include "rcfile.h"
-#include "secure-save.h"
 #include "slideshow.h"
 #include "ui-fileops.h"
 #include "ui-misc.h"
@@ -505,18 +504,12 @@ void gq_File(GtkApplication *, GApplicationCommandLine *app_command_line, GVaria
 
 void gq_file_extensions(GtkApplication *, GApplicationCommandLine *app_command_line, GVariantDict *, GList *)
 {
-	GList *extensions_list = nullptr;
-	GList *work;
+	GList *extensions_list = pixbuf_gdk_known_extensions();
 
-	pixbuf_gdk_known_extensions(&extensions_list);
-
-	work = filter_get_list();
-	while (work)
+	for (GList *work = filter_get_list(); work; work = work->next)
 		{
-		FilterEntry *fe;
+		auto *fe = static_cast<FilterEntry *>(work->data);
 
-		fe = static_cast<FilterEntry *>(work->data);
-		work = work->next;
 		if (!g_list_find_custom(extensions_list, fe->key, reinterpret_cast<GCompareFunc>(g_strcmp0)))
 			{
 			extensions_list = g_list_insert_sorted(extensions_list, g_strdup(fe->key), reinterpret_cast<GCompareFunc>(g_strcmp0));
@@ -705,7 +698,6 @@ void gq_get_file_info(GtkApplication *, GApplicationCommandLine *app_command_lin
 
 void get_filelist(GApplicationCommandLine *app_command_line, const gchar *text, gboolean recurse)
 {
-	GList *list = nullptr;
 	FileFormatClass format_class;
 	FileData *dir_fd;
 	FileData *fd;
@@ -725,6 +717,7 @@ void get_filelist(GApplicationCommandLine *app_command_line, const gchar *text, 
 		dir_fd = file_data_new_dir(tilde_filename);
 		}
 
+	g_autoptr(FileDataList) list = nullptr;
 	if (recurse)
 		{
 		list = filelist_recursive(dir_fd);
@@ -778,7 +771,6 @@ void get_filelist(GApplicationCommandLine *app_command_line, const gchar *text, 
 
 	g_application_command_line_print(app_command_line, "%s\n",  out_string->str);
 
-	filelist_free(list);
 	file_data_unref(dir_fd);
 }
 
@@ -853,7 +845,7 @@ void gq_get_selection(GtkApplication *, GApplicationCommandLine *app_command_lin
 {
 	if (!layout_valid(&lw_id)) return;
 
-	GList *selected = layout_selection_list(lw_id);  // Keep copy to free.
+	g_autoptr(FileDataList) selected = layout_selection_list(lw_id);  // Keep copy to free.
 	g_autoptr(GString) out_string = g_string_new(nullptr);
 
 	GList *work = selected;
@@ -870,8 +862,6 @@ void gq_get_selection(GtkApplication *, GApplicationCommandLine *app_command_lin
 		}
 
 	g_application_command_line_print(app_command_line, "%s\n",  out_string->str);
-
-	filelist_free(selected);
 }
 
 
@@ -935,8 +925,7 @@ void gq_log_file(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 	const gchar *text;
 	g_variant_dict_lookup(command_line_options_dict, "log-file", "&s", &text);
 
-	g_autofree gchar *pathl = path_from_utf8(text);
-	command_line->log_file_ssi = secure_open(pathl);
+	command_line->log_file = path_from_utf8(text);
 }
 
 #if HAVE_LUA // @todo Use [[maybe_unused]] for command_line_options_dict since C++17 and merge declarations
@@ -1072,7 +1061,7 @@ void gq_selection_add(GtkApplication *, GApplicationCommandLine *app_command_lin
 		g_autofree gchar *filename = g_path_get_basename(path);
 		g_autofree gchar *slash_plus_filename = g_strdup_printf("%s%s", G_DIR_SEPARATOR_S, filename);
 
-		GList *file_list = layout_list(lw_id);
+		g_autoptr(FileDataList) file_list = layout_list(lw_id);
 		for (GList *work = file_list; work && !fd_to_select; work = work->next)
 			{
 			auto fd = static_cast<FileData *>(work->data);
@@ -1099,16 +1088,13 @@ void gq_selection_add(GtkApplication *, GApplicationCommandLine *app_command_lin
 			g_application_command_line_print(app_command_line, "File " BOLD_ON "%s" BOLD_OFF " is not in the current folder " BOLD_ON "%s" BOLD_OFF "%c",
 			                                 filename, g_application_command_line_get_cwd(app_command_line), print0 ? 0 : '\n');
 			}
-
-		filelist_free(file_list);
 		}
 
 	if (fd_to_select)
 		{
-		GList *to_select = g_list_append(nullptr, fd_to_select);
+		g_autoptr(FileDataList) to_select = g_list_append(nullptr, fd_to_select);
 		// Using the "_list" variant doesn't clear the existing selection.
 		layout_select_list(lw_id, to_select);
-		filelist_free(to_select);
 		}
 }
 
@@ -1141,7 +1127,7 @@ void gq_selection_remove(GtkApplication *, GApplicationCommandLine *app_command_
 		fd_to_deselect = layout_image_get_fd(lw_id);
 		if (!fd_to_deselect)
 			{
-			filelist_free(selected);
+			file_data_list_free(selected);
 			g_application_command_line_print(app_command_line, _("remote sent \"--selection-remove:\" with no current image\n"));
 			return;
 			}
@@ -1197,23 +1183,22 @@ void gq_selection_remove(GtkApplication *, GApplicationCommandLine *app_command_
 			{
 			// Remove first link.
 			selected = g_list_remove_link(selected, link_to_remove);
-			filelist_free(link_to_remove);
-			link_to_remove = nullptr;
 			}
 		else
 			{
 			// Remove a subsequent link.
 			prior_link = g_list_remove_link(prior_link, link_to_remove);
-			filelist_free(link_to_remove);
-			link_to_remove = nullptr;
 			}
+
+		file_data_list_free(link_to_remove);
+		link_to_remove = nullptr;
 
 		// Re-select all but the deselected item.
 		layout_select_none(lw_id);
 		layout_select_list(lw_id, selected);
 		}
 
-	filelist_free(selected);
+	file_data_list_free(selected);
 	file_data_unref(fd_to_deselect);
 }
 

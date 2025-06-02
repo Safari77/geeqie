@@ -45,7 +45,6 @@
 #include "main-defines.h"
 #include "metadata.h"
 #include "options.h"
-#include "secure-save.h"
 #include "trash.h"
 #include "ui-fileops.h"
 
@@ -250,7 +249,7 @@ gboolean FileData::file_data_check_changed_files(FileData *fd)
 			}
 		file_data_check_sidecars(sidecars); /* this will group the sidecars back together */
 		/* now we can release the sidecars */
-		filelist_free(sidecars);
+		file_data_list_free(sidecars);
 		file_data_increment_version(fd);
 		file_data_send_notification(fd, NOTIFY_REREAD);
 		::file_data_unref(fd);
@@ -1006,7 +1005,7 @@ void FileData::file_data_disable_grouping(FileData *fd, gboolean disable)
 			}
 		else if (fd->sidecar_files)
 			{
-			GList *sidecar_files = filelist_copy(fd->sidecar_files);
+			g_autoptr(FileDataList) sidecar_files = filelist_copy(fd->sidecar_files);
 			GList *work = sidecar_files;
 			while (work)
 				{
@@ -1016,7 +1015,6 @@ void FileData::file_data_disable_grouping(FileData *fd, gboolean disable)
 				file_data_send_notification(sfd, NOTIFY_GROUPING);
 				}
 			file_data_check_sidecars(sidecar_files); /* this will group the sidecars back together */
-			filelist_free(sidecar_files);
 			}
 		else
 			{
@@ -1110,7 +1108,7 @@ void FileData::file_data_basename_hash_insert_cb(gpointer fd, gpointer basename_
 
 void FileData::file_data_basename_hash_remove_list(gpointer, gpointer value, gpointer)
 {
-	filelist_free(static_cast<GList *>(value));
+	file_data_list_free(static_cast<GList *>(value));
 }
 
 void FileData::file_data_basename_hash_free(GHashTable *basename_hash)
@@ -1145,7 +1143,7 @@ FileData *FileData::file_data_new_group(const gchar *path_utf8, FileDataContext 
 
 	g_autofree gchar *dir = remove_level_from_path(path_utf8);
 
-	GList *files;
+	g_autoptr(FileDataList) files = nullptr;
 	FileList::read_list_real(dir, &files, nullptr, TRUE);
 
 	auto *fd = static_cast<FileData *>(g_hash_table_lookup(context->file_data_pool, path_utf8));
@@ -1158,7 +1156,6 @@ FileData *FileData::file_data_new_group(const gchar *path_utf8, FileDataContext 
 		::file_data_ref(fd);
 		}
 
-	filelist_free(files);
 	return fd;
 }
 
@@ -2579,7 +2576,7 @@ GList *FileData::file_data_process_groups_in_selection(GList *list, gboolean ung
 			}
 		}
 
-	filelist_free(list);
+	file_data_list_free(list);
 	out = g_list_reverse(out);
 
 	return out;
@@ -2826,28 +2823,18 @@ gboolean FileData::marks_list_load(const gchar *path)
 
 gboolean FileData::marks_list_save(gchar *path, gboolean save)
 {
-	SecureSaveInfo *ssi;
-
 	g_autofree gchar *pathl = path_from_utf8(path);
-	ssi = secure_open(pathl);
-	if (!ssi)
-		{
-		log_printf(_("Error: Unable to write marks lists to: %s\n"), path);
-		return FALSE;
-		}
+	g_autoptr(GString) marks = g_string_new("#Marks lists\n");
 
-	secure_fprintf(ssi, "#Marks lists\n");
-
-	g_autoptr(GString) marks = g_string_new("");
 	if (save)
 		{
 		FileDataContext *context = FileData::DefaultFileDataContext();
 		g_hash_table_foreach(context->file_data_pool, marks_get_files, marks);
 		}
-	secure_fprintf(ssi, "%s", marks->str);
 
-	secure_fprintf(ssi, "#end\n");
-	return (secure_close(ssi) == 0);
+	g_string_append(marks, "#end\n");
+
+	return secure_save(pathl, marks->str, -1);
 }
 
 static void marks_clear(gpointer key, gpointer value, gpointer)

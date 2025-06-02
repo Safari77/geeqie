@@ -871,12 +871,10 @@ static void collection_notify_cb(FileData *fd, NotifyType type, gpointer data)
 static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpointer data)
 {
 	auto cw = static_cast<CollectWindow *>(data);
-	gboolean stop_signal = FALSE;
-	GList *list;
+	gboolean stop_signal = TRUE;
 
 	if (event->state & GDK_CONTROL_MASK)
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case '1':
@@ -901,12 +899,13 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 					}
 				break;
 			case 'L': case 'l':
-				list = layout_list(nullptr);
+				{
+				g_autoptr(FileDataList) list = layout_list(nullptr);
 				if (list)
 					{
 					collection_table_add_filelist(cw->table, list);
-					filelist_free(list);
 					}
+				}
 				break;
 			case 'C': case 'c':
 				file_util_copy(nullptr, collection_table_selection_get_list(cw->table), nullptr, cw->window);
@@ -934,7 +933,6 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 		}
 	else
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case GDK_KEY_Return: case GDK_KEY_KP_Enter:
@@ -984,23 +982,25 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 					}
 				break;
 			case GDK_KEY_Delete: case GDK_KEY_KP_Delete:
-				list = g_list_copy(cw->table->selection);
+				{
+				g_autoptr(GList) list = g_list_copy(cw->table->selection);
 				if (list)
 					{
 					collection_remove_by_info_list(cw->cd, list);
 					collection_table_refresh(cw->table);
-					g_list_free(list);
 					}
 				else
 					{
 					collection_remove_by_info(cw->cd, collection_table_get_focus_info(cw->table));
 					}
+				}
 				break;
 			default:
 				stop_signal = FALSE;
 				break;
 			}
 		}
+
 	if (!stop_signal && is_help_key(event))
 		{
 		help_window_show("GuideCollections.html");

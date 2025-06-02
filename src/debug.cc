@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 
 #include <config.h>
 
@@ -40,7 +41,6 @@
 #include "main.h"
 #include "misc.h"
 #include "options.h"
-#include "secure-save.h"
 
 /*
  * Logging functions
@@ -146,9 +146,10 @@ void print_term(bool err, const gchar *text_utf8)
 
 	fputs(text, err ? stderr : stdout);
 
-	if(command_line && command_line->log_file_ssi)
+	if (command_line && command_line->log_file)
 		{
-		secure_fputs(command_line->log_file_ssi, text);
+		std::ofstream log(command_line->log_file, std::ios::app);
+		log << text_utf8 << std::endl; // NOLINT(performance-avoid-endl)
 		}
 }
 

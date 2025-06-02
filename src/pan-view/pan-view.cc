@@ -621,7 +621,7 @@ static void pan_cache_free(PanWindow *pw)
 	g_list_free_full(pw->cache_list, reinterpret_cast<GDestroyNotify>(pan_cache_data_free));
 	pw->cache_list = nullptr;
 
-	filelist_free(pw->cache_todo);
+	file_data_list_free(pw->cache_todo);
 	pw->cache_todo = nullptr;
 
 	pw->cache_count = 0;
@@ -1247,9 +1247,9 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 
 	if (stop_signal) return stop_signal;
 
+	stop_signal = TRUE;
 	if (event->state & GDK_CONTROL_MASK)
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case '1':
@@ -1295,7 +1295,6 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 		}
 	else
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case GDK_KEY_Escape:
@@ -2276,13 +2275,6 @@ static void pan_close_cb(GtkWidget *, gpointer data)
 	pan_window_close(pw);
 }
 
-static void pan_popup_menu_destroy_cb(GtkWidget *, gpointer data)
-{
-	auto editmenu_fd_list = static_cast<GList *>(data);
-
-	filelist_free(editmenu_fd_list);
-}
-
 static void pan_play_cb(GtkWidget *, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
@@ -2309,14 +2301,10 @@ static GList *pan_view_get_fd_list(PanWindow *pw)
  */
 static void pan_pop_menu_collections_cb(GtkWidget *widget, gpointer data)
 {
-	PanWindow *pw;
-	GList *selection_list = nullptr;
+	auto *pw = static_cast<PanWindow *>(submenu_item_get_data(widget));
 
-	pw = static_cast<PanWindow *>(submenu_item_get_data(widget));
-	selection_list = g_list_append(selection_list, pan_menu_click_fd(pw));
+	g_autoptr(FileDataList) selection_list = g_list_append(nullptr, pan_menu_click_fd(pw));
 	pop_menu_collections(selection_list, data);
-
-	filelist_free(selection_list);
 }
 
 static GtkWidget *pan_popup_menu(PanWindow *pw)
@@ -2352,8 +2340,8 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
 	menu_item_add_divider(menu);
 
 	editmenu_fd_list = pan_view_get_fd_list(pw);
-	g_signal_connect(G_OBJECT(menu), "destroy",
-			 G_CALLBACK(pan_popup_menu_destroy_cb), editmenu_fd_list);
+	g_signal_connect_swapped(G_OBJECT(menu), "destroy",
+	                         G_CALLBACK(file_data_list_free), editmenu_fd_list);
 
 	submenu_add_edit(menu, &item, G_CALLBACK(pan_edit_cb), pw, editmenu_fd_list);
 	gtk_widget_set_sensitive(item, active);
@@ -2466,17 +2454,13 @@ static void pan_window_get_dnd_data(GtkWidget *, GdkDragContext *context,
 
 	if (info == TARGET_URI_LIST)
 		{
-		GList *list;
-
-		list = uri_filelist_from_gtk_selection_data(selection_data);
+		g_autoptr(FileDataList) list = uri_filelist_from_gtk_selection_data(selection_data);
 		if (list && isdir((static_cast<FileData *>(list->data))->path))
 			{
 			auto fd = static_cast<FileData *>(list->data);
 
 			pan_layout_set_fd(pw, fd);
 			}
-
-		filelist_free(list);
 		}
 }
 

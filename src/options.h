@@ -29,8 +29,6 @@
 
 enum TextPosition : gint;
 
-struct SecureSaveInfo;
-
 #define COLOR_PROFILE_INPUTS 4
 #define OVERLAY_SCREEN_DISPLAY_PROFILE_COUNT 4
 
@@ -456,7 +454,7 @@ struct ConfOptions
 
 struct CommandLine
 {
-	SecureSaveInfo *log_file_ssi;
+	gchar *log_file;
 };
 
 extern ConfOptions *options;

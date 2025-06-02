@@ -858,12 +858,10 @@ static void search_result_edit_selected(SearchData *sd, const gchar *key)
 static void search_result_collection_from_selection(SearchData *sd)
 {
 	CollectWindow *w;
-	GList *list;
 
-	list = search_result_selection_list(sd);
+	g_autoptr(FileDataList) list = search_result_selection_list(sd);
 	w = collection_window_new(nullptr);
 	collection_table_add_filelist(w->table, list);
-	filelist_free(list);
 }
 
 static gboolean search_result_update_idle_cb(gpointer data)
@@ -1073,11 +1071,9 @@ static void sr_menu_view_cb(GtkWidget *, gpointer data)
 static void sr_menu_viewnew_cb(GtkWidget *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
-	GList *list;
 
-	list = search_result_selection_list(sd);
+	g_autoptr(FileDataList) list = search_result_selection_list(sd);
 	view_window_new_from_list(list);
-	filelist_free(list);
 }
 
 static void sr_menu_select_all_cb(GtkWidget *, gpointer data)
@@ -1170,30 +1166,18 @@ static void sr_menu_play_cb(GtkWidget *, gpointer data)
 	start_editor_from_file(options->image_l_click_video_editor, sd->click_fd);
 }
 
-static void search_result_menu_destroy_cb(GtkWidget *, gpointer data)
-{
-	auto editmenu_fd_list = static_cast<GList *>(data);
-
-	filelist_free(editmenu_fd_list);
-}
-
 /**
  * @brief Add file selection list to a collection
  * @param[in] widget
  * @param[in] data Index to the collection list menu item selected, or -1 for new collection
  *
- *
  */
 static void search_pop_menu_collections_cb(GtkWidget *widget, gpointer data)
 {
-	SearchData *sd;
-	GList *selection_list;
+	auto *sd = static_cast<SearchData *>(submenu_item_get_data(widget));
 
-	sd = static_cast<SearchData *>(submenu_item_get_data(widget));
-	selection_list = search_result_selection_list(sd);
+	g_autoptr(FileDataList) selection_list = search_result_selection_list(sd);
 	pop_menu_collections(selection_list, data);
-
-	filelist_free(selection_list);
 }
 
 static GtkWidget *search_result_menu(SearchData *sd, gboolean on_row, gboolean empty)
@@ -1228,8 +1212,8 @@ static GtkWidget *search_result_menu(SearchData *sd, gboolean on_row, gboolean e
 	menu_item_add_divider(menu);
 
 	editmenu_fd_list = search_result_selection_list(sd);
-	g_signal_connect(G_OBJECT(menu), "destroy",
-			 G_CALLBACK(search_result_menu_destroy_cb), editmenu_fd_list);
+	g_signal_connect_swapped(G_OBJECT(menu), "destroy",
+	                         G_CALLBACK(file_data_list_free), editmenu_fd_list);
 	submenu_add_edit(menu, &item, G_CALLBACK(sr_menu_edit_cb), sd, editmenu_fd_list);
 	if (!on_row) gtk_widget_set_sensitive(item, FALSE);
 
@@ -1403,7 +1387,6 @@ static gboolean search_result_release_cb(GtkWidget *widget, GdkEventButton *beve
 static gboolean search_result_keypress_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
-	gboolean stop_signal = FALSE;
 	GtkTreeModel *store;
 	GList *slist;
 	MatchFileData *mfd = nullptr;
@@ -1425,9 +1408,9 @@ static gboolean search_result_keypress_cb(GtkWidget *widget, GdkEventKey *event,
 		}
 	g_list_free_full(slist, reinterpret_cast<GDestroyNotify>(gtk_tree_path_free));
 
+	gboolean stop_signal = TRUE;
 	if (event->state & GDK_CONTROL_MASK)
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case '1':
@@ -1474,7 +1457,6 @@ static gboolean search_result_keypress_cb(GtkWidget *widget, GdkEventKey *event,
 		}
 	else
 		{
-		stop_signal = TRUE;
 		switch (event->keyval)
 			{
 			case GDK_KEY_Return: case GDK_KEY_KP_Enter:
@@ -1482,11 +1464,8 @@ static gboolean search_result_keypress_cb(GtkWidget *widget, GdkEventKey *event,
 				break;
 			case 'V': case 'v':
 				{
-				GList *list;
-
-				list = search_result_selection_list(sd);
+				g_autoptr(FileDataList) list = search_result_selection_list(sd);
 				view_window_new_from_list(list);
-				filelist_free(list);
 				}
 				break;
 			case GDK_KEY_Delete: case GDK_KEY_KP_Delete:
@@ -1564,13 +1543,11 @@ static void search_dnd_data_set(GtkWidget *, GdkDragContext *,
 				guint, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
-	GList *list;
 
-	list = search_result_selection_list(sd);
+	g_autoptr(FileDataList) list = search_result_selection_list(sd);
 	if (!list) return;
 
 	uri_selection_data_set_uris_from_filelist(selection_data, list);
-	filelist_free(list);
 }
 
 static void search_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointer data)
@@ -1777,13 +1754,13 @@ static void search_stop(SearchData *sd)
 
 	search_buffer_flush(sd);
 
-	filelist_free(sd->search_folder_list);
+	file_data_list_free(sd->search_folder_list);
 	sd->search_folder_list = nullptr;
 
 	g_list_free(sd->search_done_list);
 	sd->search_done_list = nullptr;
 
-	filelist_free(sd->search_file_list);
+	file_data_list_free(sd->search_file_list);
 	sd->search_file_list = nullptr;
 
 	sd->match_broken_enable = FALSE;
@@ -2429,7 +2406,7 @@ static gboolean search_step_cb(gpointer data)
 				}
 			else
 				{
-				filelist_free(dlist);
+				file_data_list_free(dlist);
 				}
 			}
 		}

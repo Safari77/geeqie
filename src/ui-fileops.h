@@ -100,7 +100,9 @@ gboolean rmdir_recursive(GFile *file, GCancellable *cancellable, GError **error)
 
 guchar *map_file(const gchar *path, gsize &map_len);
 
-void pixbuf_gdk_known_extensions(GList **extensions_list);
+GList *pixbuf_gdk_known_extensions();
+
+gboolean secure_save(const gchar *file_name, const gchar *contents, gsize length);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
