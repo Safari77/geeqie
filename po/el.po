@@ -3583,10 +3583,6 @@ msgstr ""
 msgid "Help in pdf format"
 msgstr "Μορφή πίξελων"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr ""
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr ""
@@ -6920,7 +6916,7 @@ msgstr "Όρισέ το στο 0, για απεριόριστο μέγεθος"
 
 #: src/preferences.cc:3977
 #, fuzzy
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Εκκαθάριση της μικροαποθήκευσης"
 
 #: src/preferences.cc:3979

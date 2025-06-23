@@ -3589,10 +3589,6 @@ msgstr ""
 msgid "Help in pdf format"
 msgstr "Piksel biçimi"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr ""
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr ""
@@ -6876,7 +6872,7 @@ msgstr "Sınırsız boyut için 0'a ayarlayın"
 
 #: src/preferences.cc:3977
 #, fuzzy
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Önbelleği temizle"
 
 #: src/preferences.cc:3979

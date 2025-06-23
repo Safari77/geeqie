@@ -3483,10 +3483,6 @@ msgstr "Č_timne"
 msgid "Help in pdf format"
 msgstr "Formát pixelu"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr ""
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr "Vyhledávání nápovědy on-line"
@@ -6690,7 +6686,7 @@ msgstr "Nastav 0 pro neomezený počet"
 
 #: src/preferences.cc:3977
 #, fuzzy
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Cache podobnosti souborů"
 
 #: src/preferences.cc:3979

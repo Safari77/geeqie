@@ -3489,10 +3489,6 @@ msgstr "Файл сведений"
 msgid "Help in pdf format"
 msgstr "Справка в формате PDF"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr "Справка в формате PDF"
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr "Поиск в онлайновой справке"
@@ -6698,7 +6694,7 @@ msgid "Set to 0 for unlimited"
 msgstr "Установите значение 0 для неограниченного количества"
 
 #: src/preferences.cc:3977
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Альтернативный алгоритм сходства"
 
 #: src/preferences.cc:3979

@@ -3590,10 +3590,6 @@ msgstr ""
 msgid "Help in pdf format"
 msgstr "Format piksela"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr ""
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr ""
@@ -6877,7 +6873,7 @@ msgstr "Ustaw na 0 dla nieograniczonego rozmiaru"
 
 #: src/preferences.cc:3977
 #, fuzzy
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Wyczyść cache"
 
 #: src/preferences.cc:3979

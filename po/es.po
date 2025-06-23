@@ -3477,10 +3477,6 @@ msgstr "Léame"
 msgid "Help in pdf format"
 msgstr "Ayuda en formato pdf"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr "Ayuda en formato pdf"
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr "Búsqueda de ayuda en línea"
@@ -6629,7 +6625,7 @@ msgid "Set to 0 for unlimited"
 msgstr "Establecer en 0 para tamaño ilimitado"
 
 #: src/preferences.cc:3977
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Algoritmo de similitud alternativo"
 
 #: src/preferences.cc:3979

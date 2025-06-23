@@ -3507,10 +3507,6 @@ msgstr "Llegeix-me"
 msgid "Help in pdf format"
 msgstr "Format del píxel"
 
-#: src/layout-util.cc:2720
-msgid "Help in pdf formast"
-msgstr ""
-
 #: src/layout-util.cc:2721 src/window.cc:384
 msgid "On-line help search"
 msgstr "Cerca d'ajuda en línia"
@@ -6734,7 +6730,7 @@ msgstr "Poseu-ho a 0 per indicar il·limitat"
 
 #: src/preferences.cc:3977
 #, fuzzy
-msgid "Alternate similarity alogorithm"
+msgid "Alternate similarity algorithm"
 msgstr "Memòria cau de semblances"
 
 #: src/preferences.cc:3979
