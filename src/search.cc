@@ -111,26 +111,21 @@ struct SearchUi
 	GtkWidget *entry_collection;
 
 	// "File" row
-	GtkWidget *check_name;
 	GtkWidget *menu_name;
 	GtkWidget *entry_name;
-	GtkWidget *check_name_match_case;
 
 	// "File size" row
-	GtkWidget *check_size;
 	GtkWidget *menu_size;
 	GtkWidget *spin_size;
 	GtkWidget *spin_size_end;
 
 	// "File date" row
-	GtkWidget *check_date;
 	GtkWidget *menu_date;
 	GtkWidget *date_sel;
 	GtkWidget *date_sel_end;
 	GtkWidget *date_type;
 
 	// "Image dimensions" row
-	GtkWidget *check_dimensions;
 	GtkWidget *menu_dimensions;
 	GtkWidget *spin_width;
 	GtkWidget *spin_height;
@@ -138,47 +133,40 @@ struct SearchUi
 	GtkWidget *spin_height_end;
 
 	// "Image content" row
-	GtkWidget *check_similarity;
 	GtkWidget *spin_similarity;
 	GtkWidget *entry_similarity;
 
 	// "Keywords" row
-	GtkWidget *check_keywords;
 	GtkWidget *menu_keywords;
 	GtkWidget *entry_keywords;
 
 	// "Comment" row
-	GtkWidget *check_comment;
 	GtkWidget *menu_comment;
 	GtkWidget *entry_comment;
 
 	// "Exif" row
-	GtkWidget *check_exif;
 	GtkWidget *menu_exif;
 	GtkWidget *entry_exif_tag;
 	GtkWidget *entry_exif_value;
 
 	// "Image rating" row
-	GtkWidget *check_rating;
 	GtkWidget *menu_rating;
 	GtkWidget *spin_rating;
 	GtkWidget *spin_rating_end;
 
 	// "Image geocoded" row
-	GtkWidget *check_gps;
 	GtkWidget *menu_gps;
 	GtkWidget *spin_gps;
 	GtkWidget *units_gps;
 	GtkWidget *entry_gps_coord;
 
 	// "Image class" row
-	GtkWidget *check_class;
 	GtkWidget *menu_class;
 	GtkWidget *class_type;
 
 	// "Marks" row
-	GtkWidget *marks_type;
 	GtkWidget *menu_marks;
+	GtkWidget *marks_type;
 
 	GtkWidget *result_view;
 
@@ -274,7 +262,6 @@ struct SearchData
 	GList *search_keyword_list;
 	gchar *search_comment;
 	GRegex *search_comment_regex;
-	gchar *search_exif;
 	GRegex *search_exif_regex;
 	gchar *search_exif_tag;
 	gchar *search_exif_value;
@@ -461,6 +448,22 @@ gdouble get_gps_range(const SearchData *sd, gdouble latitude, gdouble longitude)
 	gdouble y = to_radians(sd->search_lat - latitude);
 
 	return std::sqrt((x * x) + (y * y)) * sd->search_earth_radius;
+}
+
+enum {
+	MENU_CHOICE_COLUMN_NAME = 0,
+	MENU_CHOICE_COLUMN_VALUE
+};
+
+bool menu_choice_get_match_type(GtkWidget *combo, MatchType *type)
+{
+	GtkTreeModel *store = gtk_combo_box_get_model(GTK_COMBO_BOX(combo));
+
+	GtkTreeIter iter;
+	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(combo), &iter)) return false;
+
+	gtk_tree_model_get(store, &iter, MENU_CHOICE_COLUMN_VALUE, type, -1);
+	return true;
 }
 
 GString *get_marks_string(gint mark_num)
@@ -2526,19 +2529,35 @@ static void search_start_cb(GtkWidget *, gpointer data)
 		return;
 		}
 
-	if (sd->match_name_enable) history_combo_append_history(sd->ui.entry_name, nullptr);
-	g_free(sd->search_name);
-	sd->search_name = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_name)));
+	if (sd->match_name_enable)
+		{
+		menu_choice_get_match_type(sd->ui.menu_name, &sd->match_name);
+
+		history_combo_append_history(sd->ui.entry_name, nullptr);
+
+		g_free(sd->search_name);
+		sd->search_name = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_name)));
+		}
 
 	/* XXX */
-	g_free(sd->search_comment);
-	sd->search_comment = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_comment)));
+	if (sd->match_comment_enable)
+		{
+		menu_choice_get_match_type(sd->ui.menu_comment, &sd->match_comment);
 
-	g_free(sd->search_exif_tag);
-	sd->search_exif_tag = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_exif_tag)));
+		g_free(sd->search_comment);
+		sd->search_comment = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_comment)));
+		}
 
-	g_free(sd->search_exif_value);
-	sd->search_exif_value = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_exif_value)));
+	if (sd->match_exif_enable)
+		{
+		menu_choice_get_match_type(sd->ui.menu_exif, &sd->match_exif);
+
+		g_free(sd->search_exif_tag);
+		sd->search_exif_tag = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_exif_tag)));
+
+		g_free(sd->search_exif_value);
+		sd->search_exif_value = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_exif_value)));
+		}
 
 	g_free(sd->search_similarity_path);
 	sd->search_similarity_path = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(sd->ui.entry_similarity)));
@@ -2591,8 +2610,13 @@ static void search_start_cb(GtkWidget *, gpointer data)
 			}
 		}
 
-	g_list_free_full(sd->search_keyword_list, g_free);
-	sd->search_keyword_list = keyword_list_pull(sd->ui.entry_keywords);
+	if (sd->match_keywords_enable)
+		{
+		menu_choice_get_match_type(sd->ui.menu_keywords, &sd->match_keywords);
+
+		g_list_free_full(sd->search_keyword_list, g_free);
+		sd->search_keyword_list = keyword_list_pull(sd->ui.entry_keywords);
+		}
 
 	if (sd->match_date_enable)
 		{
@@ -2610,6 +2634,8 @@ static void search_start_cb(GtkWidget *, gpointer data)
 
 	if (sd->match_class_enable)
 		{
+		menu_choice_get_match_type(sd->ui.menu_class, &sd->match_class);
+
 		g_autofree gchar *class_type = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(sd->ui.class_type));
 
 		if (g_strcmp0(class_type, _("Image")) == 0)
@@ -2648,6 +2674,8 @@ static void search_start_cb(GtkWidget *, gpointer data)
 
 	if (sd->match_marks_enable)
 		{
+		menu_choice_get_match_type(sd->ui.menu_marks, &sd->match_marks);
+
 		sd->search_marks = -1;
 
 		g_autofree gchar *marks_type = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(sd->ui.marks_type));
@@ -2755,11 +2783,6 @@ static void search_start_cb(GtkWidget *, gpointer data)
  *-------------------------------------------------------------------
  */
 
-enum {
-	MENU_CHOICE_COLUMN_NAME = 0,
-	MENU_CHOICE_COLUMN_VALUE
-};
-
 static void search_thumb_toggle_cb(GtkWidget *button, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
@@ -2860,17 +2883,6 @@ static void search_result_add_column(SearchData * sd, gint n, const gchar *title
 	gtk_tree_view_append_column(GTK_TREE_VIEW(sd->ui.result_view), column);
 }
 
-static gboolean menu_choice_get_match_type(GtkWidget *combo, MatchType *type)
-{
-	GtkTreeModel *store;
-	GtkTreeIter iter;
-
-	store = gtk_combo_box_get_model(GTK_COMBO_BOX(combo));
-	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(combo), &iter)) return FALSE;
-	gtk_tree_model_get(store, &iter, MENU_CHOICE_COLUMN_VALUE, type, -1);
-	return TRUE;
-}
-
 static void menu_choice_path_cb(GtkWidget *combo, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
@@ -2880,13 +2892,6 @@ static void menu_choice_path_cb(GtkWidget *combo, gpointer data)
 	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.check_recurse),
 	                       sd->search_type == SEARCH_MATCH_NONE);
 	gtk_widget_set_visible(sd->ui.box_collection, sd->search_type == SEARCH_MATCH_COLLECTION);
-}
-
-static void menu_choice_name_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_name)) return;
 }
 
 static void menu_choice_size_cb(GtkWidget *combo, gpointer data)
@@ -2909,20 +2914,6 @@ static void menu_choice_rating_cb(GtkWidget *combo, gpointer data)
 	                       sd->match_rating == SEARCH_MATCH_BETWEEN);
 }
 
-static void menu_choice_class_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_class)) return;
-}
-
-static void menu_choice_marks_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_marks)) return;
-}
-
 static void menu_choice_date_cb(GtkWidget *combo, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
@@ -2941,27 +2932,6 @@ static void menu_choice_dimensions_cb(GtkWidget *combo, gpointer data)
 
 	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_width_end),
 	                       sd->match_dimensions == SEARCH_MATCH_BETWEEN);
-}
-
-static void menu_choice_keyword_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_keywords)) return;
-}
-
-static void menu_choice_comment_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_comment)) return;
-}
-
-static void menu_choice_exif_cb(GtkWidget *combo, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	if (!menu_choice_get_match_type(combo, &sd->match_exif)) return;
 }
 
 static void menu_choice_spin_cb(GtkAdjustment *adjustment, gpointer data)
@@ -3043,8 +3013,8 @@ static GtkWidget *menu_choice_menu(GtkWidget *box, const std::array<MatchList, N
 	return combo;
 }
 
-static GtkWidget *menu_choice(GtkWidget *box, GtkWidget **check,
-                              const gchar *text, gboolean *value)
+static GtkWidget *menu_choice(GtkWidget *box, const gchar *text, gboolean *value,
+                              GtkWidget **check = nullptr)
 {
 	GtkWidget *base_box;
 	GtkWidget *hbox;
@@ -3303,10 +3273,9 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_hide(sd->ui.box_collection);
 
 	/* Search for file name */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_name,
-	                   _("File"), &sd->match_name_enable);
+	hbox = menu_choice(sd->ui.box_search, _("File"), &sd->match_name_enable);
 	sd->ui.menu_name = menu_choice_menu(hbox, text_search_menu_name,
-	                                    G_CALLBACK(menu_choice_name_cb), sd);
+	                                    nullptr, nullptr);
 	combo = history_combo_new(&sd->ui.entry_name, "", "search_name", -1);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
@@ -3317,8 +3286,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                            _("When set to 'contains' or 'path contains', this field uses Perl Compatible Regular Expressions.\ne.g. use \n.*\\.jpg\n and not \n*.jpg\n\nSee the Help file."));
 
 	/* Search for file size */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_size,
-	                   _("File size is"), &sd->match_size_enable);
+	hbox = menu_choice(sd->ui.box_search, _("File size is"), &sd->match_size_enable);
 	sd->ui.menu_size = menu_choice_menu(hbox, text_search_menu_size,
 	                                    G_CALLBACK(menu_choice_size_cb), sd);
 	sd->ui.spin_size = menu_spin(hbox, 0, 1024*1024*1024, sd->search_size,
@@ -3330,8 +3298,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                                 G_CALLBACK(menu_choice_spin_cb), &sd->search_size_end);
 
 	/* Search for file date */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_date,
-	                   _("File date is"), &sd->match_date_enable);
+	hbox = menu_choice(sd->ui.box_search, _("File date is"), &sd->match_date_enable);
 	sd->ui.menu_date = menu_choice_menu(hbox, text_search_menu_date,
 	                                    G_CALLBACK(menu_choice_date_cb), sd);
 
@@ -3359,8 +3326,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_show(sd->ui.date_type);
 
 	/* Search for image dimensions */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_dimensions,
-	                   _("Image dimensions are"), &sd->match_dimensions_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Image dimensions are"), &sd->match_dimensions_enable);
 	sd->ui.menu_dimensions = menu_choice_menu(hbox, text_search_menu_dimensions,
 	                                          G_CALLBACK(menu_choice_dimensions_cb), sd);
 	pad_box = pref_box_new(hbox, FALSE, GTK_ORIENTATION_HORIZONTAL, 2);
@@ -3380,8 +3346,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                                   G_CALLBACK(menu_choice_spin_cb), &sd->search_height_end);
 
 	/* Search for image similarity */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_similarity,
-	                   _("Image content is"), &sd->match_similarity_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Image content is"), &sd->match_similarity_enable);
 	sd->ui.spin_similarity = menu_spin(hbox, 80, 100, sd->search_similarity,
 	                                   G_CALLBACK(menu_choice_spin_cb), &sd->search_similarity);
 
@@ -3398,26 +3363,28 @@ void search_new(FileData *dir_fd, FileData *example_file)
 				options->rot_invariant_sim, &options->rot_invariant_sim);
 
 	/* Search for image keywords */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_keywords,
-	                   _("Keywords"), &sd->match_keywords_enable);
+	GtkWidget *check_keywords = nullptr;
+	hbox = menu_choice(sd->ui.box_search, _("Keywords"), &sd->match_keywords_enable,
+	                   &check_keywords);
 	sd->ui.menu_keywords = menu_choice_menu(hbox, text_search_menu_keywords,
-	                                        G_CALLBACK(menu_choice_keyword_cb), sd);
+	                                        nullptr, nullptr);
 	sd->ui.entry_keywords = gtk_entry_new();
 	gq_gtk_box_pack_start(GTK_BOX(hbox), sd->ui.entry_keywords, TRUE, TRUE, 0);
 	gtk_widget_set_sensitive(sd->ui.entry_keywords, sd->match_keywords_enable);
-	g_signal_connect(G_OBJECT(sd->ui.check_keywords), "toggled",
+	g_signal_connect(G_OBJECT(check_keywords), "toggled",
 	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_keywords);
 	gtk_widget_show(sd->ui.entry_keywords);
 
 	/* Search for image comment */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_comment,
-	                   _("Comment"), &sd->match_comment_enable);
+	GtkWidget *check_comment = nullptr;
+	hbox = menu_choice(sd->ui.box_search, _("Comment"), &sd->match_comment_enable,
+	                   &check_comment);
 	sd->ui.menu_comment = menu_choice_menu(hbox, text_search_menu_comment,
-	                                       G_CALLBACK(menu_choice_comment_cb), sd);
+	                                       nullptr, nullptr);
 	sd->ui.entry_comment = gtk_entry_new();
 	gq_gtk_box_pack_start(GTK_BOX(hbox), sd->ui.entry_comment, TRUE, TRUE, 0);
 	gtk_widget_set_sensitive(sd->ui.entry_comment, sd->match_comment_enable);
-	g_signal_connect(G_OBJECT(sd->ui.check_comment), "toggled",
+	g_signal_connect(G_OBJECT(check_comment), "toggled",
 	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_comment);
 	gtk_widget_show(sd->ui.entry_comment);
 	pref_checkbox_new_int(hbox, _("Match case"),
@@ -3426,17 +3393,19 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                            _("This field uses Perl Compatible Regular Expressions.\ne.g. use \nabc.*ghk\n and not \nabc*ghk\n\nSee the Help file."));
 
 	/* Search for Exif tag */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_exif,
-	                   _("Exif"), &sd->match_exif_enable);
+	GtkWidget *check_exif = nullptr;
+	hbox = menu_choice(sd->ui.box_search, _("Exif"), &sd->match_exif_enable,
+	                   &check_exif);
 	sd->ui.menu_exif = menu_choice_menu(hbox, text_search_menu_exif,
-	                                    G_CALLBACK(menu_choice_exif_cb), sd);
+	                                    nullptr, nullptr);
 
 	pref_label_new(hbox, _("Tag"));
 
 	sd->ui.entry_exif_tag = gtk_entry_new();
 	gq_gtk_box_pack_start(GTK_BOX(hbox), sd->ui.entry_exif_tag, TRUE, TRUE, 0);
 	gtk_widget_set_sensitive(sd->ui.entry_exif_tag, sd->match_exif_enable);
-	g_signal_connect(G_OBJECT(sd->ui.check_exif), "toggled", G_CALLBACK(menu_choice_check_cb), sd->ui.entry_exif_tag);
+	g_signal_connect(G_OBJECT(check_exif), "toggled",
+	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_exif_tag);
 	gtk_widget_show(sd->ui.entry_exif_tag);
 	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.entry_exif_tag),
 	                            _("e.g. Exif.Image.Model\nThis always case-sensitive\n\nYou may drag-and-drop from the Exif Window\n\nSee https://exiv2.org/tags.html"));
@@ -3446,7 +3415,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	sd->ui.entry_exif_value = gtk_entry_new();
 	gq_gtk_box_pack_start(GTK_BOX(hbox), sd->ui.entry_exif_value, TRUE, TRUE, 0);
 	gtk_widget_set_sensitive(sd->ui.entry_exif_value, sd->match_exif_enable);
-	g_signal_connect(G_OBJECT(sd->ui.check_exif), "toggled",
+	g_signal_connect(G_OBJECT(check_exif), "toggled",
 	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_exif_value);
 	gtk_widget_show(sd->ui.entry_exif_value);
 
@@ -3456,8 +3425,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	pref_checkbox_new_int(hbox, _("Match case"), sd->search_exif_match_case, &sd->search_exif_match_case);
 
 	/* Search for image rating */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_rating,
-	                   _("Image rating is"), &sd->match_rating_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Image rating is"), &sd->match_rating_enable);
 	sd->ui.menu_rating = menu_choice_menu(hbox, text_search_menu_rating,
 	                                      G_CALLBACK(menu_choice_rating_cb), sd);
 	sd->ui.spin_size = menu_spin(hbox, -1, 5, sd->search_rating,
@@ -3470,8 +3438,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	/* Search for images within a specified range of a lat/long coordinate
 	*/
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_gps,
-	                   _("Image is"), &sd->match_gps_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Image is"), &sd->match_gps_enable);
 	sd->ui.menu_gps = menu_choice_menu(hbox, text_search_menu_gps,
 	                                   G_CALLBACK(menu_choice_gps_cb), sd);
 
@@ -3502,10 +3469,9 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_show(sd->ui.entry_gps_coord);
 
 	/* Search for image class */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_class,
-	                   _("Image class"), &sd->match_class_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Image class"), &sd->match_class_enable);
 	sd->ui.menu_class = menu_choice_menu(hbox, text_search_menu_class,
-	                                     G_CALLBACK(menu_choice_class_cb), sd);
+	                                     nullptr, nullptr);
 
 	sd->ui.class_type = gtk_combo_box_text_new();
 	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sd->ui.class_type), _("Image"));
@@ -3521,10 +3487,9 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_show(sd->ui.class_type);
 
 	/* Search for image marks */
-	hbox = menu_choice(sd->ui.box_search, &sd->ui.check_class,
-	                   _("Marks"), &sd->match_marks_enable);
+	hbox = menu_choice(sd->ui.box_search, _("Marks"), &sd->match_marks_enable);
 	sd->ui.menu_marks = menu_choice_menu(hbox, text_search_menu_marks,
-	                                     G_CALLBACK(menu_choice_marks_cb), sd);
+	                                     nullptr, nullptr);
 
 	sd->ui.marks_type = gtk_combo_box_text_new();
 	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sd->ui.marks_type), _("Any mark"));

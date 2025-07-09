@@ -95,7 +95,7 @@ static void collection_notify_cb(FileData *fd, NotifyType type, gpointer data);
  *-------------------------------------------------------------------
  */
 
-CollectInfo *collection_info_new(FileData *fd, struct stat *, GdkPixbuf *pixbuf)
+static CollectInfo *collection_info_new(FileData *fd, struct stat *, GdkPixbuf *pixbuf, const gchar *infotext)
 {
 	CollectInfo *ci;
 
@@ -106,6 +106,7 @@ CollectInfo *collection_info_new(FileData *fd, struct stat *, GdkPixbuf *pixbuf)
 
 	ci->pixbuf = pixbuf;
 	if (ci->pixbuf) g_object_ref(ci->pixbuf);
+	ci->infotext = g_strdup(infotext);
 
 	return ci;
 }
@@ -122,6 +123,7 @@ void collection_info_free(CollectInfo *ci)
 
 	file_data_unref(ci->fd);
 	collection_info_free_thumb(ci);
+	g_free(ci->infotext);
 	g_free(ci);
 }
 
@@ -667,7 +669,7 @@ void collection_set_update_info_func(CollectionData *cd,
 	cd->info_updated_data = data;
 }
 
-static CollectInfo *collection_info_new_if_not_exists(CollectionData *cd, struct stat *st, FileData *fd)
+static CollectInfo *collection_info_new_if_not_exists(CollectionData *cd, struct stat *st, FileData *fd, const gchar *infotext)
 {
 	CollectInfo *ci;
 
@@ -676,12 +678,13 @@ static CollectInfo *collection_info_new_if_not_exists(CollectionData *cd, struct
 		if (g_hash_table_lookup(cd->existence, fd->path)) return nullptr;
 		}
 
-	ci = collection_info_new(fd, st, nullptr);
+	ci = collection_info_new(fd, st, nullptr, infotext);
 	if (ci) g_hash_table_insert(cd->existence, fd->path, g_strdup(""));
 	return ci;
 }
 
-gboolean collection_add_check(CollectionData *cd, FileData *fd, gboolean sorted, gboolean must_exist)
+// @TODO Drop must_exist and merge with collection_add()?
+static gboolean collection_add_check(CollectionData *cd, FileData *fd, gboolean sorted, gboolean must_exist, const gchar *infotext)
 {
 	struct stat st;
 	gboolean valid;
@@ -705,7 +708,7 @@ gboolean collection_add_check(CollectionData *cd, FileData *fd, gboolean sorted,
 		{
 		CollectInfo *ci;
 
-		ci = collection_info_new_if_not_exists(cd, &st, fd);
+		ci = collection_info_new_if_not_exists(cd, &st, fd, infotext);
 		if (!ci) return FALSE;
 		DEBUG_3("add to collection: %s", fd->path);
 
@@ -725,9 +728,9 @@ gboolean collection_add_check(CollectionData *cd, FileData *fd, gboolean sorted,
 	return valid;
 }
 
-gboolean collection_add(CollectionData *cd, FileData *fd, gboolean sorted)
+gboolean collection_add(CollectionData *cd, FileData *fd, gboolean sorted, const gchar *infotext)
 {
-	return collection_add_check(cd, fd, sorted, TRUE);
+	return collection_add_check(cd, fd, sorted, TRUE, infotext);
 }
 
 gboolean collection_insert(CollectionData *cd, FileData *fd, CollectInfo *insert_ci, gboolean sorted)
@@ -740,7 +743,7 @@ gboolean collection_insert(CollectionData *cd, FileData *fd, CollectInfo *insert
 		{
 		CollectInfo *ci;
 
-		ci = collection_info_new_if_not_exists(cd, &st, fd);
+		ci = collection_info_new_if_not_exists(cd, &st, fd, nullptr);
 		if (!ci) return FALSE;
 
 		DEBUG_3("insert in collection: %s", fd->path);
