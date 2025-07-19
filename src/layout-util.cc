@@ -3700,14 +3700,46 @@ void layout_util_status_update_write(LayoutWindow *lw)
 	gint n = metadata_queue_length();
 	action = gq_gtk_action_group_get_action(lw->action_group, "SaveMetadata");
 	gq_gtk_action_set_sensitive(action, n > 0);
-	if (n > 0)
+
+	const gchar *icon_name = n > 0 ? GQ_ICON_SAVE_AS : GQ_ICON_SAVE;
+	g_autofree const gchar *icon_tooltip= n > 0 ? g_strdup_printf("Number of files with unsaved metadata: %d",n) : g_strdup("No unsaved metadata");
+
+	struct UpdateIconData
 		{
-		g_autofree gchar *buf = g_strdup_printf(_("Number of files with unsaved metadata: %d"), n);
-		g_object_set(G_OBJECT(action), "tooltip", buf, NULL);
-		}
-	else
+		GtkAction *act;
+		const gchar *name;
+		const gchar *tooltip;
+		};
+
+	static const auto update_icon_cb = [](GtkWidget *widget, gpointer data)
 		{
-		g_object_set(G_OBJECT(action), "tooltip", _("No unsaved metadata"), NULL);
+		auto *uid = static_cast<UpdateIconData *>(data);
+		if (!GTK_IS_BUTTON(widget)) return;
+		auto *waction = static_cast<GtkAction *>(g_object_get_data(G_OBJECT(widget), "action"));
+		if (waction != uid->act) return;
+#if HAVE_GTK4
+		GtkWidget *image = gtk_button_get_child(GTK_BUTTON(widget));
+		if (GTK_IS_IMAGE(image))
+			{
+			gtk_image_set_from_icon_name(GTK_IMAGE(image), uid->name);
+			}
+#else
+		GtkWidget *image = gtk_button_get_image(GTK_BUTTON(widget));
+		if (GTK_IS_IMAGE(image))
+			{
+			gtk_image_set_from_icon_name(GTK_IMAGE(image), uid->name, GTK_ICON_SIZE_SMALL_TOOLBAR);
+			}
+#endif
+		gtk_widget_set_tooltip_text(widget, uid->tooltip);
+		};
+
+	UpdateIconData uid = {action, icon_name, icon_tooltip};
+	for (int i = 0; i < TOOLBAR_COUNT; i++) // NOLINT(modernize-loop-convert)
+		{
+		if (lw->toolbar[i])
+			{
+			gtk_container_foreach(GTK_CONTAINER(lw->toolbar[i]), update_icon_cb, &uid);
+			}
 		}
 }
 
