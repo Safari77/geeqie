@@ -1125,20 +1125,12 @@ static void sr_menu_rename_cb(GtkWidget *, gpointer data)
 	file_util_rename(nullptr, search_result_selection_list(sd), sd->ui.window);
 }
 
+template<gboolean safe_delete>
 static void sr_menu_delete_cb(GtkWidget *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
 
-	options->file_ops.safe_delete_enable = FALSE;
-	file_util_delete(nullptr, search_result_selection_list(sd), sd->ui.window);
-}
-
-static void sr_menu_move_to_trash_cb(GtkWidget *, gpointer data)
-{
-	auto sd = static_cast<SearchData *>(data);
-
-	options->file_ops.safe_delete_enable = TRUE;
-	file_util_delete(nullptr, search_result_selection_list(sd), sd->ui.window);
+	file_util_delete(nullptr, search_result_selection_list(sd), sd->ui.window, safe_delete);
 }
 
 static void sr_menu_copy_path_cb(GtkWidget *, gpointer data)
@@ -1232,14 +1224,14 @@ static GtkWidget *search_result_menu(SearchData *sd, gboolean on_row, gboolean e
 				G_CALLBACK(sr_menu_copy_path_unquoted_cb), sd);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu,
-				options->file_ops.confirm_move_to_trash ? _("Move selection to Trash...") :
-					_("Move selection to Trash"), GQ_ICON_DELETE, on_row,
-				G_CALLBACK(sr_menu_move_to_trash_cb), sd);
-	menu_item_add_icon_sensitive(menu,
-				options->file_ops.confirm_delete ? _("_Delete selection...") :
-					_("_Delete selection"), GQ_ICON_DELETE_SHRED, on_row,
-				G_CALLBACK(sr_menu_delete_cb), sd);
+	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
+	                                 _("Move selection to Trash...") : _("Move selection to Trash"),
+	                             GQ_ICON_DELETE, on_row,
+	                             G_CALLBACK(sr_menu_delete_cb<TRUE>), sd);
+	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
+	                                 _("_Delete selection...") : _("_Delete selection"),
+	                             GQ_ICON_DELETE_SHRED, on_row,
+	                             G_CALLBACK(sr_menu_delete_cb<FALSE>), sd);
 
 	return menu;
 }
@@ -1411,8 +1403,7 @@ static gboolean search_result_keypress_cb(GtkWidget *widget, GdkEventKey *event,
 				file_util_rename(nullptr, search_result_selection_list(sd), widget);
 				break;
 			case 'D': case 'd':
-				options->file_ops.safe_delete_enable = TRUE;
-				file_util_delete(nullptr, search_result_selection_list(sd), widget);
+				file_util_delete(nullptr, search_result_selection_list(sd), widget, TRUE);
 				break;
 			case 'A': case 'a':
 				if (event->state & GDK_SHIFT_MASK)

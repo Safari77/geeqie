@@ -1275,8 +1275,7 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 			case 'D': case 'd':
 				if (fd)
 					{
-					options->file_ops.safe_delete_enable = TRUE;
-					file_util_delete(fd, nullptr, GTK_WIDGET(pr));
+					file_util_delete(fd, nullptr, GTK_WIDGET(pr), TRUE);
 					}
 				break;
 			case 'F': case 'f':
@@ -2190,30 +2189,15 @@ static void pan_rename_cb(GtkWidget *, gpointer data)
 	if (fd) file_util_rename(fd, nullptr, pw->imd->widget);
 }
 
+template<gboolean safe_delete>
 static void pan_delete_cb(GtkWidget *, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
-	FileData *fd;
 
-	fd = pan_menu_click_fd(pw);
-	if (fd)
-		{
-		options->file_ops.safe_delete_enable = FALSE;
-		file_util_delete(fd, nullptr, pw->imd->widget);
-		}
-}
+	FileData *fd = pan_menu_click_fd(pw);
+	if (!fd) return;
 
-static void pan_move_to_trash_cb(GtkWidget *, gpointer data)
-{
-	auto pw = static_cast<PanWindow *>(data);
-	FileData *fd;
-
-	fd = pan_menu_click_fd(pw);
-	if (fd)
-		{
-		options->file_ops.safe_delete_enable = TRUE;
-		file_util_delete(fd, nullptr, pw->imd->widget);
-		}
+	file_util_delete(fd, nullptr, pw->imd->widget, safe_delete);
 }
 
 static void pan_copy_path_cb(GtkWidget *, gpointer data)
@@ -2361,14 +2345,14 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
 				G_CALLBACK(pan_copy_path_unquoted_cb), pw);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu,
-				options->file_ops.confirm_move_to_trash ? _("Move to Trash...") :
-					_("Move to Trash"), GQ_ICON_DELETE, active,
-						G_CALLBACK(pan_move_to_trash_cb), pw);
-	menu_item_add_icon_sensitive(menu,
-				options->file_ops.confirm_delete ? _("_Delete...") :
-					_("_Delete"), GQ_ICON_DELETE_SHRED, active,
-						G_CALLBACK(pan_delete_cb), pw);
+	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
+	                                 _("Move to Trash...") : _("Move to Trash"),
+	                             GQ_ICON_DELETE, active,
+	                             G_CALLBACK(pan_delete_cb<TRUE>), pw);
+	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
+	                                 _("_Delete...") : _("_Delete"),
+	                             GQ_ICON_DELETE_SHRED, active,
+	                             G_CALLBACK(pan_delete_cb<FALSE>), pw);
 
 	menu_item_add_divider(menu);
 

@@ -3152,6 +3152,11 @@ static void dupe_window_remove_selection(DupeWindow *dw, GtkWidget *listview)
 	dupe_listview_realign_colors(dw);
 }
 
+static void dupe_window_delete_selected(DupeWindow *dw, gboolean safe_delete)
+{
+	file_util_delete_notify_done(nullptr, dupe_listview_get_selection(dw->listview), dw->window, safe_delete, delete_finished_cb, dw);
+}
+
 static void dupe_window_edit_selected(DupeWindow *dw, const gchar *key)
 {
 	file_util_start_editor_from_filelist(key, dupe_listview_get_selection(dw->listview), nullptr, dw->window);
@@ -3269,18 +3274,12 @@ static void dupe_menu_rename_cb(GtkWidget *, gpointer data)
 
 static void dupe_menu_delete_cb(GtkWidget *, gpointer data)
 {
-	auto dw = static_cast<DupeWindow *>(data);
-
-	options->file_ops.safe_delete_enable = FALSE;
-	file_util_delete_notify_done(nullptr, dupe_listview_get_selection(dw->listview), dw->window, delete_finished_cb, dw);
+	dupe_window_delete_selected(static_cast<DupeWindow *>(data), FALSE);
 }
 
 static void dupe_menu_move_to_trash_cb(GtkWidget *, gpointer data)
 {
-	auto dw = static_cast<DupeWindow *>(data);
-
-	options->file_ops.safe_delete_enable = TRUE;
-	file_util_delete_notify_done(nullptr, dupe_listview_get_selection(dw->listview), dw->window, delete_finished_cb, dw);
+	dupe_window_delete_selected(static_cast<DupeWindow *>(data), TRUE);
 }
 
 static void dupe_menu_copy_path_cb(GtkWidget *, gpointer data)
@@ -4072,8 +4071,7 @@ static gboolean dupe_window_keypress_cb(GtkWidget *widget, GdkEventKey *event, g
 					file_util_rename(nullptr, dupe_listview_get_selection(listview), dw->window);
 					break;
 				case 'D': case 'd':
-					options->file_ops.safe_delete_enable = TRUE;
-					file_util_delete(nullptr, dupe_listview_get_selection(listview), dw->window);
+					file_util_delete(nullptr, dupe_listview_get_selection(listview), dw->window, TRUE);
 					break;
 				default:
 					stop_signal = FALSE;
@@ -4130,8 +4128,7 @@ static gboolean dupe_window_keypress_cb(GtkWidget *widget, GdkEventKey *event, g
 			{
 			case GDK_KEY_Delete:
 			case GDK_KEY_KP_Delete:
-				options->file_ops.safe_delete_enable = FALSE;
-				file_util_delete_notify_done(nullptr, dupe_listview_get_selection(dw->listview), dw->window, delete_finished_cb, dw);
+				dupe_window_delete_selected(dw, FALSE);
 				break;
 			default:
 				stop_signal = FALSE;
