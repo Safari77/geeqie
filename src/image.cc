@@ -560,14 +560,6 @@ static gboolean image_post_process_color(ImageWindow *imd, gint start_row, gbool
 }
 
 
-static void image_post_process_tile_color_cb(PixbufRenderer *, GdkPixbuf **pixbuf, gint x, gint y, gint w, gint h, gpointer data)
-{
-	auto imd = static_cast<ImageWindow *>(data);
-	if (imd->cm) color_man_correct_region(static_cast<ColorMan *>(imd->cm), *pixbuf, x, y, w, h);
-	if (imd->desaturate) pixbuf_desaturate_rect(*pixbuf, x, y, w, h);
-	if (imd->overunderexposed) pixbuf_highlight_overunderexposed(*pixbuf, x, y, w, h);
-}
-
 void image_alter_orientation(ImageWindow *imd, FileData *fd_n, AlterType type)
 {
 	static const gint rotate_90[]    = {1,   6, 7, 8, 5, 2, 3, 4, 1};
@@ -589,7 +581,7 @@ void image_alter_orientation(ImageWindow *imd, FileData *fd_n, AlterType type)
 	else
 		if (options->metadata.write_orientation)
 			{
-			if (g_strcmp0(imd->image_fd->format_name, "heif") == 0)
+			if ((g_strcmp0(imd->image_fd->format_name, "heif") == 0) || (g_strcmp0(imd->image_fd->format_name, "jxl") == 0))
 				{
 				orientation = EXIF_ORIENTATION_TOP_LEFT;
 				}
@@ -627,7 +619,7 @@ void image_alter_orientation(ImageWindow *imd, FileData *fd_n, AlterType type)
 
 	if (orientation != (fd_n->exif_orientation ? fd_n->exif_orientation : 1))
 		{
-		if (g_strcmp0(fd_n->format_name, "heif") != 0)
+		if ((g_strcmp0(fd_n->format_name, "heif") != 0) && (g_strcmp0(fd_n->format_name, "jxl") != 0))
 			{
 			if (!options->metadata.write_orientation)
 				{
@@ -652,7 +644,7 @@ void image_alter_orientation(ImageWindow *imd, FileData *fd_n, AlterType type)
 		fd_n->user_orientation = 0;
 		}
 
-	if (g_strcmp0(fd_n->format_name, "heif") != 0)
+	if ((g_strcmp0(fd_n->format_name, "heif") != 0) && (g_strcmp0(fd_n->format_name, "jxl") != 0))
 		{
 		if (options->metadata.write_orientation)
 			{
@@ -674,13 +666,28 @@ void image_alter_orientation(ImageWindow *imd, FileData *fd_n, AlterType type)
 		}
 }
 
+static void image_set_pixbuf_renderer_post_process_func(ImageWindow *imd)
+{
+	if (imd->cm || imd->desaturate || imd->overunderexposed)
+		{
+		const auto image_post_process_tile_color_cb = [imd](PixbufRenderer *, GdkPixbuf **pixbuf, gint x, gint y, gint w, gint h)
+		{
+			if (imd->cm) color_man_correct_region(static_cast<ColorMan *>(imd->cm), *pixbuf, x, y, w, h);
+			if (imd->desaturate) pixbuf_desaturate_rect(*pixbuf, x, y, w, h);
+			if (imd->overunderexposed) pixbuf_highlight_overunderexposed(*pixbuf, x, y, w, h);
+		};
+		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, (imd->cm != nullptr) );
+		}
+	else
+		{
+		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, TRUE);
+		}
+}
+
 void image_set_desaturate(ImageWindow *imd, gboolean desaturate)
 {
 	imd->desaturate = desaturate;
-	if (imd->cm || imd->desaturate || imd->overunderexposed)
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, imd, (imd->cm != nullptr) );
-	else
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, nullptr, TRUE);
+	image_set_pixbuf_renderer_post_process_func(imd);
 	pixbuf_renderer_set_orientation(PIXBUF_RENDERER(imd->pr), imd->orientation);
 }
 
@@ -692,10 +699,7 @@ gboolean image_get_desaturate(ImageWindow *imd)
 void image_set_overunderexposed(ImageWindow *imd, gboolean overunderexposed)
 {
 	imd->overunderexposed = overunderexposed;
-	if (imd->cm || imd->desaturate || imd->overunderexposed)
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, imd, (imd->cm != nullptr) );
-	else
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, nullptr, TRUE);
+	image_set_pixbuf_renderer_post_process_func(imd);
 	pixbuf_renderer_set_orientation(PIXBUF_RENDERER(imd->pr), imd->orientation);
 }
 
@@ -1358,7 +1362,7 @@ void image_change_pixbuf(ImageWindow *imd, GdkPixbuf *pixbuf, gdouble zoom, gboo
 			}
 		else if (options->image.exif_rotate_enable)
 			{
-			if (g_strcmp0(imd->image_fd->format_name, "heif") == 0)
+			if ((g_strcmp0(imd->image_fd->format_name, "heif") == 0) || (g_strcmp0(imd->image_fd->format_name, "jxl") == 0))
 				{
 				imd->orientation = EXIF_ORIENTATION_TOP_LEFT;
 				imd->image_fd->exif_orientation = imd->orientation;
@@ -1380,7 +1384,7 @@ void image_change_pixbuf(ImageWindow *imd, GdkPixbuf *pixbuf, gdouble zoom, gboo
 			}
 		}
 
-	pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, nullptr, FALSE);
+	pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, FALSE);
 	if (imd->cm)
 		{
 		color_man_free(static_cast<ColorMan *>(imd->cm));
@@ -1407,8 +1411,7 @@ void image_change_pixbuf(ImageWindow *imd, GdkPixbuf *pixbuf, gdouble zoom, gboo
 		image_post_process_color(imd, 0, FALSE); /** @todo error handling */
 		}
 
-	if (imd->cm || imd->desaturate || imd->overunderexposed)
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, imd, (imd->cm != nullptr) );
+	image_set_pixbuf_renderer_post_process_func(imd);
 
 	image_state_set(imd, IMAGE_STATE_IMAGE);
 }
@@ -1530,11 +1533,7 @@ void image_move_from_image(ImageWindow *imd, ImageWindow *source)
 
 	pixbuf_renderer_move(PIXBUF_RENDERER(imd->pr), PIXBUF_RENDERER(source->pr));
 
-	if (imd->cm || imd->desaturate || imd->overunderexposed)
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, imd, (imd->cm != nullptr) );
-	else
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, nullptr, TRUE);
-
+	image_set_pixbuf_renderer_post_process_func(imd);
 }
 
 /* this is  a copy function
@@ -1592,11 +1591,7 @@ void image_copy_from_image(ImageWindow *imd, ImageWindow *source)
 
 	pixbuf_renderer_copy(PIXBUF_RENDERER(imd->pr), PIXBUF_RENDERER(source->pr));
 
-	if (imd->cm || imd->desaturate || imd->overunderexposed)
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), image_post_process_tile_color_cb, imd, (imd->cm != nullptr) );
-	else
-		pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, nullptr, TRUE);
-
+	image_set_pixbuf_renderer_post_process_func(imd);
 }
 
 

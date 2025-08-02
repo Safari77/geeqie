@@ -380,18 +380,12 @@ static void layout_menu_copy_cb(GtkAction *, gpointer data)
 	file_util_copy(nullptr, layout_selection_list(lw), nullptr, layout_window(lw));
 }
 
+template<gboolean quoted>
 static void layout_menu_copy_path_cb(GtkAction *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 
-	file_util_path_list_to_clipboard(layout_selection_list(lw), TRUE, ClipboardAction::COPY);
-}
-
-static void layout_menu_copy_path_unquoted_cb(GtkAction *, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-
-	file_util_path_list_to_clipboard(layout_selection_list(lw), FALSE, ClipboardAction::COPY);
+	file_util_path_list_to_clipboard(layout_selection_list(lw), quoted, ClipboardAction::COPY);
 }
 
 static void layout_menu_copy_image_cb(GtkAction *, gpointer data)
@@ -1754,68 +1748,24 @@ static void layout_menu_marks_cb(GtkToggleAction *action, gpointer data)
 	layout_marks_set(lw, gq_gtk_toggle_action_get_active(action));
 }
 
-
-static void layout_menu_set_mark_sel_cb(GtkAction *action, gpointer data)
+template<SelectionToMarkMode mode>
+static void layout_menu_selection_to_mark_cb(GtkAction *action, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
 	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
 
-	layout_selection_to_mark(lw, mark, STM_MODE_SET);
+	layout_selection_to_mark(lw, mark, mode);
 }
 
-static void layout_menu_res_mark_sel_cb(GtkAction *action, gpointer data)
+template<MarkToSelectionMode mode>
+static void layout_menu_mark_to_selection_cb(GtkAction *action, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
 	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
 
-	layout_selection_to_mark(lw, mark, STM_MODE_RESET);
-}
-
-static void layout_menu_toggle_mark_sel_cb(GtkAction *action, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
-
-	layout_selection_to_mark(lw, mark, STM_MODE_TOGGLE);
-}
-
-static void layout_menu_sel_mark_cb(GtkAction *action, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
-
-	layout_mark_to_selection(lw, mark, MTS_MODE_SET);
-}
-
-static void layout_menu_sel_mark_or_cb(GtkAction *action, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
-
-	layout_mark_to_selection(lw, mark, MTS_MODE_OR);
-}
-
-static void layout_menu_sel_mark_and_cb(GtkAction *action, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
-
-	layout_mark_to_selection(lw, mark, MTS_MODE_AND);
-}
-
-static void layout_menu_sel_mark_minus_cb(GtkAction *action, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-	gint mark = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(action), "mark_num"));
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
-
-	layout_mark_to_selection(lw, mark, MTS_MODE_MINUS);
+	layout_mark_to_selection(lw, mark, mode);
 }
 
 static void layout_menu_mark_filter_toggle_cb(GtkAction *action, gpointer data)
@@ -2085,7 +2035,7 @@ static void layout_menu_edit_cb(GtkAction *action, gpointer data)
 
 static void layout_menu_metadata_write_cb(GtkAction *, gpointer)
 {
-	metadata_write_queue_confirm(TRUE, nullptr, nullptr);
+	metadata_write_queue_confirm(TRUE, nullptr);
 }
 
 static GtkWidget *last_focussed = nullptr;
@@ -2607,8 +2557,8 @@ static GtkActionEntry menu_entries[] = {
   { "ConnectZoomOut",        GQ_ICON_ZOOM_OUT,                  N_("Zoom _out"),                                        "underscore",          N_("Connected Zoom out"),                              CB(layout_menu_connect_zoom_out_cb) },
   { "Copy",                  GQ_ICON_COPY,                      N_("_Copy..."),                                         "<control>C",          N_("Copy..."),                                         CB(layout_menu_copy_cb) },
   { "CopyImage",             nullptr,                           N_("_Copy image to clipboard"),                         nullptr,               N_("Copy image to clipboard"),                         CB(layout_menu_copy_image_cb) },
-  { "CopyPath",              nullptr,                           N_("_Copy to clipboard"),                               nullptr,               N_("Copy to clipboard"),                               CB(layout_menu_copy_path_cb) },
-  { "CopyPathUnquoted",      nullptr,                           N_("_Copy to clipboard (unquoted)"),                    nullptr,               N_("Copy to clipboard (unquoted)"),                    CB(layout_menu_copy_path_unquoted_cb) },
+  { "CopyPath",              nullptr,                           N_("_Copy to clipboard"),                               nullptr,               N_("Copy to clipboard"),                               CB(layout_menu_copy_path_cb<TRUE>) },
+  { "CopyPathUnquoted",      nullptr,                           N_("_Copy to clipboard (unquoted)"),                    nullptr,               N_("Copy to clipboard (unquoted)"),                    CB(layout_menu_copy_path_cb<FALSE>) },
   { "CropRectangle",         nullptr,                           N_("Crop Rectangle"),                                   nullptr,               N_("Crop Rectangle"),                                  CB(layout_menu_crop_selection_cb) },
   { "CutPath",               nullptr,                           N_("_Cut to clipboard"),                                "<control>X",          N_("Cut to clipboard"),                                CB(layout_menu_cut_path_cb) },
   { "DeleteAlt1",            GQ_ICON_USER_TRASH,                N_("Move selection to Trash..."),                       "Delete",              N_("Move selection to Trash..."),                      CB(layout_menu_move_to_trash_key_cb) },
@@ -2882,15 +2832,15 @@ static void layout_actions_setup_marks(LayoutWindow *lw)
 		gint i = (mark < 10 ? mark : 0);
 
 		layout_actions_setup_mark(lw, i, "Mark%d",		_("Mark _%d"), nullptr, nullptr, nullptr);
-		layout_actions_setup_mark(lw, i, "SetMark%d",	_("_Set mark %d"),			nullptr,		_("Set mark %d"), G_CALLBACK(layout_menu_set_mark_sel_cb));
-		layout_actions_setup_mark(lw, i, "ResetMark%d",	_("_Reset mark %d"),			nullptr,		_("Reset mark %d"), G_CALLBACK(layout_menu_res_mark_sel_cb));
-		layout_actions_setup_mark(lw, i, "ToggleMark%d",	_("_Toggle mark %d"),			"%d",		_("Toggle mark %d"), G_CALLBACK(layout_menu_toggle_mark_sel_cb));
-		layout_actions_setup_mark(lw, i, "ToggleMark%dAlt1",	_("_Toggle mark %d"),			"KP_%d",	_("Toggle mark %d"), G_CALLBACK(layout_menu_toggle_mark_sel_cb));
-		layout_actions_setup_mark(lw, i, "SelectMark%d",	_("Se_lect mark %d"),			"<control>%d",	_("Select mark %d"), G_CALLBACK(layout_menu_sel_mark_cb));
-		layout_actions_setup_mark(lw, i, "SelectMark%dAlt1",	_("_Select mark %d"),			"<control>KP_%d", _("Select mark %d"), G_CALLBACK(layout_menu_sel_mark_cb));
-		layout_actions_setup_mark(lw, i, "AddMark%d",	_("_Add mark %d"),			nullptr,		_("Add mark %d"), G_CALLBACK(layout_menu_sel_mark_or_cb));
-		layout_actions_setup_mark(lw, i, "IntMark%d",	_("_Intersection with mark %d"),	nullptr,		_("Intersection with mark %d"), G_CALLBACK(layout_menu_sel_mark_and_cb));
-		layout_actions_setup_mark(lw, i, "UnselMark%d",	_("_Unselect mark %d"),			nullptr,		_("Unselect mark %d"), G_CALLBACK(layout_menu_sel_mark_minus_cb));
+		layout_actions_setup_mark(lw, i, "SetMark%d",	_("_Set mark %d"),			nullptr,		_("Set mark %d"), G_CALLBACK(layout_menu_selection_to_mark_cb<STM_MODE_SET>));
+		layout_actions_setup_mark(lw, i, "ResetMark%d",	_("_Reset mark %d"),			nullptr,		_("Reset mark %d"), G_CALLBACK(layout_menu_selection_to_mark_cb<STM_MODE_RESET>));
+		layout_actions_setup_mark(lw, i, "ToggleMark%d",	_("_Toggle mark %d"),			"%d",		_("Toggle mark %d"), G_CALLBACK(layout_menu_selection_to_mark_cb<STM_MODE_TOGGLE>));
+		layout_actions_setup_mark(lw, i, "ToggleMark%dAlt1",	_("_Toggle mark %d"),			"KP_%d",	_("Toggle mark %d"), G_CALLBACK(layout_menu_selection_to_mark_cb<STM_MODE_TOGGLE>));
+		layout_actions_setup_mark(lw, i, "SelectMark%d",	_("Se_lect mark %d"),			"<control>%d",	_("Select mark %d"), G_CALLBACK(layout_menu_mark_to_selection_cb<MTS_MODE_SET>));
+		layout_actions_setup_mark(lw, i, "SelectMark%dAlt1",	_("_Select mark %d"),			"<control>KP_%d", _("Select mark %d"), G_CALLBACK(layout_menu_mark_to_selection_cb<MTS_MODE_SET>));
+		layout_actions_setup_mark(lw, i, "AddMark%d",	_("_Add mark %d"),			nullptr,		_("Add mark %d"), G_CALLBACK(layout_menu_mark_to_selection_cb<MTS_MODE_OR>));
+		layout_actions_setup_mark(lw, i, "IntMark%d",	_("_Intersection with mark %d"),	nullptr,		_("Intersection with mark %d"), G_CALLBACK(layout_menu_mark_to_selection_cb<MTS_MODE_AND>));
+		layout_actions_setup_mark(lw, i, "UnselMark%d",	_("_Unselect mark %d"),			nullptr,		_("Unselect mark %d"), G_CALLBACK(layout_menu_mark_to_selection_cb<MTS_MODE_MINUS>));
 		layout_actions_setup_mark(lw, i, "FilterMark%d",	_("_Filter mark %d"),			nullptr,		_("Filter mark %d"), G_CALLBACK(layout_menu_mark_filter_toggle_cb));
 
 		g_string_append_printf(desc,
@@ -4140,7 +4090,7 @@ void layout_bars_new_image(LayoutWindow *lw)
 
 	/* this should be called here to handle the metadata edited in bars */
 	if (options->metadata.confirm_on_image_change)
-		metadata_write_queue_confirm(FALSE, nullptr, nullptr);
+		metadata_write_queue_confirm(FALSE, nullptr);
 }
 
 void layout_bars_new_selection(LayoutWindow *lw, gint count)

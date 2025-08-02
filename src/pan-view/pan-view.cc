@@ -243,7 +243,7 @@ static void pan_queue_image_done_cb(ImageLoader *il, gpointer data)
 			{
 			if (!il->fd->exif_orientation)
 				{
-				if (g_strcmp0(il->fd->format_name, "heif") != 0)
+				if ((g_strcmp0(il->fd->format_name, "heif") != 0) && (g_strcmp0(il->fd->format_name, "jxl") != 0))
 					{
 					il->fd->exif_orientation = metadata_read_int(il->fd, ORIENTATION_KEY, EXIF_ORIENTATION_TOP_LEFT);
 					}
@@ -375,10 +375,10 @@ static void pan_queue_add(PanWindow *pw, PanItem *pi)
  *-----------------------------------------------------------------------------
  */
 
-static gboolean pan_window_request_tile_cb(PixbufRenderer *pr, gint x, gint y,
-				       	   gint width, gint height, GdkPixbuf *pixbuf, gpointer data)
+static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
+                                           gint x, gint y, gint width, gint height,
+                                           GdkPixbuf *pixbuf)
 {
-	auto pw = static_cast<PanWindow *>(data);
 	GList *list;
 	GList *work;
 	const GdkRectangle request_rect{x, y, width, height};
@@ -454,10 +454,8 @@ static gboolean pan_window_request_tile_cb(PixbufRenderer *pr, gint x, gint y,
 	return TRUE;
 }
 
-static void pan_window_dispose_tile_cb(PixbufRenderer *, gint x, gint y,
-				       gint width, gint height, GdkPixbuf *, gpointer data)
+static void pan_window_dispose_tile_cb(PanWindow *pw, gint x, gint y, gint width, gint height)
 {
-	auto pw = static_cast<PanWindow *>(data);
 	GList *list;
 	GList *work;
 
@@ -1117,10 +1115,18 @@ static gint pan_layout_update_idle_cb(gpointer data)
 
 		pan_grid_build(pw, width, height, 1000);
 
+		const auto tile_request_func = [pw](PixbufRenderer *pr, gint x, gint y, gint width, gint height, GdkPixbuf *pixbuf)
+		{
+			return pan_window_request_tile_cb(pw, pr, x, y, width, height, pixbuf);
+		};
+		const auto tile_dispose_func = [pw](PixbufRenderer *, gint x, gint y, gint width, gint height, GdkPixbuf *)
+		{
+			pan_window_dispose_tile_cb(pw, x, y, width, height);
+		};
 		pixbuf_renderer_set_tiles(PIXBUF_RENDERER(pw->imd->pr), width, height,
-					  PAN_TILE_SIZE, PAN_TILE_SIZE, 10,
-					  pan_window_request_tile_cb,
-					  pan_window_dispose_tile_cb, pw, 1.0);
+		                          PAN_TILE_SIZE, PAN_TILE_SIZE, 10,
+		                          tile_request_func, tile_dispose_func,
+		                          1.0);
 
 		if (scroll_x == 0 && scroll_y == 0)
 			{
@@ -2200,22 +2206,13 @@ static void pan_delete_cb(GtkWidget *, gpointer data)
 	file_util_delete(fd, nullptr, pw->imd->widget, safe_delete);
 }
 
+template<gboolean quoted>
 static void pan_copy_path_cb(GtkWidget *, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
-	FileData *fd;
+	FileData *fd = pan_menu_click_fd(pw);
 
-	fd = pan_menu_click_fd(pw);
-	if (fd) file_util_copy_path_to_clipboard(fd, TRUE, ClipboardAction::COPY);
-}
-
-static void pan_copy_path_unquoted_cb(GtkWidget *, gpointer data)
-{
-	auto pw = static_cast<PanWindow *>(data);
-	FileData *fd;
-
-	fd = pan_menu_click_fd(pw);
-	if (fd) file_util_copy_path_to_clipboard(fd, FALSE, ClipboardAction::COPY);
+	if (fd) file_util_copy_path_to_clipboard(fd, quoted, ClipboardAction::COPY);
 }
 
 static void pan_exif_date_toggle_cb(GtkWidget *widget, gpointer data)
@@ -2340,9 +2337,9 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
 	menu_item_add_sensitive(menu, _("_Rename..."), active,
 				G_CALLBACK(pan_rename_cb), pw);
 	menu_item_add_sensitive(menu, _("_Copy to clipboard"), active,
-				G_CALLBACK(pan_copy_path_cb), pw);
+	                        G_CALLBACK(pan_copy_path_cb<TRUE>), pw);
 	menu_item_add_sensitive(menu, _("_Copy to clipboard (unquoted)"), active,
-				G_CALLBACK(pan_copy_path_unquoted_cb), pw);
+	                        G_CALLBACK(pan_copy_path_cb<FALSE>), pw);
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?

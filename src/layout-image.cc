@@ -589,18 +589,12 @@ static void li_pop_menu_copy_cb(GtkWidget *widget, gpointer data)
 		       li_pop_menu_click_parent(widget, lw));
 }
 
+template<gboolean quoted>
 static void li_pop_menu_copy_path_cb(GtkWidget *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 
-	file_util_copy_path_to_clipboard(layout_image_get_fd(lw), TRUE, ClipboardAction::COPY);
-}
-
-static void li_pop_menu_copy_path_unquoted_cb(GtkWidget *, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-
-	file_util_copy_path_to_clipboard(layout_image_get_fd(lw), FALSE, ClipboardAction::COPY);
+	file_util_copy_path_to_clipboard(layout_image_get_fd(lw), quoted, ClipboardAction::COPY);
 }
 
 static void li_pop_menu_cut_path_cb(GtkWidget *, gpointer data)
@@ -823,8 +817,10 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw)
 	if (!path) gtk_widget_set_sensitive(item, FALSE);
 	item = menu_item_add(menu, _("_Rename..."), G_CALLBACK(li_pop_menu_rename_cb), lw);
 	if (!path) gtk_widget_set_sensitive(item, FALSE);
-	item = menu_item_add(menu, _("_Copy to clipboard"), G_CALLBACK(li_pop_menu_copy_path_cb), lw);
-	item = menu_item_add(menu, _("_Copy to clipboard (unquoted)"), G_CALLBACK(li_pop_menu_copy_path_unquoted_cb), lw);
+	item = menu_item_add(menu, _("_Copy to clipboard"),
+	                     G_CALLBACK(li_pop_menu_copy_path_cb<TRUE>), lw);
+	item = menu_item_add(menu, _("_Copy to clipboard (unquoted)"),
+	                     G_CALLBACK(li_pop_menu_copy_path_cb<FALSE>), lw);
 	item = menu_item_add(menu, _("Copy _image to clipboard"), G_CALLBACK(li_pop_menu_copy_image_cb), lw);
 	item = menu_item_add(menu, _("Cut to clipboard"), G_CALLBACK(li_pop_menu_cut_path_cb), lw);
 	if (!path) gtk_widget_set_sensitive(item, FALSE);
@@ -1232,7 +1228,15 @@ void layout_image_reset_orientation(LayoutWindow *lw)
 
 	if (options->image.exif_rotate_enable)
 		{
-		if (g_strcmp0(imd->image_fd->format_name, "heif") != 0)
+		/* ISO/IEC 23008‑12 (HEIF) – Key Sections & Clauses
+		 * Annex A – Metadata Specification
+		 * Specifies how Exif metadata is carried in HEIF files.
+		 * Exif orientation tags are described only as descriptive metadata—decoders are not
+		 * required to rotate images based on Exif.
+		 * This also applies to jxl files.
+		 * Also see commit ac15f03b
+		 */
+		if ((g_strcmp0(imd->image_fd->format_name, "heif") != 0) && (g_strcmp0(imd->image_fd->format_name, "jxl") != 0))
 			{
 			imd->orientation = metadata_read_int(imd->image_fd, ORIENTATION_KEY, EXIF_ORIENTATION_TOP_LEFT);
 			}

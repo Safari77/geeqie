@@ -32,12 +32,6 @@ enum ZoomMode {
 	ZOOM_RESET_NONE		= 2
 };
 
-enum ClipboardSelection {
-	CLIPBOARD_PRIMARY	= 0,
-	CLIPBOARD_CLIPBOARD = 1,
-	CLIPBOARD_BOTH = 2
-};
-
 enum MouseButton {
 	MOUSE_BUTTON_LEFT	= 1,
 	MOUSE_BUTTON_MIDDLE	= 2,
@@ -210,8 +204,6 @@ enum ScrollReset : guint {
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(FILE, fclose)
-
-using FileUtilDoneFunc = void (*)(gboolean, const gchar *, gpointer);
 
 #define FILEDATA_MARKS_SIZE 10
 
