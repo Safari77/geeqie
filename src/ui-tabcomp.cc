@@ -31,6 +31,7 @@
 #include "compat.h"
 #include "history-list.h"
 #include "intl.h"
+#include "layout.h"
 #include "main-defines.h"
 #include "misc.h"	/* expand_tilde() */
 #include "options.h"
@@ -77,7 +78,7 @@ struct TabCompData
 	gchar *history_key;
 	gint history_levels;
 
-	FileDialog *fd;
+	GtkWidget *dialog;
 	gchar *fd_title;
 	gboolean fd_folders_only;
 	GtkWidget *fd_button;
@@ -148,7 +149,10 @@ static void tab_completion_destroy(gpointer data)
 	tab_completion_free_list(td);
 	g_free(td->history_key);
 
-	if (td->fd) file_dialog_close(td->fd);
+	if (td->dialog)
+		{
+		gq_gtk_widget_destroy(GTK_WIDGET(td->dialog));
+		}
 	g_free(td->fd_title);
 
 	g_free(td->filter);
@@ -766,75 +770,212 @@ gchar *remove_trailing_slash(const gchar *path)
 	return g_strndup(path, l);
 }
 
-static void tab_completion_select_cancel_cb(FileDialog *fd, gpointer data)
+static void tab_completion_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
 {
 	auto td = static_cast<TabCompData *>(data);
 
-	td->fd = nullptr;
-	file_dialog_close(fd);
-}
+	if (response_id == GTK_RESPONSE_ACCEPT)
+		{
+		g_autofree gchar *filename = gtk_file_chooser_get_filename(chooser);
+		gq_gtk_entry_set_text(GTK_ENTRY(td->entry), filename);
+		}
 
-static void tab_completion_select_ok_cb(FileDialog *fd, gpointer data)
-{
-	auto td = static_cast<TabCompData *>(data);
-
-	gq_gtk_entry_set_text(GTK_ENTRY(td->entry), gq_gtk_entry_get_text(GTK_ENTRY(fd->entry)));
-
-	tab_completion_select_cancel_cb(fd, data);
+	td->dialog = nullptr;
+	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 
 	tab_completion_emit_enter_signal(td);
+}
+
+static void update_tabcomp_preview_cb(GtkFileChooser *chooser, gpointer data)
+{
+	g_autofree char *filename = gtk_file_chooser_get_filename(chooser);
+	GtkTextBuffer *buffer = GTK_TEXT_BUFFER(data);
+
+	gtk_text_buffer_set_text(buffer, "", -1);
+
+	if (isfile(filename) && g_str_has_suffix(filename, "icc"))
+		{
+		g_autofree gchar *stdout_data = nullptr;
+		g_autofree gchar *stderr_data = nullptr;
+		gint exit_status = 0;
+		GError *error = nullptr;
+
+		g_autofree gchar *cmd_line = g_strdup_printf("iccdump %s", filename);
+
+		gboolean success = g_spawn_command_line_sync(cmd_line, &stdout_data, &stderr_data, &exit_status, &error);
+
+		if (!success)
+			{
+			log_printf("iccdump is not installed. Install argyll package: %s\n", error->message);
+			g_clear_error(&error);
+			}
+		else
+			{
+			gtk_text_buffer_set_text(buffer, stdout_data, -1);
+			}
+		}
+	else
+		{
+		if (filename && isdir(filename))
+			{
+			g_autoptr(GDir) dir = g_dir_open(filename, 0, nullptr);
+			if (dir)
+				{
+				const gchar *entry;
+				g_autoptr(GString) output = g_string_new("");
+
+				while ((entry = g_dir_read_name(dir)) != nullptr)
+					{
+					g_autofree gchar *fullpath = g_build_filename(filename, entry, nullptr);
+
+					if (isdir(fullpath))
+						{
+						g_string_append_printf(output, "📁 %s\n", entry);
+						}
+					else
+						{
+						g_string_append_printf(output, "📄 %s\n", entry);
+						}
+					}
+
+				gtk_text_buffer_set_text(buffer, output->str, -1);
+				}
+			}
+		}
+}
+
+static GtkWidget* create_history_combo_box(const gchar *history_key)
+{
+	GList *work = history_list_get_by_key(history_key);
+
+	if (work)
+		{
+		GtkWidget *history_combo = gtk_combo_box_text_new();
+
+		for (GList *history_list = work; history_list != nullptr; history_list = history_list->next)
+			{
+			const auto path = static_cast<const gchar*>(history_list->data);
+			gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(history_combo), path);
+			}
+
+		gtk_combo_box_set_active(GTK_COMBO_BOX(history_combo), 0);
+
+		return history_combo;
+		}
+
+	return nullptr;
+}
+
+static void history_combo_changed_cb(GtkComboBoxText *history_combo, gpointer data)
+{
+	auto td = static_cast<TabCompData *>(data);
+
+	g_autofree gchar *text = gtk_combo_box_text_get_active_text(history_combo);
+
+	if (text)
+		{
+		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(td->dialog), text);
+		}
 }
 
 static void tab_completion_select_show(TabCompData *td)
 {
 	const gchar *title;
-	const gchar *path;
-	const gchar *filter = nullptr;
-	gchar *filter_desc = nullptr;
+	GtkFileChooserAction action;
 
-	if (td->fd)
+	if (td->dialog)
 		{
-		gtk_window_present(GTK_WINDOW(GENERIC_DIALOG(td->fd)->dialog));
+		gtk_window_present(GTK_WINDOW(GENERIC_DIALOG(td->dialog)));
 		return;
 		}
 
-	title = (td->fd_title) ? td->fd_title : _("Select path");
-	td->fd = file_dialog_new(title, "select_path", td->entry,
-				 tab_completion_select_cancel_cb, td);
-	file_dialog_add_button(td->fd, GQ_ICON_OK, "OK",
-				 tab_completion_select_ok_cb, TRUE);
-
-	generic_dialog_add_message(GENERIC_DIALOG(td->fd), nullptr, title, nullptr, FALSE);
-
-	if (td->filter)
-		{
-		filter = td->filter;
-		}
-	else
-		{
-		filter = "*";
-		}
-	if (td->filter_desc)
-		{
-		filter_desc = td->filter_desc;
-		}
-	else
-		{
-		filter_desc = _("All files");
-		}
-
-	path = gq_gtk_entry_get_text(GTK_ENTRY(td->entry));
-	if (path[0] == '\0') path = nullptr;
 	if (td->fd_folders_only)
 		{
-		file_dialog_add_path_widgets(td->fd, nullptr, path, td->history_key, nullptr, nullptr);
+		action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
 		}
 	else
 		{
-		file_dialog_add_path_widgets(td->fd, nullptr, path, td->history_key, filter, filter_desc);
+		action = GTK_FILE_CHOOSER_ACTION_OPEN;
 		}
 
-	gtk_widget_show(GENERIC_DIALOG(td->fd)->dialog);
+	title = (td->fd_title) ? td->fd_title : _("Select path");
+	td->dialog = gtk_file_chooser_dialog_new(title, nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr);
+
+	GtkFileFilter *all_filter = gtk_file_filter_new();
+	gtk_file_filter_set_name(all_filter, _("All files"));
+	gtk_file_filter_add_pattern(all_filter, "*");
+	gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(td->dialog), all_filter);
+	gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(td->dialog), all_filter);
+
+	if (td->filter && td->filter_desc)
+		{
+		GtkFileFilter *file_filter = gtk_file_filter_new();
+		gtk_file_filter_set_name(file_filter, td->filter_desc);
+		g_autofree gchar *filter = g_strconcat("*", td->filter, nullptr);
+		gtk_file_filter_add_pattern(file_filter, filter);
+		gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(td->dialog), file_filter);
+		gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(td->dialog), file_filter);
+		}
+
+	/* Current layout folder
+	 */
+	gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(td->dialog), layout_get_path(get_current_layout()), nullptr);
+
+	/* Include standard system directories for .icc file in the bookmarks if
+	 * icc files are being searched for
+	 */
+	if (g_strcmp0(td->filter, ".icc") == 0)
+		{
+		gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(td->dialog), GQ_ICC_SYSTEM, nullptr);
+		gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(td->dialog), GQ_ICC_LOCAL, nullptr);
+		}
+
+	g_signal_connect(td->dialog, "response", G_CALLBACK(tab_completion_response_cb), td);
+
+	if (isfile(gtk_entry_get_text(GTK_ENTRY(td->entry))))
+		{
+		g_autofree gchar *dir_name = g_path_get_dirname(gtk_entry_get_text(GTK_ENTRY(td->entry)));
+		gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(td->dialog), gtk_entry_get_text(GTK_ENTRY(td->entry)));
+		}
+	else
+		{
+		if (g_strcmp0(gtk_entry_get_text(GTK_ENTRY(td->entry)), "") != 0)
+			{
+			gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(td->dialog), gtk_entry_get_text(GTK_ENTRY(td->entry)));
+			}
+		else
+			{
+			gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(td->dialog), homedir());
+			}
+		}
+
+	if (td->has_history)
+		{
+		GtkWidget *history_combo = create_history_combo_box(td->history_key);
+
+		if (history_combo)
+			{
+			gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(td->dialog), history_combo);
+			g_signal_connect(history_combo, "changed", G_CALLBACK(history_combo_changed_cb), td);
+			}
+		}
+
+	GtkWidget *textview = gtk_text_view_new();
+	gtk_text_view_set_editable(GTK_TEXT_VIEW(textview), FALSE);
+	gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(textview), FALSE);
+
+	GtkWidget *scroller = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gq_gtk_container_add(GTK_WIDGET(scroller), textview);
+	gtk_widget_set_size_request(scroller, 200, -1);
+	gq_gtk_widget_show_all(GTK_WIDGET(scroller));
+
+	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(td->dialog), scroller);
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
+
+	g_signal_connect(td->dialog, "update-preview", G_CALLBACK(update_tabcomp_preview_cb), buffer);
+
+	gq_gtk_widget_show_all(GTK_WIDGET(td->dialog));
 }
 
 static void tab_completion_select_pressed(GtkWidget *, gpointer data)

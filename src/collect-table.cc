@@ -107,9 +107,9 @@ static void collection_table_populate_at_new_size(CollectTable *ct, gint w, gint
  * @link collection_window_keypress @endlink \n
  * @link collection_table_popup_menu @endlink
  *
- * See also @link hard_coded_window_keys @endlink
+ * See also @link HardcodedWindowKey @endlink
  **/
-static hard_coded_window_keys collection_window_keys[] = {
+static HardcodedWindowKeyList collection_window_keys{
 	{GDK_CONTROL_MASK, 'C', N_("Copy")},
 	{GDK_CONTROL_MASK, 'M', N_("Move")},
 	{GDK_CONTROL_MASK, 'R', N_("Rename")},
@@ -136,7 +136,6 @@ static hard_coded_window_keys collection_window_keys[] = {
 	{GDK_SHIFT_MASK, 'P', N_("Print")},
 	{GDK_MOD1_MASK, 'A', N_("Append (Append collection dialog)")},
 	{GDK_MOD1_MASK, 'D', N_("Discard (Close modified collection dialog)")},
-	{static_cast<GdkModifierType>(0), 0, nullptr}
 };
 
 /*
@@ -1005,7 +1004,7 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 	accel_group = gtk_accel_group_new();
 	gtk_menu_set_accel_group(GTK_MENU(menu), accel_group);
 
-	g_object_set_data(G_OBJECT(menu), "window_keys", collection_window_keys);
+	g_object_set_data(G_OBJECT(menu), "window_keys", &collection_window_keys);
 	g_object_set_data(G_OBJECT(menu), "accel_group", accel_group);
 
 	g_signal_connect(G_OBJECT(menu), "destroy",
@@ -1069,12 +1068,10 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 	                             G_CALLBACK(collection_table_popup_delete_cb<FALSE>), ct);
 
 	menu_item_add_divider(menu);
-	submenu = submenu_add_sort(nullptr, G_CALLBACK(collection_table_popup_sort_cb), ct, FALSE, TRUE, FALSE, SORT_NONE);
+	submenu = submenu_add_sort(menu, G_CALLBACK(collection_table_popup_sort_cb), ct, FALSE, TRUE, FALSE, SORT_NONE);
 	menu_item_add_divider(submenu);
 	menu_item_add(submenu, _("Randomize"),
 			G_CALLBACK(collection_table_popup_randomize_cb), ct);
-	item = menu_item_add(menu, _("_Sort"), nullptr, nullptr);
-	gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
 
 	menu_item_add_check(menu, _("Show filename _text"), ct->show_text,
 			G_CALLBACK(collection_table_popup_show_names_cb), ct);
@@ -2106,31 +2103,19 @@ static void collection_table_add_dir_recursive(CollectTable *ct, FileData *dir_f
 	file_data_list_free(d);
 }
 
-static void confirm_dir_list_do(CollectTable *ct, GList *list, gboolean recursive)
-{
-	GList *work = list;
-	while (work)
-		{
-		auto fd = static_cast<FileData *>(work->data);
-		work = work->next;
-		if (isdir(fd->path)) collection_table_add_dir_recursive(ct, fd, recursive);
-		}
-	collection_table_insert_filelist(ct, list, ct->marker_info);
-}
-
-
+template<gboolean recursive>
 static void confirm_dir_list_add(GtkWidget *, gpointer data)
 {
-	auto ct = static_cast<CollectTable *>(data);
+	auto *ct = static_cast<CollectTable *>(data);
 
-	confirm_dir_list_do(ct, ct->drop_list, FALSE);
-}
+	for (GList *work = ct->drop_list; work; work = work->next)
+		{
+		auto fd = static_cast<FileData *>(work->data);
 
-static void confirm_dir_list_recurse(GtkWidget *, gpointer data)
-{
-	auto ct = static_cast<CollectTable *>(data);
+		if (isdir(fd->path)) collection_table_add_dir_recursive(ct, fd, recursive);
+		}
 
-	confirm_dir_list_do(ct, ct->drop_list, TRUE);
+	collection_table_insert_filelist(ct, ct->drop_list, ct->marker_info);
 }
 
 static void confirm_dir_list_skip(GtkWidget *, gpointer data)
@@ -2151,11 +2136,11 @@ static GtkWidget *collection_table_drop_menu(CollectTable *ct)
 	menu_item_add_icon(menu, _("Dropped list includes folders."), GQ_ICON_DIRECTORY, nullptr, nullptr);
 	menu_item_add_divider(menu);
 	menu_item_add_icon(menu, _("_Add contents"), GQ_ICON_OK,
-			    G_CALLBACK(confirm_dir_list_add), ct);
+	                   G_CALLBACK(confirm_dir_list_add<FALSE>), ct);
 	menu_item_add_icon(menu, _("Add contents _recursive"), GQ_ICON_ADD,
-			    G_CALLBACK(confirm_dir_list_recurse), ct);
+	                   G_CALLBACK(confirm_dir_list_add<TRUE>), ct);
 	menu_item_add_icon(menu, _("_Skip folders"), GQ_ICON_REMOVE,
-			    G_CALLBACK(confirm_dir_list_skip), ct);
+	                   G_CALLBACK(confirm_dir_list_skip), ct);
 	menu_item_add_divider(menu);
 	menu_item_add_icon(menu, _("Cancel"), GQ_ICON_CANCEL, nullptr, ct);
 

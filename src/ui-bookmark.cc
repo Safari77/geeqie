@@ -353,21 +353,14 @@ static void bookmark_menu_prop_cb(GtkWidget *widget, gpointer data)
 	bookmark_edit(bm->key, bm->active_button->key, widget);
 }
 
-static void bookmark_menu_move(BookMarkData *bm, gint direction)
+template<gint direction>
+static void bookmark_menu_move_cb(GtkWidget *, gpointer data)
 {
+	auto *bm = static_cast<BookMarkData *>(data);
+
 	if (!bm->active_button) return;
 
 	bookmark_move(bm, bm->active_button->button, direction);
-}
-
-static void bookmark_menu_up_cb(GtkWidget *, gpointer data)
-{
-	bookmark_menu_move(static_cast<BookMarkData *>(data), -1);
-}
-
-static void bookmark_menu_down_cb(GtkWidget *, gpointer data)
-{
-	bookmark_menu_move(static_cast<BookMarkData *>(data), 1);
 }
 
 static void bookmark_menu_remove_cb(GtkWidget *, gpointer data)
@@ -394,9 +387,9 @@ static void bookmark_menu_popup(BookMarkData *bm, GtkWidget *button, gint, guint
 	menu_item_add_icon_sensitive(menu, _("_Properties..."), PIXBUF_INLINE_ICON_PROPERTIES, bm->editable,
 		      G_CALLBACK(bookmark_menu_prop_cb), bm);
 	menu_item_add_icon_sensitive(menu, _("Move _up"), GQ_ICON_GO_UP, bm->editable,
-		      G_CALLBACK(bookmark_menu_up_cb), bm);
+	                             G_CALLBACK(bookmark_menu_move_cb<-1>), bm);
 	menu_item_add_icon_sensitive(menu, _("Move _down"), GQ_ICON_GO_DOWN, bm->editable,
-		      G_CALLBACK(bookmark_menu_down_cb), bm);
+	                             G_CALLBACK(bookmark_menu_move_cb<1>), bm);
 	menu_item_add_icon_sensitive(menu, _("_Remove"), GQ_ICON_REMOVE, bm->editable,
 		      G_CALLBACK(bookmark_menu_remove_cb), bm);
 
@@ -525,7 +518,7 @@ static void bookmark_populate(BookMarkData *bm)
 
 			if (g_strcmp0(bm->key, "shortcuts") != 0)
 				{
-				g_autofree gchar *buf = bookmark_string(".", g_strdup(history_list_find_last_path_by_key("path_list")), nullptr);
+				g_autofree gchar *buf = bookmark_string(".", history_list_find_last_path_by_key("path_list"), nullptr);
 				history_list_add_to_key(bm->key, buf, 0);
 				}
 
@@ -550,7 +543,7 @@ static void bookmark_populate(BookMarkData *bm)
 				{
 				if (g_strcmp0(bm->key, "shortcuts") == 0) continue;
 
-				buf = bookmark_string(name, g_strdup(history_list_find_last_path_by_key("path_list")), nullptr);
+				buf = bookmark_string(name, history_list_find_last_path_by_key("path_list"), nullptr);
 				}
 			else
 				{

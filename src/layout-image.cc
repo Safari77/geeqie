@@ -754,7 +754,7 @@ static void layout_pop_menu_collections_cb(GtkWidget *widget, gpointer data)
 	auto *lw = static_cast<LayoutWindow *>(submenu_item_get_data(widget));
 
 	g_autoptr(FileDataList) selection_list = g_list_append(nullptr, layout_image_get_fd(lw));
-	pop_menu_collections(selection_list, data);
+	collection_by_index_add_filelist(GPOINTER_TO_INT(data), selection_list);
 }
 
 static void li_pop_menu_selectable_toolbars_toggle_cb(GtkWidget *, gpointer)
@@ -780,7 +780,6 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw)
 	accel_group = gtk_accel_group_new();
 	gtk_menu_set_accel_group(GTK_MENU(menu), accel_group);
 
-	g_object_set_data(G_OBJECT(menu), "window_keys", nullptr);
 	g_object_set_data(G_OBJECT(menu), "accel_group", accel_group);
 
 	menu_item_add_icon(menu, _("Zoom _in"), GQ_ICON_ZOOM_IN, G_CALLBACK(li_pop_menu_zoom_in_cb), lw);

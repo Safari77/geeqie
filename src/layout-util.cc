@@ -1019,51 +1019,120 @@ static void open_recent_file_cb(GtkFileChooser *chooser, gint response_id, gpoin
 	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 }
 
-static void preview_file_cb(GtkFileChooser *chooser, gpointer data)
+static gboolean file_is_image(const std::string& path)
 {
-	GtkImage *image_widget = GTK_IMAGE(data);
-	g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
-	g_autofree gchar *file_name = g_file_get_path(file);
+	g_autoptr(GFile) file = g_file_new_for_path(path.c_str());
+	g_autoptr(GError) error = nullptr;
+	g_autoptr(GFileInfo) info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE, G_FILE_QUERY_INFO_NONE, nullptr, &error);
 
-	if (file_name)
+	if (!info)
 		{
-		/* Use a thumbnail file if one exists */
-		g_autofree gchar *thumb_file = cache_find_location(CACHE_TYPE_THUMB, file_name);
-		if (thumb_file)
-			{
-			GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(thumb_file, nullptr);
-			if (pixbuf)
-				{
-				gtk_image_set_from_pixbuf(image_widget, pixbuf);
-				}
-			else
-				{
-				gtk_image_set_from_icon_name(image_widget, "image-missing", GTK_ICON_SIZE_DIALOG);
-				}
+		return false;
+		}
 
-			g_object_unref(pixbuf);
-			}
-		else
-			{
-			/* Use the standard pixbuf loader */
-			GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(file_name, nullptr);
-			if (pixbuf)
-				{
-				GdkPixbuf *scaled_pixbuf = gdk_pixbuf_scale_simple(pixbuf, options->thumbnails.max_width, options->thumbnails.max_height, GDK_INTERP_BILINEAR);
-				gtk_image_set_from_pixbuf(image_widget, scaled_pixbuf);
+	const char *content_type = g_file_info_get_content_type(info);
+	return (content_type && g_str_has_prefix(content_type, "image/"));
+}
 
-				g_object_unref(pixbuf);
-				}
-			else
-				{
-				gtk_image_set_from_icon_name(image_widget, "image-missing", GTK_ICON_SIZE_DIALOG);
-				}
-			}
+static void append_dir_entry(GString *output, const char *base_path, const char *entry)
+{
+	g_autofree gchar *fullpath = g_build_filename(base_path, entry, nullptr);
+
+	if (isdir(fullpath))
+		{
+		g_string_append_printf(output, "📁 %s\n", entry);
+		}
+	else if (file_is_image(fullpath))
+		{
+		g_string_append_printf(output, "🖼️ %s\n", entry);
 		}
 	else
 		{
-		gtk_image_set_from_icon_name(image_widget, "image-missing", GTK_ICON_SIZE_DIALOG);
+		g_string_append_printf(output, "📄 %s\n", entry);
 		}
+}
+
+static GtkWidget *create_dir_preview(const char *dir_path)
+{
+	GtkWidget *textview = gtk_text_view_new();
+	gtk_text_view_set_editable(GTK_TEXT_VIEW(textview), FALSE);
+	gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(textview), FALSE);
+
+	g_autoptr(GDir) dir = g_dir_open(dir_path, 0, nullptr);
+	if (dir)
+		{
+		g_autoptr(GString) output = g_string_new("");
+		const gchar *entry;
+		while ((entry = g_dir_read_name(dir)) != nullptr)
+			{
+			append_dir_entry(output, dir_path, entry);
+			}
+
+		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
+		gtk_text_buffer_set_text(buffer, output->str, -1);
+		}
+
+	return textview;
+}
+
+static GtkWidget *create_image_preview(const char *file_path)
+{
+	GtkWidget *image_widget = gtk_image_new();
+
+	g_autofree gchar *thumb_file = cache_find_location(CACHE_TYPE_THUMB, file_path);
+	GdkPixbuf *pixbuf = nullptr;
+
+	if (thumb_file)
+		{
+		pixbuf = gdk_pixbuf_new_from_file(thumb_file, nullptr);
+		}
+	else
+		{
+		g_autoptr(GdkPixbuf) orig_pixbuf = gdk_pixbuf_new_from_file(file_path, nullptr);
+		if (orig_pixbuf)
+			{
+			pixbuf = gdk_pixbuf_scale_simple(orig_pixbuf, options->thumbnails.max_width, options->thumbnails.max_height, GDK_INTERP_BILINEAR);
+			}
+		}
+
+	if (pixbuf)
+		{
+		gtk_image_set_from_pixbuf(GTK_IMAGE(image_widget), pixbuf);
+		g_object_unref(pixbuf);
+		}
+	else
+		{
+		gtk_image_set_from_icon_name(GTK_IMAGE(image_widget), "image-missing", GTK_ICON_SIZE_DIALOG);
+		}
+
+	return image_widget;
+}
+
+static void preview_file_cb(GtkFileChooser *chooser, gpointer)
+{
+	g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+	if (!file)
+		{
+		return;
+		}
+
+	g_autofree gchar *file_name = g_file_get_path(file);
+	if (!file_name)
+		{
+		return;
+		}
+
+	GtkWidget *preview_box = gtk_file_chooser_get_preview_widget(chooser);
+
+	if (GtkWidget *child = gtk_bin_get_child(GTK_BIN(preview_box)))
+		{
+		gtk_container_remove(GTK_CONTAINER(preview_box), child);
+		}
+
+	GtkWidget *new_preview = isdir(file_name) ? create_dir_preview(file_name) : create_image_preview(file_name);
+
+	gq_gtk_container_add(GTK_WIDGET(preview_box), new_preview);
+	gq_gtk_widget_show_all(GTK_WIDGET(new_preview));
 }
 
 static void layout_menu_open_file_cb(GtkAction *, gpointer)
@@ -1072,9 +1141,6 @@ static void layout_menu_open_file_cb(GtkAction *, gpointer)
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 
 	dialog = gtk_file_chooser_dialog_new(_("Geeqie - Open File"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Open"), GTK_RESPONSE_ACCEPT, nullptr);
-
-	GtkWidget *preview_area = gtk_image_new();
-	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(dialog), preview_area);
 
 	GtkFileFilter *image_filter = gtk_file_filter_new();
 	gtk_file_filter_set_name(image_filter, _("Geeqie image files"));
@@ -1099,6 +1165,8 @@ static void layout_menu_open_file_cb(GtkAction *, gpointer)
 		work = work->next;
 		}
 
+	gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), layout_get_path(get_current_layout()));
+
 	gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), image_filter);
 
 	GtkFileFilter *all_filter = gtk_file_filter_new();
@@ -1108,9 +1176,14 @@ static void layout_menu_open_file_cb(GtkAction *, gpointer)
 
 	gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(dialog), image_filter);
 
-	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(dialog), preview_area);
+	GtkWidget *scroller = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_widget_set_size_request(scroller, 200, -1);
+	gq_gtk_widget_show_all(GTK_WIDGET(scroller));
 
-	g_signal_connect(dialog, "selection-changed", G_CALLBACK(preview_file_cb), preview_area);
+	gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(dialog), scroller);
+
+	g_signal_connect(dialog, "update-preview", G_CALLBACK(preview_file_cb), nullptr);
 	g_signal_connect(dialog, "response", G_CALLBACK(open_file_cb), dialog);
 
 	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
@@ -3643,16 +3716,16 @@ void layout_util_sync_color(LayoutWindow *lw)
 	if (layout_image_color_profile_get_status(lw, &image_profile, &screen_profile))
 		{
 		g_autofree gchar *buf = g_strdup_printf(_("Image profile: %s\nScreen profile: %s"), image_profile, screen_profile);
-		g_object_set(G_OBJECT(action), "tooltip", buf, NULL);
+		gq_gtk_action_set_tooltip(action, buf);
 		}
 	else
 		{
-		g_object_set(G_OBJECT(action), "tooltip", _("Click to enable color management"), NULL);
+		gq_gtk_action_set_tooltip(action, _("Click to enable color management"));
 		}
 #else
 	gq_gtk_toggle_action_set_active(GQ_GTK_TOGGLE_ACTION(action), FALSE);
 	gq_gtk_action_set_sensitive(action, FALSE);
-	g_object_set(G_OBJECT(action), "tooltip", _("Color profiles not supported"), NULL);
+	gq_gtk_action_set_tooltip(action, _("Color profiles not supported"));
 #endif
 
 	action = gq_gtk_action_group_get_action(lw->action_group, "UseImageProfile");
@@ -3674,8 +3747,7 @@ void layout_util_sync_color(LayoutWindow *lw)
 			g_autofree gchar *end = layout_color_name_parse(name);
 			g_autofree gchar *buf = g_strdup_printf(_("Input _%d: %s"), i, end);
 
-			g_object_set(G_OBJECT(action), "label", buf, NULL);
-
+			gq_gtk_action_set_label(action, buf);
 			gq_gtk_action_set_visible(action, file && file[0]);
 			}
 
@@ -3830,7 +3902,7 @@ void layout_util_sync_thumb(LayoutWindow *lw)
 
 	action = gq_gtk_action_group_get_action(lw->action_group, "Thumbnails");
 	gq_gtk_toggle_action_set_active(GQ_GTK_TOGGLE_ACTION(action), lw->options.show_thumbnails);
-	g_object_set(action, "sensitive", (lw->options.file_view_type == FILEVIEW_LIST), NULL);
+	gq_gtk_action_set_sensitive(action, lw->options.file_view_type == FILEVIEW_LIST);
 }
 
 void layout_util_sync(LayoutWindow *lw)

@@ -59,8 +59,7 @@ struct SortData : BarSort
 	GtkWidget *bookmarks;
 	LayoutWindow *lw;
 
-	gchar *name;
-	GtkPopover *name_popover;
+	GtkWidget *name_entry;
 
 	GtkWidget *dialog_name_entry;
 
@@ -364,28 +363,14 @@ static void bar_sort_set_action(SortData *sd, BarSort::Action action, const gcha
 		}
 }
 
-static void bar_sort_set_copy_cb(GtkWidget *button, gpointer data)
+template<BarSort::Action action>
+static void bar_sort_set_action_cb(GtkWidget *button, gpointer data)
 {
-	auto sd = static_cast<SortData *>(data);
 	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
-	bar_sort_set_action(sd, BarSort::COPY, nullptr);
-}
 
-static void bar_sort_set_move_cb(GtkWidget *button, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
-	bar_sort_set_action(sd, BarSort::MOVE, nullptr);
-}
-
-static void bar_sort_set_filter_cb(GtkWidget *button, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-	const gchar *key;
-
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
-	key = static_cast<const gchar *>(g_object_get_data(G_OBJECT(button), "filter_key"));
-	bar_sort_set_action(sd, BarSort::FILTER, key);
+	auto *sd = static_cast<SortData *>(data);
+	const auto *key = static_cast<const gchar *>(g_object_get_data(G_OBJECT(button), "filter_key"));
+	bar_sort_set_action(sd, action, key);
 }
 
 static void bar_filter_help_cb(GenericDialog *, gpointer)
@@ -421,23 +406,13 @@ static void bar_sort_help_cb(gpointer)
 	bar_filter_help_dialog();
 }
 
-static void bar_sort_set_selection(SortData *sd, BarSort::Selection selection)
+template<BarSort::Selection selection>
+static void bar_sort_set_selection_cb(GtkWidget *button, gpointer data)
 {
+	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
+
+	auto *sd = static_cast<SortData *>(data);
 	sd->selection = selection;
-}
-
-static void bar_sort_set_selection_image_cb(GtkWidget *button, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
-	bar_sort_set_selection(sd, BarSort::SELECTION_IMAGE);
-}
-
-static void bar_sort_set_selection_selected_cb(GtkWidget *button, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
-	bar_sort_set_selection(sd, BarSort::SELECTION_SELECTED);
 }
 
 static void bar_sort_add_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
@@ -448,38 +423,17 @@ static void bar_sort_add_response_cb(GtkFileChooser *chooser, gint response_id, 
 		{
 		if (sd->mode == BarSort::MODE_FOLDER)
 			{
-			gboolean empty_name = (sd->name == nullptr);
+			const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(sd->name_entry));
+			gboolean empty_name = (entry_text[0] == '\0');
 
 			g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
 			g_autofree gchar *selected_dir = g_file_get_path(file);
 
-			bookmark_list_add(sd->bookmarks, empty_name ? filename_from_path(selected_dir) : sd->name, selected_dir);
-
-			g_free(sd->name);
-			sd->name = nullptr;
+			bookmark_list_add(sd->bookmarks, empty_name ? filename_from_path(selected_dir) : entry_text, selected_dir);
 			}
 		}
 
-	if (response_id == GQ_RESPONSE_NAME_CLICKED)
-		{
-		gtk_popover_popup(GTK_POPOVER(sd->name_popover));
-		gq_gtk_widget_show_all(GTK_WIDGET(sd->name_popover));
-		gtk_widget_grab_focus(GTK_WIDGET(sd->name_popover));
-
-		return;
-		}
-
 	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
-}
-
-static void name_entry_activate_cb(GtkEntry *entry, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-
-	g_free(sd->name);
-	sd->name = g_strdup(gtk_entry_get_text(entry));
-
-	gtk_popover_popdown(GTK_POPOVER(sd->name_popover));
 }
 
 static void new_collection_file_save_failed_cb(GtkDialog *dialog, gint, gpointer)
@@ -564,23 +518,17 @@ static void bar_sort_add_cb(GtkWidget *, gpointer data)
 		GtkWidget *dialog;
 		GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
 
-		dialog = gtk_file_chooser_dialog_new(_("Add Bookmark - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("Add"), GTK_RESPONSE_ACCEPT, _("Name"), GQ_RESPONSE_NAME_CLICKED, nullptr);
-
-		gtk_widget_set_tooltip_text(gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), GQ_RESPONSE_NAME_CLICKED), _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used"));
-
-		GtkWidget *entry = gtk_entry_new();
-		GtkWidget *name_popover = gtk_popover_new(GTK_WIDGET(gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), GQ_RESPONSE_NAME_CLICKED)));
-		sd->name_popover = GTK_POPOVER(name_popover);
-
-		g_signal_connect(GTK_ENTRY(entry), "activate", G_CALLBACK(name_entry_activate_cb), sd);
-
-		gtk_popover_set_position(GTK_POPOVER(name_popover), GTK_POS_BOTTOM);
-		gq_gtk_container_add(GTK_WIDGET(name_popover), entry);
-		gtk_container_set_border_width(GTK_CONTAINER(name_popover), 6);
+		dialog = gtk_file_chooser_dialog_new(_("Add Bookmark - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("Add"), GTK_RESPONSE_ACCEPT, nullptr);
 
 		gtk_file_chooser_set_create_folders(GTK_FILE_CHOOSER(dialog), TRUE);
 
 		g_signal_connect(dialog, "response", G_CALLBACK(bar_sort_add_response_cb), sd);
+
+		GtkWidget *entry = gtk_entry_new();
+		gtk_entry_set_placeholder_text(GTK_ENTRY(entry), _("Optional name..."));
+		gtk_widget_set_tooltip_text(entry, _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used"));
+		sd->name_entry = entry;
+		gtk_file_chooser_set_extra_widget (GTK_FILE_CHOOSER(dialog), entry);
 
 		gq_gtk_widget_show_all(GTK_WIDGET(dialog));
 		}
@@ -688,13 +636,11 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 	DEBUG_NAME(sd->folder_group);
 	gtk_widget_set_tooltip_text(sd->folder_group, _("See the Help file for additional functions"));
 
-	buttongrp = pref_radiobutton_new(sd->folder_group, nullptr,
-	                                 _("Copy"), sd->action == BarSort::COPY,
-	                                 G_CALLBACK(bar_sort_set_copy_cb), sd);
+	buttongrp = pref_radiobutton_new(sd->folder_group, nullptr, _("Copy"), sd->action == BarSort::COPY,
+	                                 G_CALLBACK(bar_sort_set_action_cb<BarSort::COPY>), sd);
 	g_signal_connect(G_OBJECT(buttongrp), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
-	button = pref_radiobutton_new(sd->folder_group, buttongrp,
-	                              _("Move"), sd->action == BarSort::MOVE,
-	                              G_CALLBACK(bar_sort_set_move_cb), sd);
+	button = pref_radiobutton_new(sd->folder_group, buttongrp, _("Move"), sd->action == BarSort::MOVE,
+	                              G_CALLBACK(bar_sort_set_action_cb<BarSort::MOVE>), sd);
 	g_signal_connect(G_OBJECT(button), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
 
 
@@ -713,9 +659,8 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 			have_filter = TRUE;
 			}
 
-		GtkWidget *button = pref_radiobutton_new(sd->folder_group, buttongrp,
-		                                         editor->name, select,
-		                                         G_CALLBACK(bar_sort_set_filter_cb), sd);
+		GtkWidget *button = pref_radiobutton_new(sd->folder_group, buttongrp, editor->name, select,
+		                                         G_CALLBACK(bar_sort_set_action_cb<BarSort::FILTER>), sd);
 		g_signal_connect(G_OBJECT(button), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
 
 		g_object_set_data_full(G_OBJECT(button), "filter_key", key, g_free);
@@ -725,12 +670,12 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 
 	sd->collection_group = pref_box_new(sd->vbox, FALSE, GTK_ORIENTATION_VERTICAL, 0);
 
-	buttongrp = pref_radiobutton_new(sd->collection_group, nullptr,
-	                                 _("Add image"), sd->selection == BarSort::SELECTION_IMAGE,
-	                                 G_CALLBACK(bar_sort_set_selection_image_cb), sd);
-	pref_radiobutton_new(sd->collection_group, buttongrp,
-	                     _("Add selection"), sd->selection == BarSort::SELECTION_SELECTED,
-	                     G_CALLBACK(bar_sort_set_selection_selected_cb), sd);
+	buttongrp = pref_radiobutton_new(sd->collection_group, nullptr, _("Add image"),
+	                                 sd->selection == BarSort::SELECTION_IMAGE,
+	                                 G_CALLBACK(bar_sort_set_selection_cb<BarSort::SELECTION_IMAGE>), sd);
+	pref_radiobutton_new(sd->collection_group, buttongrp, _("Add selection"),
+	                     sd->selection == BarSort::SELECTION_SELECTED,
+	                     G_CALLBACK(bar_sort_set_selection_cb<BarSort::SELECTION_SELECTED>), sd);
 
 	sd->bookmarks = bookmark_list_new(SORT_KEY_FOLDERS, bar_sort_bookmark_select, sd);
 	DEBUG_NAME(sd->bookmarks);

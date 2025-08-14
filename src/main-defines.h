@@ -37,6 +37,8 @@
 #define GQ_RESOURCE_PATH_ICONS "/org/geeqie/icons"
 #define GQ_RESOURCE_PATH_CREDITS "/org/geeqie/credits"
 #define GQ_RESOURCE_PATH_UI "/org/geeqie/ui"
+#define GQ_ICC_LOCAL "/usr/local/share/color/icc/"
+#define GQ_ICC_SYSTEM "/usr/share/color/icc/"
 
 #define GQ_SYSTEM_WIDE_DIR    "/etc/" GQ_APPNAME_LC
 
@@ -53,8 +55,6 @@
 #define GQ_DEFAULT_SHELL_OPTIONS "-c"
 
 #define DEFAULT_MINIMAL_WINDOW_SIZE 100
-
-#define GQ_RESPONSE_NAME_CLICKED 1
 
 #define DEFAULT_OVERLAY_INFO	"%collection:<i>*</i>\\n%" \
 				"(%number%/%total%) [%zoom%] <b>%name%</b>\n" \

@@ -1588,8 +1588,6 @@ static void image_overlay_set_background_color_cb(GtkWidget *widget, gpointer da
 static void accel_store_populate()
 {
 	GList *groups;
-	GList *actions;
-	GtkAction *action;
 	const gchar *accel_path;
 	GtkAccelKey key;
 	GtkTreeIter iter;
@@ -1603,10 +1601,10 @@ static void accel_store_populate()
 	groups = gq_gtk_ui_manager_get_action_groups(lw->ui_manager);
 	while (groups)
 		{
-		actions = gq_gtk_action_group_list_actions(GQ_GTK_ACTION_GROUP(groups->data));
-		while (actions)
+		g_autoptr(GList) actions = gq_gtk_action_group_list_actions(GQ_GTK_ACTION_GROUP(groups->data));
+		for (GList *work = actions; work; work = work->next)
 			{
-			action = GQ_GTK_ACTION(actions->data);
+			GtkAction *action = GQ_GTK_ACTION(work->data);
 			accel_path = gq_gtk_action_get_accel_path(action);
 			if (accel_path && gtk_accel_map_lookup_entry(accel_path, &key))
 				{
@@ -1638,7 +1636,6 @@ static void accel_store_populate()
 					                   -1);
 					}
 				}
-			actions = actions->next;
 			}
 
 		groups = groups->next;
@@ -3392,25 +3389,16 @@ static void config_tab_color(GtkWidget *notebook)
 }
 
 /* advanced entry tab */
-static void use_geeqie_trash_cb(GtkWidget *widget, gpointer)
+template<gboolean use_system_trash>
+static void use_trash_cb(GtkWidget *widget, gpointer)
 {
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
-		{
-		c_options->file_ops.use_system_trash = FALSE;
-		c_options->file_ops.no_trash = FALSE;
-		}
+	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
+
+	c_options->file_ops.use_system_trash = use_system_trash;
+	c_options->file_ops.no_trash = FALSE;
 }
 
-static void use_system_trash_cb(GtkWidget *widget, gpointer)
-{
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
-		{
-		c_options->file_ops.use_system_trash = TRUE;
-		c_options->file_ops.no_trash = FALSE;
-		}
-}
-
-static void use_no_cache_cb(GtkWidget *widget, gpointer)
+static void use_no_trash_cb(GtkWidget *widget, gpointer)
 {
 	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
 		{
@@ -3448,7 +3436,8 @@ static void config_tab_behavior(GtkWidget *notebook)
 			      options->file_ops.enable_delete_key, &c_options->file_ops.enable_delete_key);
 
 	ct_button = pref_radiobutton_new(group, nullptr, _("Use Geeqie trash location"),
-					!options->file_ops.use_system_trash && !options->file_ops.no_trash, G_CALLBACK(use_geeqie_trash_cb),nullptr);
+	                                 !options->file_ops.use_system_trash && !options->file_ops.no_trash,
+	                                 G_CALLBACK(use_trash_cb<FALSE>), nullptr);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_checkbox_link_sensitivity(ct_button, hbox);
@@ -3487,10 +3476,11 @@ static void config_tab_behavior(GtkWidget *notebook)
 	c_options->file_ops.use_system_trash = options->file_ops.use_system_trash;
 
 	pref_radiobutton_new(group, ct_button, _("Use system Trash bin"),
-					options->file_ops.use_system_trash && !options->file_ops.no_trash, G_CALLBACK(use_system_trash_cb), nullptr);
+	                     options->file_ops.use_system_trash && !options->file_ops.no_trash,
+	                     G_CALLBACK(use_trash_cb<TRUE>), nullptr);
 
 	pref_radiobutton_new(group, ct_button, _("Use no trash at all"),
-			options->file_ops.no_trash, G_CALLBACK(use_no_cache_cb), nullptr);
+	                     options->file_ops.no_trash, G_CALLBACK(use_no_trash_cb), nullptr);
 
 	gtk_widget_show(button);
 

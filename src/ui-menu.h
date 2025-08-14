@@ -22,13 +22,15 @@
 #ifndef UI_MENU_H
 #define UI_MENU_H
 
+#include <vector>
+
 #include <gdk/gdk.h>
 #include <glib-object.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 
 /**
- * @struct hard_coded_window_keys
+ * @struct HardcodedWindowKey
  * @brief hard coded window shortcut keys
  *
  * Used for two purposes:\n
@@ -36,11 +38,14 @@
  * used by ./doc/create-shortcuts-xml.sh to generate shortcut documentation in the Help files
  *
  */
-struct hard_coded_window_keys {
+struct HardcodedWindowKey
+{
 	GdkModifierType mask; /**< modifier key mask */
 	guint key_value;  /**< GDK_keyval */
-	const gchar *text;  /**< menu item label - NULL if end of list */
+	const gchar *text;  /**< menu item label */
 };
+
+using HardcodedWindowKeyList = std::vector<HardcodedWindowKey>;
 
 GtkWidget *menu_item_add(GtkWidget *menu, const gchar *label,
 			 GCallback func, gpointer data);
@@ -56,6 +61,8 @@ GtkWidget *menu_item_add_check(GtkWidget *menu, const gchar *label, gboolean act
 			       GCallback func, gpointer data);
 GtkWidget *menu_item_add_radio(GtkWidget *menu, const gchar *label, gpointer item_data, gboolean active,
 			       GCallback func, gpointer data);
+gpointer menu_item_radio_get_data(GtkWidget *menu_item);
+
 void menu_item_add_divider(GtkWidget *menu);
 
 GtkWidget *menu_item_add_simple(GtkWidget *menu, const gchar *label,

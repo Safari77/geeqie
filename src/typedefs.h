@@ -26,12 +26,6 @@
 
 #include <glib.h>
 
-enum ZoomMode {
-	ZOOM_RESET_ORIGINAL	= 0,
-	ZOOM_RESET_FIT_WINDOW	= 1,
-	ZOOM_RESET_NONE		= 2
-};
-
 enum MouseButton {
 	MOUSE_BUTTON_LEFT	= 1,
 	MOUSE_BUTTON_MIDDLE	= 2,
@@ -40,20 +34,6 @@ enum MouseButton {
 	MOUSE_BUTTON_WHEEL_DOWN	= 5,
 	MOUSE_BUTTON_8	= 8,
 	MOUSE_BUTTON_9	= 9
-};
-
-enum DirViewType {
-	DIRVIEW_LIST,
-	DIRVIEW_TREE,
-
-	DIRVIEW_LAST = DIRVIEW_TREE /**< Keep this up to date! */
-};
-
-enum FileViewType {
-	FILEVIEW_LIST,
-	FILEVIEW_ICON,
-
-	FILEVIEW_LAST = FILEVIEW_ICON /**< Keep this up to date! */
 };
 
 #define	CMD_COPY     "geeqie-copy-command.desktop"
