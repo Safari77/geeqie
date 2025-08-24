@@ -1120,19 +1120,17 @@ static void view_new_window_cb(GtkWidget *, gpointer data)
 
 static void view_edit_cb(GtkWidget *widget, gpointer data)
 {
-	ViewWindow *vw;
-	ImageWindow *imd;
-	auto key = static_cast<const gchar *>(data);
-
-	vw = static_cast<ViewWindow *>(submenu_item_get_data(widget));
+	auto *vw = static_cast<ViewWindow *>(submenu_item_get_data(widget));
 	if (!vw) return;
+
+	auto *key = static_cast<const gchar *>(data);
 
 	if (!editor_window_flag_set(key))
 		{
 		view_fullscreen_toggle(vw, TRUE);
 		}
 
-	imd = view_window_active_image(vw);
+	ImageWindow *imd = view_window_active_image(vw);
 	file_util_start_editor_from_file(key, image_get_fd(imd), imd->widget);
 }
 
@@ -1349,7 +1347,7 @@ static GtkWidget *view_popup_menu(ViewWindow *vw)
  	editmenu_fd_list = view_window_get_fd_list(vw);
 	g_signal_connect_swapped(G_OBJECT(menu), "destroy",
 	                         G_CALLBACK(file_data_list_free), editmenu_fd_list);
-	item = submenu_add_edit(menu, nullptr, G_CALLBACK(view_edit_cb), vw, editmenu_fd_list);
+	item = submenu_add_edit(menu, TRUE, editmenu_fd_list, G_CALLBACK(view_edit_cb), vw);
 	menu_item_add_divider(item);
 
 	submenu_add_alter(menu, G_CALLBACK(view_alter_cb), vw);
@@ -1378,9 +1376,8 @@ static GtkWidget *view_popup_menu(ViewWindow *vw)
 
 	menu_item_add_divider(menu);
 
-	submenu_add_collections(menu, &item,
-				G_CALLBACK(image_pop_menu_collections_cb), vw);
-	gtk_widget_set_sensitive(item, TRUE);
+	submenu_add_collections(menu, TRUE,
+	                        G_CALLBACK(image_pop_menu_collections_cb), vw);
 	menu_item_add_divider(menu);
 
 	if (vw->ss)

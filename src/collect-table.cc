@@ -754,12 +754,10 @@ static GList *collection_table_popup_file_list(CollectTable *ct)
 
 static void collection_table_popup_edit_cb(GtkWidget *widget, gpointer data)
 {
-	CollectTable *ct;
-	auto key = static_cast<const gchar *>(data);
-
-	ct = static_cast<CollectTable *>(submenu_item_get_data(widget));
-
+	auto *ct = static_cast<CollectTable *>(submenu_item_get_data(widget));
 	if (!ct) return;
+
+	auto *key = static_cast<const gchar *>(data);
 
 	file_util_start_editor_from_filelist(key, collection_table_popup_file_list(ct), nullptr, ct->listview);
 }
@@ -1041,9 +1039,8 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 
 
 	ct->editmenu_fd_list = collection_table_selection_get_list(ct);
-	submenu_add_edit(menu, &item,
-			G_CALLBACK(collection_table_popup_edit_cb), ct, ct->editmenu_fd_list);
-	gtk_widget_set_sensitive(item, over_icon);
+	submenu_add_edit(menu, over_icon, ct->editmenu_fd_list,
+	                 G_CALLBACK(collection_table_popup_edit_cb), ct);
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, over_icon,
@@ -1068,7 +1065,9 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 	                             G_CALLBACK(collection_table_popup_delete_cb<FALSE>), ct);
 
 	menu_item_add_divider(menu);
-	submenu = submenu_add_sort(menu, G_CALLBACK(collection_table_popup_sort_cb), ct, FALSE, TRUE, FALSE, SORT_NONE);
+	submenu = submenu_add_sort(menu, G_CALLBACK(collection_table_popup_sort_cb), ct, FALSE, SORT_NONE);
+	menu_item_add(submenu, sort_type_get_text(SORT_PATH),
+	              G_CALLBACK(collection_table_popup_sort_cb), GINT_TO_POINTER(SORT_PATH));
 	menu_item_add_divider(submenu);
 	menu_item_add(submenu, _("Randomize"),
 			G_CALLBACK(collection_table_popup_randomize_cb), ct);

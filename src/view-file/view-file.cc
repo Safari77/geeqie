@@ -457,12 +457,10 @@ GList *vf_selection_get_one(ViewFile *vf, FileData *fd)
 
 static void vf_pop_menu_edit_cb(GtkWidget *widget, gpointer data)
 {
-	ViewFile *vf;
-	auto key = static_cast<const gchar *>(data);
-
-	vf = static_cast<ViewFile *>(submenu_item_get_data(widget));
-
+	auto *vf = static_cast<ViewFile *>(submenu_item_get_data(widget));
 	if (!vf) return;
+
+	auto *key = static_cast<const gchar *>(data);
 
 	file_util_start_editor_from_filelist(key, vf_pop_menu_file_list(vf), vf->dir_fd->path, vf->listview);
 }
@@ -570,11 +568,11 @@ static void vf_pop_menu_sort_cb(GtkWidget *widget, gpointer data)
 {
 	if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(widget))) return;
 
-	auto *vf = static_cast<ViewFile *>(submenu_item_get_data(widget));
+	auto *vf = static_cast<ViewFile *>(data);
 	if (!vf) return;
 
 	auto sort = vf->sort;
-	sort.method = static_cast<SortType>(GPOINTER_TO_INT(data));
+	sort.method = static_cast<SortType>(GPOINTER_TO_INT(menu_item_radio_get_data(widget)));
 
 	if (sort_type_requires_metadata(sort.method))
 		{
@@ -639,13 +637,13 @@ static void vf_pop_menu_selection_to_mark_cb(GtkWidget *, gpointer data)
 	vf_selection_to_mark(vf, vf->active_mark, mode);
 }
 
-static void vf_pop_menu_toggle_view_type_cb(GtkWidget *widget, gpointer data)
+template<FileViewType file_view_type>
+static void vf_pop_menu_toggle_view_type_cb(GtkWidget *, gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
 	if (!vf->layout) return;
 
-	auto new_type = static_cast<FileViewType>(GPOINTER_TO_INT(menu_item_radio_get_data(widget)));
-	layout_views_set(vf->layout, vf->layout->options.dir_view_type, new_type);
+	layout_views_set(vf->layout, vf->layout->options.dir_view_type, file_view_type);
 }
 
 static void vf_pop_menu_refresh_cb(GtkWidget *, gpointer data)
@@ -706,7 +704,6 @@ static void vf_pop_menu_show_star_rating_cb(GtkWidget *, gpointer data)
 GtkWidget *vf_pop_menu(ViewFile *vf)
 {
 	GtkWidget *menu;
-	GtkWidget *item;
 	GtkWidget *submenu;
 	gboolean active = FALSE;
 	gboolean class_archive = FALSE;
@@ -770,8 +767,7 @@ GtkWidget *vf_pop_menu(ViewFile *vf)
 		}
 
 	vf->editmenu_fd_list = vf_pop_menu_file_list(vf);
-	submenu_add_edit(menu, &item, G_CALLBACK(vf_pop_menu_edit_cb), vf, vf->editmenu_fd_list);
-	gtk_widget_set_sensitive(item, active);
+	submenu_add_edit(menu, active, vf->editmenu_fd_list, G_CALLBACK(vf_pop_menu_edit_cb), vf);
 
 	menu_item_add_icon_sensitive(menu, _("View in _new window"), GQ_ICON_NEW, active,
 				      G_CALLBACK(vf_pop_menu_view_cb), vf);
@@ -812,24 +808,22 @@ GtkWidget *vf_pop_menu(ViewFile *vf)
 				G_CALLBACK(vf_pop_menu_duplicates_cb), vf);
 	menu_item_add_divider(menu);
 
-	submenu = submenu_add_collections(menu, &item,
-				G_CALLBACK(vf_pop_menu_collections_cb), vf);
-	gtk_widget_set_sensitive(item, active);
+	submenu = submenu_add_collections(menu, active,
+	                                  G_CALLBACK(vf_pop_menu_collections_cb), vf);
 	menu_item_add_divider(menu);
 
 	submenu = submenu_add_sort(menu, G_CALLBACK(vf_pop_menu_sort_cb), vf,
-	                           FALSE, FALSE, TRUE, vf->sort.method);
+	                           TRUE, vf->sort.method);
 	menu_item_add_divider(submenu);
 	menu_item_add_check(submenu, _("Ascending"), vf->sort.ascending,
 	                    G_CALLBACK(vf_pop_menu_sort_ascend_cb), vf);
 	menu_item_add_check(submenu, _("Case"), vf->sort.case_sensitive,
 	                    G_CALLBACK(vf_pop_menu_sort_case_cb), vf);
 
-	item = menu_item_add_radio(menu, _("Images as List"), GINT_TO_POINTER(FILEVIEW_LIST), vf->type == FILEVIEW_LIST,
-                                           G_CALLBACK(vf_pop_menu_toggle_view_type_cb), vf);
-
-	item = menu_item_add_radio(menu, _("Images as Icons"), GINT_TO_POINTER(FILEVIEW_ICON), vf->type == FILEVIEW_ICON,
-                                           G_CALLBACK(vf_pop_menu_toggle_view_type_cb), vf);
+	menu_item_add_radio(menu, _("Images as List"), nullptr, vf->type == FILEVIEW_LIST,
+	                    G_CALLBACK(vf_pop_menu_toggle_view_type_cb<FILEVIEW_LIST>), vf);
+	menu_item_add_radio(menu, _("Images as Icons"), nullptr, vf->type == FILEVIEW_ICON,
+	                    G_CALLBACK(vf_pop_menu_toggle_view_type_cb<FILEVIEW_ICON>), vf);
 
 	switch (vf->type)
 	{
@@ -1262,8 +1256,8 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 void vf_mark_filter_toggle(ViewFile *vf, gint mark)
 {
 	gint n = mark - 1;
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(vf->filter_check[n]),
-				     !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vf->filter_check[n])));
+	auto *filter_check = GTK_TOGGLE_BUTTON(vf->filter_check[n]);
+	gtk_toggle_button_set_active(filter_check, !gtk_toggle_button_get_active(filter_check));
 }
 
 ViewFile *vf_new(FileViewType type, FileData *dir_fd)

@@ -36,7 +36,6 @@
 #include "layout-image.h"
 #include "layout.h"
 #include "main-defines.h"
-#include "options.h"
 #include "rcfile.h"
 #include "typedefs.h"
 #include "ui-bookmark.h"
@@ -58,10 +57,6 @@ struct SortData : BarSort
 	GtkWidget *vbox;
 	GtkWidget *bookmarks;
 	LayoutWindow *lw;
-
-	GtkWidget *name_entry;
-
-	GtkWidget *dialog_name_entry;
 
 	GtkWidget *folder_group;
 	GtkWidget *collection_group;
@@ -186,7 +181,7 @@ static void bar_sort_undo_set(SortData *sd, GList *src_list, const gchar *dest)
 	if (sd->undo_button)
 		{
 		gtk_widget_set_sensitive(sd->undo_button,
-					((sd->undo_src_list ) && sd->undo_dest_list));
+		                         sd->undo_src_list && sd->undo_dest_list);
 		}
 }
 
@@ -333,22 +328,6 @@ static void bar_sort_bookmark_select_collection(SortData *sd, const gchar *path)
 	g_list_foreach(list, reinterpret_cast<GFunc>(collect_manager_add), const_cast<gchar *>(path));
 }
 
-static void bar_sort_bookmark_select(const gchar *path, gpointer data)
-{
-	if (!path) return;
-
-	auto sd = static_cast<SortData *>(data);
-
-	if (sd->mode == BarSort::MODE_FOLDER)
-		{
-		bar_sort_bookmark_select_folder(sd, path);
-		}
-	else
-		{
-		bar_sort_bookmark_select_collection(sd, path);
-		}
-}
-
 static void bar_sort_set_action(SortData *sd, BarSort::Action action, const gchar *filter_key)
 {
 	sd->action = action;
@@ -413,27 +392,6 @@ static void bar_sort_set_selection_cb(GtkWidget *button, gpointer data)
 
 	auto *sd = static_cast<SortData *>(data);
 	sd->selection = selection;
-}
-
-static void bar_sort_add_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
-{
-	auto sd = static_cast<SortData *>(data);
-
-	if (response_id == GTK_RESPONSE_ACCEPT)
-		{
-		if (sd->mode == BarSort::MODE_FOLDER)
-			{
-			const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(sd->name_entry));
-			gboolean empty_name = (entry_text[0] == '\0');
-
-			g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
-			g_autofree gchar *selected_dir = g_file_get_path(file);
-
-			bookmark_list_add(sd->bookmarks, empty_name ? filename_from_path(selected_dir) : entry_text, selected_dir);
-			}
-		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 }
 
 static void new_collection_file_save_failed_cb(GtkDialog *dialog, gint, gpointer)
@@ -515,22 +473,7 @@ static void bar_sort_add_cb(GtkWidget *, gpointer data)
 
 	if (sd->mode == BarSort::MODE_FOLDER)
 		{
-		GtkWidget *dialog;
-		GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-
-		dialog = gtk_file_chooser_dialog_new(_("Add Bookmark - Geeqie"), nullptr, action, _("_Cancel"), GTK_RESPONSE_CANCEL, _("Add"), GTK_RESPONSE_ACCEPT, nullptr);
-
-		gtk_file_chooser_set_create_folders(GTK_FILE_CHOOSER(dialog), TRUE);
-
-		g_signal_connect(dialog, "response", G_CALLBACK(bar_sort_add_response_cb), sd);
-
-		GtkWidget *entry = gtk_entry_new();
-		gtk_entry_set_placeholder_text(GTK_ENTRY(entry), _("Optional name..."));
-		gtk_widget_set_tooltip_text(entry, _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used"));
-		sd->name_entry = entry;
-		gtk_file_chooser_set_extra_widget (GTK_FILE_CHOOSER(dialog), entry);
-
-		gq_gtk_widget_show_all(GTK_WIDGET(dialog));
+		bookmark_add_dialog(_("Add Bookmark - Geeqie"), sd->bookmarks);
 		}
 	else
 		{
@@ -677,7 +620,20 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 	                     sd->selection == BarSort::SELECTION_SELECTED,
 	                     G_CALLBACK(bar_sort_set_selection_cb<BarSort::SELECTION_SELECTED>), sd);
 
-	sd->bookmarks = bookmark_list_new(SORT_KEY_FOLDERS, bar_sort_bookmark_select, sd);
+	const auto bar_sort_bookmark_select = [sd](const gchar *path)
+	{
+		if (!path) return;
+
+		if (sd->mode == BarSort::MODE_FOLDER)
+			{
+			bar_sort_bookmark_select_folder(sd, path);
+			}
+		else
+			{
+			bar_sort_bookmark_select_collection(sd, path);
+			}
+	};
+	sd->bookmarks = bookmark_list_new(SORT_KEY_FOLDERS, bar_sort_bookmark_select);
 	DEBUG_NAME(sd->bookmarks);
 	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), sd->bookmarks, TRUE, TRUE, 0);
 	gtk_widget_show(sd->bookmarks);

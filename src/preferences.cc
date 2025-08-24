@@ -1091,7 +1091,7 @@ static void filter_store_ext_edit_cb(GtkCellRendererText *, gchar *path_str, gch
 	GtkTreePath *tpath;
 	GtkTreeIter iter;
 
-	if (!new_text || strlen(new_text) < 1) return;
+	if (!new_text || *new_text == '\0') return;
 
 	tpath = gtk_tree_path_new_from_string(path_str);
 	gtk_tree_model_get_iter(GTK_TREE_MODEL(model), &iter, tpath);
@@ -2156,12 +2156,9 @@ static void config_tab_general(GtkWidget *notebook)
 		}
 
 	group = pref_group_new(vbox, FALSE, _("Timezone database"), GTK_ORIENTATION_VERTICAL);
-	hbox = pref_box_new(group, TRUE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
+	gtk_widget_set_sensitive(group, internet_available);
 
-	if (!internet_available)
-		{
-		gtk_widget_set_sensitive(group, FALSE);
-		}
+	hbox = pref_box_new(group, TRUE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 
 	tz = g_new0(TZData, 1);
 

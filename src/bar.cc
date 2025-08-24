@@ -21,7 +21,6 @@
 
 #include "bar.h"
 
-#include <algorithm>
 #include <string>
 
 #include <glib-object.h>
@@ -34,6 +33,7 @@
 #include "intl.h"
 #include "layout.h"
 #include "main-defines.h"
+#include "menu.h"
 #include "metadata.h"
 #include "rcfile.h"
 #include "typedefs.h"
@@ -45,11 +45,6 @@ namespace
 {
 
 constexpr gint SIDEBAR_DEFAULT_WIDTH = 250;
-
-void remove_child_from_parent(gpointer data)
-{
-	gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(GTK_WIDGET(data))), GTK_WIDGET(data));
-}
 
 } // namespace
 
@@ -230,38 +225,22 @@ struct BarData
 	GtkWidget *vbox;
 	FileData *fd;
 	GtkWidget *label_file_name;
-	GtkWidget *add_button;
 
 	LayoutWindow *lw;
 	gint width;
 };
 
-static const gchar *bar_pane_get_default_config(const gchar *id);
-
-template<gboolean up, gboolean single_step>
-static void bar_expander_move_cb(GtkWidget *, gpointer data)
+static const gchar *bar_pane_get_default_config(const gchar *id)
 {
-	auto expander = static_cast<GtkWidget *>(data);
-	GtkWidget *box;
-	gint pos;
+	const KnownPanes *pane = known_panes;
 
-	if (!expander) return;
-	box = gtk_widget_get_ancestor(expander, GTK_TYPE_BOX);
-	if (!box) return;
-
-	gtk_container_child_get(GTK_CONTAINER(box), expander, "position", &pos, NULL);
-
-	if (single_step)
+	while (pane->id)
 		{
-		pos = up ? (pos - 1) : (pos + 1);
-		pos = std::max(pos, 0);
+		if (strcmp(pane->id, id) == 0) break;
+		pane++;
 		}
-	else
-		{
-		pos = up ? 0 : -1;
-		}
-
-	gtk_box_reorder_child(GTK_BOX(box), expander, pos);
+	if (!pane->id) return nullptr;
+	return pane->config;
 }
 
 static void height_spin_changed_cb(GtkSpinButton *spin, gpointer data)
@@ -333,111 +312,44 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	gtk_widget_grab_focus(GTK_WIDGET(spin));
 }
 
-static void bar_expander_delete_cb(GtkWidget *, gpointer data)
+static void bar_expander_add_cb(GtkWidget *, gpointer data)
 {
-	auto expander = static_cast<GtkWidget *>(data);
-	gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(expander)), expander);
-}
+	const auto *config = static_cast<const gchar *>(data);
 
-static void bar_expander_add_cb(GtkWidget *widget, gpointer)
-{
-	const KnownPanes *pane = known_panes;
-	auto id = static_cast<const gchar *>(g_object_get_data(G_OBJECT(widget), "pane_add_id"));
-	const gchar *config;
-
-	if (!id) return;
-
-	while (pane->id)
-		{
-		if (strcmp(pane->id, id) == 0) break;
-		pane++;
-		}
-	if (!pane->id) return;
-
-	config = bar_pane_get_default_config(id);
 	if (config) load_config_from_buf(config, strlen(config), FALSE);
-
 }
 
 
 static void bar_menu_popup(GtkWidget *widget)
 {
-	GtkWidget *menu;
-	GtkWidget *bar;
-	GtkWidget *expander;
-	BarData *bd;
-	gboolean display_height_option = FALSE;
-	gchar const *label;
+	GtkWidget *expander = nullptr;
 
-	label = gtk_expander_get_label(GTK_EXPANDER(widget));
-	display_height_option =	(g_strcmp0(label, "Comment") == 0) ||
-							(g_strcmp0(label, "Rating") == 0) ||
-							(g_strcmp0(label, "Title") == 0) ||
-							(g_strcmp0(label, "Headline") == 0) ||
-							(g_strcmp0(label, "Keywords") == 0) ||
-							(g_strcmp0(label, "GPS Map") == 0);
-
-	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(widget), "bar_data"));
-	if (bd)
+	if (!g_object_get_data(G_OBJECT(widget), "bar_data"))
 		{
-		expander = nullptr;
-		bar = widget;
-		}
-	else
-		{
-		expander = widget;
-		bar = gtk_widget_get_parent(widget);
-		while (bar && !g_object_get_data(G_OBJECT(bar), "bar_data"))
+		GtkWidget *bar = widget;
+		do
+			{
 			bar = gtk_widget_get_parent(bar);
+			}
+		while (bar && !g_object_get_data(G_OBJECT(bar), "bar_data"));
 		if (!bar) return;
+
+		expander = widget;
 		}
 
-	menu = popup_menu_short_lived();
-
+	gboolean display_height_option = FALSE;
 	if (expander)
 		{
-		menu_item_add_icon(menu, _("Move to _top"), GQ_ICON_GO_TOP,
-		                   (GCallback)bar_expander_move_cb<TRUE, FALSE>, expander);
-		menu_item_add_icon(menu, _("Move _up"), GQ_ICON_GO_UP,
-		                   (GCallback)bar_expander_move_cb<TRUE, TRUE>, expander);
-		menu_item_add_icon(menu, _("Move _down"), GQ_ICON_GO_DOWN,
-		                   (GCallback)bar_expander_move_cb<FALSE, TRUE>, expander);
-		menu_item_add_icon(menu, _("Move to _bottom"), GQ_ICON_GO_BOTTOM,
-		                   (GCallback)bar_expander_move_cb<FALSE, FALSE>, expander);
-		menu_item_add_divider(menu);
-
-		if (gtk_expander_get_expanded(GTK_EXPANDER(expander)) && display_height_option)
-			{
-			menu_item_add_icon(menu, _("Height..."), GQ_ICON_PREFERENCES, G_CALLBACK(bar_expander_height_cb), expander);
-			menu_item_add_divider(menu);
-			}
-
-		menu_item_add_icon(menu, _("Remove"), GQ_ICON_DELETE, G_CALLBACK(bar_expander_delete_cb), expander);
-		menu_item_add_divider(menu);
+		gchar const *label = gtk_expander_get_label(GTK_EXPANDER(expander));
+		display_height_option = (g_strcmp0(label, "Comment") == 0) ||
+		                        (g_strcmp0(label, "Rating") == 0) ||
+		                        (g_strcmp0(label, "Title") == 0) ||
+		                        (g_strcmp0(label, "Headline") == 0) ||
+		                        (g_strcmp0(label, "Keywords") == 0) ||
+		                        (g_strcmp0(label, "GPS Map") == 0);
 		}
 
-	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
-}
-
-static void bar_menu_add_popup(GtkWidget *widget)
-{
-	GtkWidget *menu;
-	GtkWidget *bar;
-	const KnownPanes *pane = known_panes;
-
-	bar = widget;
-
-	menu = popup_menu_short_lived();
-
-	while (pane->id)
-		{
-		GtkWidget *item;
-		item = menu_item_add_icon(menu, _(pane->title), GQ_ICON_ADD, G_CALLBACK(bar_expander_add_cb), bar);
-		g_object_set_data(G_OBJECT(item), "pane_add_id", const_cast<gchar *>(pane->id));
-		pane++;
-		}
-
-	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
+	popup_menu_bar(expander, display_height_option ? G_CALLBACK(bar_expander_height_cb) : nullptr);
 }
 
 
@@ -469,9 +381,17 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 		}
 }
 
-static gboolean bar_menu_add_cb(GtkWidget *widget, GdkEventButton *, gpointer)
+static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
 {
-	bar_menu_add_popup(widget);
+	GtkWidget *menu = popup_menu_short_lived();
+
+	for (const KnownPanes *pane = known_panes; pane->id; pane++)
+		{
+		menu_item_add_icon(menu, _(pane->title), GQ_ICON_ADD,
+		                   G_CALLBACK(bar_expander_add_cb), const_cast<gchar *>(pane->config));
+		}
+
+	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 	return TRUE;
 }
 
@@ -574,7 +494,7 @@ void bar_clear(GtkWidget *bar)
 
 	list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
 
-	g_list_free_full(list, remove_child_from_parent);
+	g_list_free_full(list, reinterpret_cast<GDestroyNotify>(widget_remove_from_parent));
 }
 
 void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
@@ -761,8 +681,8 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	DEBUG_NAME(add_box);
 	gq_gtk_box_pack_end(GTK_BOX(bd->widget), add_box, FALSE, FALSE, 0);
 	tbar = pref_toolbar_new(add_box);
-	bd->add_button = pref_toolbar_button(tbar, GQ_ICON_ADD, _("Add"), FALSE,
-					     _("Add Pane"), G_CALLBACK(bar_menu_add_cb), bd);
+	pref_toolbar_button(tbar, GQ_ICON_ADD, _("Add"), FALSE,
+	                    _("Add Pane"), G_CALLBACK(bar_menu_add_cb), nullptr);
 	gtk_widget_show(add_box);
 
 #if HAVE_LIBCHAMPLAIN_GTK
@@ -834,19 +754,6 @@ gboolean bar_pane_translate_title(PaneType type, const gchar *id, gchar **title)
 	g_free(*title);
 	*title = g_strdup(_(pane->title));
 	return TRUE;
-}
-
-static const gchar *bar_pane_get_default_config(const gchar *id)
-{
-	const KnownPanes *pane = known_panes;
-
-	while (pane->id)
-		{
-		if (strcmp(pane->id, id) == 0) break;
-		pane++;
-		}
-	if (!pane->id) return nullptr;
-	return pane->config;
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

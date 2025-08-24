@@ -444,8 +444,7 @@ static void layout_path_entry_tab_cb(const gchar *path, gpointer data)
 			gint pos = -1;
 			/* put the G_DIR_SEPARATOR back, if we are in tab completion for a dir and result was path change */
 			gtk_editable_insert_text(GTK_EDITABLE(lw->path_entry), G_DIR_SEPARATOR_S, -1, &pos);
-			gtk_editable_set_position(GTK_EDITABLE(lw->path_entry),
-						  strlen(gq_gtk_entry_get_text(GTK_ENTRY(lw->path_entry))));
+			gtk_editable_set_position(GTK_EDITABLE(lw->path_entry), -1);
 			}
 		}
 	else if (lw->dir_fd)
@@ -607,11 +606,11 @@ static void layout_sort_menu_cb(GtkWidget *widget, gpointer data)
 {
 	if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(widget))) return;
 
-	auto *lw = static_cast<LayoutWindow *>(submenu_item_get_data(widget));
+	auto *lw = static_cast<LayoutWindow *>(data);
 	if (!lw) return;
 
 	auto sort = lw->options.file_view_list_sort;
-	sort.method = static_cast<SortType>(GPOINTER_TO_INT(data));
+	sort.method = static_cast<SortType>(GPOINTER_TO_INT(menu_item_radio_get_data(widget)));
 
 	if (sort_type_requires_metadata(sort.method))
 		{
@@ -643,9 +642,8 @@ static void layout_sort_menu_case_cb(GtkWidget *, gpointer data)
 static void layout_sort_button_press_cb(GtkWidget *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
-	GtkWidget *menu;
 
-	menu = submenu_add_sort(nullptr, G_CALLBACK(layout_sort_menu_cb), lw, FALSE, FALSE, TRUE, lw->options.file_view_list_sort.method);
+	GtkWidget *menu = submenu_add_sort(nullptr, G_CALLBACK(layout_sort_menu_cb), lw, TRUE, lw->options.file_view_list_sort.method);
 
 	/* ascending option */
 	menu_item_add_divider(menu);
@@ -686,21 +684,20 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 	return button;
 }
 
-static void layout_zoom_menu_cb(GtkWidget *widget, gpointer data)
+template<ZoomMode mode>
+static void layout_zoom_menu_cb(GtkWidget *widget, gpointer)
 {
-	ZoomMode mode;
-
 	if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(widget))) return;
 
-	mode = static_cast<ZoomMode>GPOINTER_TO_INT(data);
 	options->image.zoom_mode = mode;
 }
 
-static void layout_scroll_menu_cb(GtkWidget *widget, gpointer data)
+template<ScrollReset scroll_reset_method>
+static void layout_scroll_menu_cb(GtkWidget *widget, gpointer)
 {
 	if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(widget))) return;
 
-	options->image.scroll_reset_method = static_cast<ScrollReset>(GPOINTER_TO_UINT(data));
+	options->image.scroll_reset_method = scroll_reset_method;
 	image_options_sync();
 }
 
@@ -708,39 +705,27 @@ static void layout_zoom_button_press_cb(GtkWidget *, gpointer)
 {
 	GtkWidget *menu = popup_menu_short_lived();
 
-	menu_item_add_radio(menu, _("Zoom to original size"),
-	                    GINT_TO_POINTER(ZOOM_RESET_ORIGINAL),
+	menu_item_add_radio(menu, _("Zoom to original size"), nullptr,
 	                    options->image.zoom_mode == ZOOM_RESET_ORIGINAL,
-	                    G_CALLBACK(layout_zoom_menu_cb),
-	                    GINT_TO_POINTER(ZOOM_RESET_ORIGINAL));
-	menu_item_add_radio(menu, _("Fit image to window"),
-	                    GINT_TO_POINTER(ZOOM_RESET_FIT_WINDOW),
+	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_ORIGINAL>), nullptr);
+	menu_item_add_radio(menu, _("Fit image to window"), nullptr,
 	                    options->image.zoom_mode == ZOOM_RESET_FIT_WINDOW,
-	                    G_CALLBACK(layout_zoom_menu_cb),
-	                    GINT_TO_POINTER(ZOOM_RESET_FIT_WINDOW));
-	menu_item_add_radio(menu, _("Leave Zoom at previous setting"),
-	                    GINT_TO_POINTER(ZOOM_RESET_NONE),
+	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_FIT_WINDOW>), nullptr);
+	menu_item_add_radio(menu, _("Leave Zoom at previous setting"), nullptr,
 	                    options->image.zoom_mode == ZOOM_RESET_NONE,
-	                    G_CALLBACK(layout_zoom_menu_cb),
-	                    GINT_TO_POINTER(ZOOM_RESET_NONE));
+	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_NONE>), nullptr);
 
 	menu_item_add_divider(menu);
 
-	menu_item_add_radio(menu, _("Scroll to top left corner"),
-	                    GUINT_TO_POINTER(ScrollReset::TOPLEFT),
+	menu_item_add_radio(menu, _("Scroll to top left corner"), nullptr,
 	                    options->image.scroll_reset_method == ScrollReset::TOPLEFT,
-	                    G_CALLBACK(layout_scroll_menu_cb),
-	                    GUINT_TO_POINTER(ScrollReset::TOPLEFT));
-	menu_item_add_radio(menu, _("Scroll to image center"),
-	                    GUINT_TO_POINTER(ScrollReset::CENTER),
+	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::TOPLEFT>), nullptr);
+	menu_item_add_radio(menu, _("Scroll to image center"), nullptr,
 	                    options->image.scroll_reset_method == ScrollReset::CENTER,
-	                    G_CALLBACK(layout_scroll_menu_cb),
-	                    GUINT_TO_POINTER(ScrollReset::CENTER));
-	menu_item_add_radio(menu, _("Keep the region from previous image"),
-	                    GUINT_TO_POINTER(ScrollReset::NOCHANGE),
+	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::CENTER>), nullptr);
+	menu_item_add_radio(menu, _("Keep the region from previous image"), nullptr,
 	                    options->image.scroll_reset_method == ScrollReset::NOCHANGE,
-	                    G_CALLBACK(layout_scroll_menu_cb),
-	                    GUINT_TO_POINTER(ScrollReset::NOCHANGE));
+	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::NOCHANGE>), nullptr);
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 }
@@ -1916,7 +1901,7 @@ void layout_split_change(LayoutWindow *lw, ImageSplitMode mode)
 			{
 			gtk_widget_hide(lw->split_images[i]->widget);
 			if (gtk_widget_get_parent(lw->split_images[i]->widget) != lw->utility_paned)
-				gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->split_images[i]->widget)), lw->split_images[i]->widget);
+				widget_remove_from_parent(lw->split_images[i]->widget);
 			}
 		}
 	gtk_container_remove(GTK_CONTAINER(lw->utility_paned), lw->split_image_widget);
@@ -2091,19 +2076,19 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 
 	/* preserve utility_box (image + sidebars), menu_bar and toolbars to be reused later in layout_grid_setup */
 	/* lw->image is preserved together with lw->utility_box */
-	if (lw->utility_box) gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->utility_box)), lw->utility_box);
+	if (lw->utility_box) widget_remove_from_parent(lw->utility_box);
 
 	if (options->expand_menu_toolbar)
 		{
-		if (lw->toolbar[TOOLBAR_STATUS]) gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->toolbar[TOOLBAR_STATUS])), lw->toolbar[TOOLBAR_STATUS]);
+		if (lw->toolbar[TOOLBAR_STATUS]) widget_remove_from_parent(lw->toolbar[TOOLBAR_STATUS]);
 
-		if (lw->menu_tool_bar) gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->menu_tool_bar)), lw->menu_tool_bar);
+		if (lw->menu_tool_bar) widget_remove_from_parent(lw->menu_tool_bar);
 		}
 	else
 		{
-		if (lw->menu_bar) gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->menu_bar)), lw->menu_bar);
-			for (i = 0; i < TOOLBAR_COUNT; i++)
-				if (lw->toolbar[i]) gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(lw->toolbar[i])), lw->toolbar[i]);
+		if (lw->menu_bar) widget_remove_from_parent(lw->menu_bar);
+		for (i = 0; i < TOOLBAR_COUNT; i++)
+			if (lw->toolbar[i]) widget_remove_from_parent(lw->toolbar[i]);
 		}
 
 	/* clear it all */
