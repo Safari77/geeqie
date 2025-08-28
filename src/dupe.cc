@@ -55,6 +55,7 @@
 #include "similar.h"
 #include "thumb.h"
 #include "typedefs.h"
+#include "ui-file-chooser.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
 #include "ui-misc.h"
@@ -1438,10 +1439,7 @@ static gboolean dupe_match(DupeItem *a, DupeItem *b, DupeMatchType mask, gdouble
 		if (b->width == 0) image_load_dimensions(b->fd, &b->width, &b->height);
 		if (a->width != b->width || a->height != b->height) return FALSE;
 		}
-	if (mask & DUPE_MATCH_SIM_HIGH ||
-	    mask & DUPE_MATCH_SIM_MED ||
-	    mask & DUPE_MATCH_SIM_LOW ||
-	    mask & DUPE_MATCH_SIM_CUSTOM)
+	if (mask & DUPE_MATCH_SIM)
 		{
 		gdouble f;
 		gdouble m;
@@ -1721,48 +1719,39 @@ static gint dupe_match_sort_cb(gconstpointer a, gconstpointer b, gpointer data)
  * If two file sets, steps down the first set and for each value
  * does a binary search for matches in the second set.
  */
-static void dupe_array_check(DupeWindow *dw )
+static void dupe_array_check(DupeWindow *dw)
 {
-	GArray *array_set1;
-	GArray *array_set2;
-	GList *work;
-	gint i_set1;
-	gint i_set2;
 	DUPE_CHECK_RESULT check_result;
 	param_match_mask = dw->match_mask;
 	guint out_match_index;
-	gboolean match_found = FALSE;;
 
 	if (!dw->list) return;
 
-	array_set1 = g_array_new(TRUE, TRUE, sizeof(gpointer));
-	array_set2 = g_array_new(TRUE, TRUE, sizeof(gpointer));
 	dupe_match_reset_list(dw->list);
 
-	work = dw->list;
-	while (work)
-		{
-		auto di = static_cast<DupeItem *>(work->data);
-		g_array_append_val(array_set1, di);
-		work = work->next;
-		}
+	const auto list_to_sorted_array = [dw](GList *list)
+	{
+		GArray *array_set = g_array_new(TRUE, TRUE, sizeof(gpointer));
 
-	g_array_sort_with_data(array_set1, dupe_match_sort_cb, dw);
+		for (GList *work = list; work; work = work->next)
+			{
+			g_array_append_val(array_set, work->data);
+			}
+
+		g_array_sort_with_data(array_set, dupe_match_sort_cb, dw);
+		return array_set;
+	};
+
+	GArray *array_set1 = list_to_sorted_array(dw->list);
 
 	if (dw->second_set)
 		{
 		/* Two sets - nothing can be done until a second set is loaded */
 		if (dw->second_list)
 			{
-			work = dw->second_list;
-			while (work)
-				{
-				g_array_append_val(array_set2, (work->data));
-				work = work->next;
-				}
-			g_array_sort_with_data(array_set2, dupe_match_sort_cb, dw);
+			GArray *array_set2 = list_to_sorted_array(dw->second_list);
 
-			for (i_set1 = 0; i_set1 <= static_cast<gint>(array_set1->len) - 1; i_set1++)
+			for (gint i_set1 = 0; i_set1 <= static_cast<gint>(array_set1->len) - 1; i_set1++)
 				{
 				auto di1 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1));
 				DupeItem *di2 = nullptr;
@@ -1777,26 +1766,7 @@ static void dupe_array_check(DupeWindow *dw )
 						}
 					}
 
-#if ((GLIB_MAJOR_VERSION == 2) && (GLIB_MINOR_VERSION >= 62))
-				match_found = g_array_binary_search(array_set2, di1, dupe_match_binary_search_cb, &out_match_index);
-#else
-				gint i;
-
-				match_found = FALSE;
-				for(i=0; i < array_set2->len; i++)
-					{
-					di2 = static_cast<DupeItem *>(g_array_index(array_set2,  gpointer, i));
-					check_result = dupe_match_check(di1, di2, dw);
-					if (check_result == DUPE_MATCH)
-						{
-						match_found = TRUE;
-						out_match_index = i;
-						break;
-						}
-					}
-#endif
-
-				if (match_found)
+				if (g_array_binary_search(array_set2, di1, dupe_match_binary_search_cb, &out_match_index))
 					{
 					di2 = static_cast<DupeItem *>(g_array_index(array_set2, gpointer, out_match_index));
 
@@ -1807,8 +1777,8 @@ static void dupe_array_check(DupeWindow *dw )
 							{
 							dupe_match_link(di2, di1, 0.0);
 							}
-						i_set2 = out_match_index + 1;
 
+						gint i_set2 = out_match_index + 1;
 						if (i_set2 > static_cast<gint>(array_set2->len) - 1)
 							{
 							break;
@@ -1833,58 +1803,39 @@ static void dupe_array_check(DupeWindow *dw )
 						}
 					}
 				}
+
+			g_array_free(array_set2, TRUE);
 			}
 		}
 	else
 		{
 		/* File set 1 only */
-		g_list_free(dw->dupes);
-		dw->dupes = nullptr;
+		g_clear_pointer(&dw->dupes, g_list_free);
 
-		if (static_cast<gint>(array_set1->len) > 1)
+		for (gint i_set1 = 0; i_set1 <= static_cast<gint>(array_set1->len) - 2; i_set1++)
 			{
-			for (i_set1 = 0; i_set1 <= static_cast<gint>(array_set1->len) - 2; i_set1++)
+			auto *di1 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1));
+
+			/* Look for multiple matches for item di1 */
+			auto *di2 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1 + 1));
+			check_result = dupe_match_check(di1, di2, dw);
+			while (check_result == DUPE_MATCH || check_result == DUPE_NAME_MATCH)
 				{
-				auto di1 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1));
-				auto di2 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1 + 1));
-
-				check_result = dupe_match_check(di1, di2, dw);
-				if (check_result == DUPE_MATCH || check_result == DUPE_NAME_MATCH)
+				if (check_result == DUPE_MATCH)
 					{
-					if (check_result == DUPE_MATCH)
-						{
-						dupe_match_link(di2, di1, 0.0);
-						}
-					i_set1++;
-
-					if ( i_set1 + 1 > static_cast<gint>(array_set1->len) - 1)
-						{
-						break;
-						}
-					/* Look for multiple matches for item di1 */
-					di2 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1 + 1));
-					check_result = dupe_match_check(di1, di2, dw);
-					while (check_result == DUPE_MATCH || check_result == DUPE_NAME_MATCH)
-						{
-						if (check_result == DUPE_MATCH)
-							{
-							dupe_match_link(di2, di1, 0.0);
-							}
-						i_set1++;
-
-						if (i_set1 + 1 > static_cast<gint>(array_set1->len) - 1)
-							{
-							break;
-							}
-						di2 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1 + 1));
-						check_result = dupe_match_check(di1, di2, dw);
-						}
+					dupe_match_link(di2, di1, 0.0);
 					}
+
+				i_set1++;
+				if (i_set1 + 1 > static_cast<gint>(array_set1->len) - 1) break;
+
+				di2 = static_cast<DupeItem *>(g_array_index(array_set1, gpointer, i_set1 + 1));
+				check_result = dupe_match_check(di1, di2, dw);
 				}
 			}
 		}
+
 	g_array_free(array_set1, TRUE);
-	g_array_free(array_set2, TRUE);
 }
 
 /**
@@ -2303,10 +2254,7 @@ static gboolean dupe_check_cb(gpointer data)
 				return G_SOURCE_CONTINUE;
 				}
 			}
-		if ((dw->match_mask & DUPE_MATCH_SIM_HIGH ||
-		     dw->match_mask & DUPE_MATCH_SIM_MED ||
-		     dw->match_mask & DUPE_MATCH_SIM_LOW ||
-		     dw->match_mask & DUPE_MATCH_SIM_CUSTOM) &&
+		if ((dw->match_mask & DUPE_MATCH_SIM) &&
 		    !(dw->setup_mask & DUPE_MATCH_SIM_MED) )
 			{
 			/* Similarity only */
@@ -2369,10 +2317,7 @@ static gboolean dupe_check_cb(gpointer data)
 	if (!dw->working)
 		{
 		/* Similarity check threads may still be running */
-		if (dw->setup_count > 0 && (dw->match_mask == DUPE_MATCH_SIM_HIGH ||
-			dw->match_mask == DUPE_MATCH_SIM_MED ||
-			dw->match_mask == DUPE_MATCH_SIM_LOW ||
-			dw->match_mask == DUPE_MATCH_SIM_CUSTOM))
+		if (dw->setup_count > 0 && (dw->match_mask & DUPE_MATCH_SIM))
 			{
 			if( dw->thread_count < dw->queue_count)
 				{
@@ -2440,10 +2385,7 @@ static gboolean dupe_check_cb(gpointer data)
 		}
 
 	/* Setup done - working */
-	if (dw->match_mask == DUPE_MATCH_SIM_HIGH ||
-		dw->match_mask == DUPE_MATCH_SIM_MED ||
-		dw->match_mask == DUPE_MATCH_SIM_LOW ||
-		dw->match_mask == DUPE_MATCH_SIM_CUSTOM)
+	if (dw->match_mask & DUPE_MATCH_SIM)
 		{
 		/* This is the similarity comparison */
 		dupe_list_check_match(dw, static_cast<DupeItem *>(dw->working->data), dw->working);
@@ -3731,14 +3673,7 @@ static void dupe_menu_type_cb(GtkWidget *combo, gpointer data)
 
 	options->duplicates_match = dw->match_mask;
 
-	if (dw->match_mask & (DUPE_MATCH_SIM_HIGH | DUPE_MATCH_SIM_MED | DUPE_MATCH_SIM_LOW | DUPE_MATCH_SIM_CUSTOM))
-		{
-		dupe_listview_show_rank(dw->listview, TRUE);
-		}
-	else
-		{
-		dupe_listview_show_rank(dw->listview, FALSE);
-		}
+	dupe_listview_show_rank(dw->listview, dw->match_mask & DUPE_MATCH_SIM);
 	dupe_window_recompare(dw);
 }
 
@@ -4937,7 +4872,7 @@ struct ExportDupesData
 {
 	SeparatorType separator;
 	DupeWindow *dupewindow;
-	GtkWidget *chooser;
+	GtkFileChooser *chooser;
 };
 
 static void export_duplicates_data(DupeWindow *dw, const gchar *sep, GString *output_string)
@@ -5053,44 +4988,40 @@ void export_duplicates_data_command_line(GString *output_string)
 
 static void save_export_file(ExportDupesData *edd)
 {
-	g_autoptr(GFile) file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(edd->chooser));
-	g_autofree gchar *filename = g_file_get_path(file);
-	g_autoptr(GFile) out_file = g_file_new_for_path(filename);
-	g_autoptr(GError) error = nullptr;
-	g_autoptr(GFileOutputStream) gfstream = g_file_replace(out_file, nullptr, TRUE, G_FILE_CREATE_NONE, nullptr, &error);
+	g_autoptr(GFile) file = gtk_file_chooser_get_file(edd->chooser);
 
-	history_list_add_to_key("export_duplicates", filename, -1);
-
-	if (error)
+	if (file != nullptr)
 		{
-		log_printf(_("Error creating Export duplicates data file: Error: %s\n"), error->message);
+		g_autofree gchar *filename = g_file_get_path(file);
+		g_autoptr(GFile) out_file = g_file_new_for_path(filename);
+		g_autoptr(GError) error = nullptr;
+		g_autoptr(GFileOutputStream) gfstream = g_file_replace(out_file, nullptr, TRUE, G_FILE_CREATE_NONE, nullptr, &error);
+
+		if (error)
+			{
+			log_printf(_("Error creating Export duplicates data file: Error: %s\n"), error->message);
+			}
+		else
+			{
+			const gchar *sep = (edd->separator == EXPORT_CSV) ?  "," : "\t";
+
+			g_autoptr(GString) output_string = g_string_new(nullptr);
+			output_string = g_string_append(output_string, "header");
+
+			export_duplicates_data(edd->dupewindow, sep, output_string);
+
+			g_output_stream_write(G_OUTPUT_STREAM(gfstream), output_string->str, output_string->len, nullptr, &error);
+
+			g_autoptr(GFile) parent = g_file_get_parent(file);
+
+			if (parent != nullptr)
+				{
+				g_autofree gchar *dirname = g_file_get_path(parent);
+				history_list_add_to_key("export_duplicates", g_path_get_dirname(dirname), -1);
+				}
+			}
 		}
-	else
-		{
-		const gchar *sep = (edd->separator == EXPORT_CSV) ?  "," : "\t";
-
-		g_autoptr(GString) output_string = g_string_new(nullptr);
-		output_string = g_string_append(output_string, "header");
-
-		export_duplicates_data(edd->dupewindow, sep, output_string);
-
-		g_output_stream_write(G_OUTPUT_STREAM(gfstream), output_string->str, output_string->len, nullptr, &error);
-		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(edd->chooser));
 	g_free(edd);
-}
-
-static void confirm_overwrite_response_cb(GtkDialog *dialog, gint response_id, gpointer data)
-{
-	auto edd = static_cast<ExportDupesData *>(data);
-
-	if (response_id == GTK_RESPONSE_YES)
-		{
-		save_export_file(edd);
-		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
 }
 
 static void export_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
@@ -5099,25 +5030,14 @@ static void export_response_cb(GtkFileChooser *chooser, gint response_id, gpoint
 
 	if (response_id == GTK_RESPONSE_ACCEPT)
 		{
-		g_autofree gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
-		if (g_file_test(filename, G_FILE_TEST_EXISTS))
-			{
-			GtkWidget *confirm_overwrite = gtk_message_dialog_new(GTK_WINDOW(chooser), GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO, _("File \"%s\" already exists. Overwrite?"), filename);
-			gtk_window_set_modal(GTK_WINDOW(confirm_overwrite), TRUE);
+		g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
 
-			g_signal_connect(confirm_overwrite, "response", G_CALLBACK(confirm_overwrite_response_cb), edd);
-
-			gtk_widget_show(confirm_overwrite);
-			}
-		else
+		if (file != nullptr)
 			{
 			save_export_file(edd);
+
+			gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 			}
-		}
-	else
-		{
-		g_free(edd);
-		gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 		}
 }
 
@@ -5126,105 +5046,31 @@ static void dupe_pop_menu_export_cb(GtkWidget *, gpointer data)
 {
 	auto *dw = static_cast<DupeWindow *>(data);
 
-	GtkWidget *dialog = gtk_file_chooser_dialog_new(_("Export duplicates data"), GTK_WINDOW(dw->window), GTK_FILE_CHOOSER_ACTION_SAVE,
-	                                                _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Save"), GTK_RESPONSE_ACCEPT, nullptr);
-
 	auto *edd = g_new0(ExportDupesData, 1);
 	edd->dupewindow = dw;
-	edd->chooser = dialog;
 	edd->separator = separator;
 
-	GtkFileFilter *all_filter = gtk_file_filter_new();
-	gtk_file_filter_set_name(all_filter, _("All files"));
-	gtk_file_filter_add_pattern(all_filter, "*");
-	gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), all_filter);
+	g_autoptr(FileChooserDialogData) fcdd = g_new0(FileChooserDialogData, 1);
 
-	GtkFileFilter *type_filter = gtk_file_filter_new();
-	g_autofree gchar *previous_path = g_strdup(history_list_find_last_path_by_key("export_duplicates"));
-	g_autofree gchar *base_name = g_path_get_basename(previous_path);
+	fcdd->action = GTK_FILE_CHOOSER_ACTION_SAVE;
+	fcdd->accept_text = _("Save");
+	fcdd->data = edd;
+	fcdd->entry_text = nullptr;
+	fcdd->entry_tooltip =  nullptr;
+	fcdd->filename = nullptr;
+	fcdd->filter = g_strdup((separator == EXPORT_CSV) ? ".csv" : ".tsv");
+	fcdd->filter_description = (separator == EXPORT_CSV) ? "csv files" : "tsv files";
+	fcdd->history_key = "export_duplicates";
+	fcdd->response_callback = G_CALLBACK(export_response_cb);
+	fcdd->shortcuts = nullptr;
+	fcdd->suggested_name = (separator == EXPORT_CSV) ? _("Untitled.csv") : _("Untitled.tsv");
+	fcdd->title = _("Export duplicates data");
 
-	switch (separator)
-		{
-		case EXPORT_CSV:
-			gtk_file_filter_set_name(type_filter, _("csv files"));
-			gtk_file_filter_add_pattern(type_filter, "*.csv");
-			if (base_name && g_str_has_suffix(base_name, ".csv"))
-				{
-				gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), base_name);
-				}
-			else
-				{
-				gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), _("Untitled document.csv"));
-				}
-			break;
-		case EXPORT_TSV:
-			gtk_file_filter_set_name(type_filter, _("tsv files"));
-			gtk_file_filter_add_pattern(type_filter, "*.tsv");
-			if (base_name && g_str_has_suffix(base_name, ".tsv"))
-				{
-				gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), base_name);
-				}
-			else
-				{
-				gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), _("Untitled document.tsv"));
-				}
-			break;
-		default:
-			return;
-		}
+	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
 
-	gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), type_filter);
-	gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(dialog), type_filter);
+	edd->chooser = GTK_FILE_CHOOSER(dialog);
 
-	/* Get the 3 most recent, unique, path names from the history and
-	 * add them to the dialog shortcuts pane
-	 */
-	GList *list = history_list_get_by_key("export_duplicates");
-
-	g_autoptr(GList) reversed = g_list_reverse(g_list_copy(list));
-	GList *unique_dirs = nullptr; // @TODO Use STL container of std::string. E.g. unsorted_set if order is not important.
-
-	for (GList *work = reversed; work != nullptr && g_list_length(unique_dirs) < 3; work = work->next)
-		{
-		g_autofree gchar *dir = g_path_get_dirname((gchar *)work->data);
-
-		if (!g_list_find_custom(unique_dirs, dir, (GCompareFunc)g_strcmp0))
-			{
-			unique_dirs = g_list_prepend(unique_dirs, g_strdup(dir));
-			}
-		}
-
-	for (GList *work = unique_dirs; work; work = work->next)
-		{
-#if HAVE_GTK4
-		g_autoptr(GFile) path = g_file_new_for_path(static_cast<const gchar *>(work->data), nullptr);
-		gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(dialog), path, nullptr);
-#else
-		gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(dialog), static_cast<const gchar *>(work->data), nullptr);
-#endif
-		}
-
-	g_list_free_full(unique_dirs, g_free);
-
-	if (previous_path)
-		{
-#if HAVE_GTK4
-		g_autoptr(GFile) last_path = g_file_new_for_path(previous_path);
-		g_autoptr(GFile) last_dir = g_file_get_parent(last_path);
-		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), last_dir, nullptr);
-#else
-		g_autofree gchar *last_dir = g_path_get_dirname(previous_path);
-		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), last_dir);
-#endif
-		}
-	else
-		{
-		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), "/tmp/");
-		}
-
-	g_signal_connect(dialog, "response", G_CALLBACK(export_response_cb), edd);
-
-	gtk_window_present(GTK_WINDOW(dialog));
+	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
 }
 
 static void submenu_add_export(GtkWidget *menu, gboolean sensitive, gpointer data)
