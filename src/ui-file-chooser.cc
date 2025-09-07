@@ -21,7 +21,10 @@
 
 #include "ui-file-chooser.h"
 
-#include <iostream>
+#include <algorithm>
+#include <config.h>
+#include <string>
+#include <vector>
 
 #if HAVE_ARCHIVE
 #include <archive.h>
@@ -30,6 +33,7 @@
 #if HAVE_PDF
 #include <poppler.h>
 #endif
+
 #include "cache.h"
 #include "compat.h"
 #include "history-list.h"
@@ -330,25 +334,68 @@ GtkWidget *create_pdf_preview(const char *filename)
 }
 #endif
 
+gboolean is_dir(const char *dir_path, const std::string &entry)
+{
+	g_autofree gchar *full_path = g_build_filename(dir_path, entry.c_str(), NULL);
+	gboolean result = g_file_test(full_path, G_FILE_TEST_IS_DIR);
+
+	return result;
+}
+
 GtkWidget *create_dir_preview(const char *dir_path)
 {
 	GtkWidget *textview = gtk_text_view_new();
 	gtk_text_view_set_editable(GTK_TEXT_VIEW(textview), FALSE);
 	gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(textview), FALSE);
 
-	g_autoptr(GDir) dir = g_dir_open(dir_path, 0, nullptr);
-	if (dir)
+	GError *error = nullptr;
+	GDir *dir = g_dir_open(dir_path, 0, &error);
+
+	if (!dir)
 		{
-		g_autoptr(GString) output = g_string_new("");
-		const gchar *entry;
-		while ((entry = g_dir_read_name(dir)) != nullptr)
+		if (error)
 			{
-			append_dir_entry(output, dir_path, entry);
+			log_printf("Dir preview failed: %s", error->message);
+			g_error_free(error);
 			}
 
-		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
-		gtk_text_buffer_set_text(buffer, output->str, -1);
+		return nullptr;
 		}
+
+	std::vector<std::string> entries;
+	const gchar *entry;
+
+	while ((entry = g_dir_read_name(dir)) != nullptr)
+		{
+		entries.emplace_back(entry);
+		}
+
+	g_dir_close(dir);
+
+	/* Sort: directories first, then files, alphabetically within groups
+	 */
+	std::sort(entries.begin(), entries.end(), [&](const std::string &a, const std::string &b)
+		{
+		bool dir_a = is_dir(dir_path, a);
+		bool dir_b = is_dir(dir_path, b);
+
+		if (dir_a != dir_b)
+			{
+			return dir_a; // dirs first
+			}
+
+		return a < b; // then alphabetical
+		});
+
+	GString *output = g_string_new("");
+
+	for (const auto &e : entries)
+		{
+		append_dir_entry(output, dir_path, e.c_str());
+		}
+
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
+	gtk_text_buffer_set_text(buffer, output->str, -1);
 
 	return textview;
 }
@@ -481,15 +528,15 @@ void history_combo_changed_cb(GtkComboBoxText *history_combo, gpointer data)
 
 } // namespace
 
-GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
+GtkFileChooserDialog *file_chooser_dialog_new(const FileChooserDialogData &fcdd)
 {
 	const gchar *title;
 
-	title = fcdd->title ? fcdd->title : _("Select path");
+	title = fcdd.title ? fcdd.title : _("Select path");
 
 	GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(g_application_get_default()));
 
-	GtkFileChooserDialog *dialog = GTK_FILE_CHOOSER_DIALOG(gtk_file_chooser_dialog_new(title, window, fcdd->action, _("_Cancel"), GTK_RESPONSE_CANCEL, fcdd->accept_text, GTK_RESPONSE_ACCEPT, nullptr));
+	GtkFileChooserDialog *dialog = GTK_FILE_CHOOSER_DIALOG(gtk_file_chooser_dialog_new(title, window, fcdd.action, _("_Cancel"), GTK_RESPONSE_CANCEL, fcdd.accept_text, GTK_RESPONSE_ACCEPT, nullptr));
 
 	if (window)
 		{
@@ -512,15 +559,15 @@ GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
 	 */
 	g_auto(GStrv) extension_list = nullptr;
 
-	if (fcdd->filter)
+	if (fcdd.filter)
 		{
-		extension_list = g_strsplit(fcdd->filter, ";", -1);
+		extension_list = g_strsplit(fcdd.filter, ";", -1);
 		}
 
 	if (extension_list)
 		{
 		GtkFileFilter *sub_filter = gtk_file_filter_new();
-		gtk_file_filter_set_name(sub_filter, fcdd->filter_description);
+		gtk_file_filter_set_name(sub_filter, fcdd.filter_description);
 
 		for (gint i = 0; extension_list[i] != nullptr; i++)
 			{
@@ -532,27 +579,27 @@ GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
 		gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(dialog), sub_filter);
 		}
 
-	g_signal_connect(dialog, "response", G_CALLBACK(fcdd->response_callback), fcdd->data);
+	g_signal_connect(dialog, "response", fcdd.response_callback, fcdd.data);
 
 	/* It is expected that extra_widget contains only a single widget - i.e. that
 	 * entry text and history combo are not used at the same time
 	 *
 	 * Optional entry box
 	 */
-	if (fcdd->entry_text)
+	if (fcdd.entry_text)
 		{
 		GtkWidget *entry = gtk_entry_new();
-		gtk_entry_set_placeholder_text(GTK_ENTRY(entry), fcdd->entry_text);
-		gtk_widget_set_tooltip_text(entry, fcdd->entry_tooltip);
+		gtk_entry_set_placeholder_text(GTK_ENTRY(entry), fcdd.entry_text);
+		gtk_widget_set_tooltip_text(entry, fcdd.entry_tooltip);
 		gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog), entry);
 		}
 
 	/* Optional history combo
 	 */
 	GtkWidget *history_combo = nullptr;
-	if (fcdd->history_key)
+	if (fcdd.history_key)
 		{
-		history_combo = create_history_combo_box(fcdd->history_key);
+		history_combo = create_history_combo_box(fcdd.history_key);
 
 		if (history_combo)
 			{
@@ -586,9 +633,9 @@ GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
 	gtk_file_chooser_add_shortcut_folder(GTK_FILE_CHOOSER(dialog), layout_get_path(get_current_layout()), nullptr);
 #endif
 
-	if (fcdd->shortcuts)
+	if (fcdd.shortcuts)
 		{
-		g_auto(GStrv) shortcut_list = g_strsplit(fcdd->shortcuts, ";", -1);
+		g_auto(GStrv) shortcut_list = g_strsplit(fcdd.shortcuts, ";", -1);
 
 		for (gint i = 0; shortcut_list[i] != nullptr; i++)
 			{
@@ -608,9 +655,9 @@ GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
 		gchar *first = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(history_combo));
 		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), first);
 		}
-	else if (isfile(fcdd->filename))
+	else if (isfile(fcdd.filename))
 		{
-		g_autoptr(GFile) file = g_file_new_for_path(fcdd->filename);
+		g_autoptr(GFile) file = g_file_new_for_path(fcdd.filename);
 		g_autoptr(GFile) parent = g_file_get_parent(file);
 
 		if (parent)
@@ -618,30 +665,18 @@ GtkFileChooserDialog *file_chooser_dialog_new(FileChooserDialogData *fcdd)
 			gtk_file_chooser_set_file(GTK_FILE_CHOOSER(dialog), file, nullptr);
 			}
 		}
-	else if (isdir(fcdd->filename))
+	else if (isdir(fcdd.filename))
 		{
-		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), fcdd->filename);
+		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), fcdd.filename);
 		}
 
-	if (fcdd->action == GTK_FILE_CHOOSER_ACTION_SAVE && fcdd->suggested_name)
+	if (fcdd.action == GTK_FILE_CHOOSER_ACTION_SAVE && fcdd.suggested_name)
 		{
-		gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), fcdd->suggested_name);
+		gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), fcdd.suggested_name);
 		}
 	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
 
 	return dialog;
 }
-
-void file_chooser_dialog_data_free(FileChooserDialogData *fcdd)
-{
-	if (!fcdd) return;
-
-	g_free(fcdd->filename);
-	g_free(fcdd->filter);
-	g_free(fcdd->shortcuts);
-
-	g_free(fcdd);
-}
-
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

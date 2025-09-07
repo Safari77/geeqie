@@ -2804,28 +2804,14 @@ void dupe_window_add_files(DupeWindow *dw, GList *list, gboolean recurse)
 		}
 }
 
-void dupe_window_add_folder(const gchar *path)
+void dupe_window_add_folder(const gchar *path, gboolean recurse)
 {
 	DupeWindow *dw = dupe_window_new();
 	FileData *fd = file_data_new_simple(path);
 	g_autoptr(GList) list = nullptr;
 	list = g_list_append(list, fd);
 
-	dupe_window_add_files(dw, list, FALSE);
-
-	dupe_check_start(dw);
-
-	file_data_unref(fd);
-}
-
-void dupe_window_add_folder_recurse(const gchar *path)
-{
-	DupeWindow *dw = dupe_window_new();
-	FileData *fd = file_data_new_simple(path);
-	g_autoptr(GList) list = nullptr;
-	list = g_list_append(list, fd);
-
-	dupe_window_add_files(dw, list, TRUE);
+	dupe_window_add_files(dw, list, recurse);
 
 	dupe_check_start(dw);
 
@@ -4872,10 +4858,9 @@ struct ExportDupesData
 {
 	SeparatorType separator;
 	DupeWindow *dupewindow;
-	GtkFileChooser *chooser;
 };
 
-static void export_duplicates_data(DupeWindow *dw, const gchar *sep, GString *output_string)
+static GString *export_duplicates_data(DupeWindow *dw, const gchar *sep)
 {
 	gboolean color_old = FALSE;
 	gboolean color_new = FALSE;
@@ -4883,7 +4868,7 @@ static void export_duplicates_data(DupeWindow *dw, const gchar *sep, GString *ou
 
 	g_autofree gchar *header = g_strjoin(sep, _("Match"), _("Group"), _("Similarity"), _("Set"), _("Thumbnail"), _("Name"), _("Size"), _("Date"), _("Width"), _("Height"), _("Path"), NULL);
 
-	output_string = g_string_append(output_string, header);
+	GString *output_string = g_string_new(header);
 	output_string = g_string_append_c(output_string, '\n');
 
 	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(dw->listview));
@@ -4960,68 +4945,49 @@ static void export_duplicates_data(DupeWindow *dw, const gchar *sep, GString *ou
 		output_string = g_string_append(output_string, di->fd->path);
 		output_string = g_string_append_c(output_string, '\n');
 		}
+
+	return output_string;
 }
 
-void export_duplicates_data_command_line(GString *output_string)
+GString *export_duplicates_data_command_line()
 {
-	if (dupe_window_list != nullptr)
-		{
-		auto dw = static_cast<DupeWindow *>(g_list_last(dupe_window_list)->data);
+	if (!dupe_window_list) return g_string_new(_("No duplicates windows open"));
 
-		if (dw->idle_id != 0)
-			{
-			output_string = g_string_append(output_string, _("Incomplete"));
-			}
-		else
-			{
-			GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(dw->listview));
-			gtk_tree_selection_select_all(selection);
+	auto *dw = static_cast<DupeWindow *>(g_list_last(dupe_window_list)->data);
 
-			export_duplicates_data(dw, "\t", output_string);
-			}
-		}
-	else
-		{
-		output_string = g_string_append(output_string, _("No duplicates windows open"));
-		}
+	if (dw->idle_id != 0) return g_string_new(_("Incomplete"));
+
+	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(dw->listview));
+	gtk_tree_selection_select_all(selection);
+
+	return export_duplicates_data(dw, "\t");
 }
 
-static void save_export_file(ExportDupesData *edd)
+static void save_export_file(GFile *file, ExportDupesData *edd)
 {
-	g_autoptr(GFile) file = gtk_file_chooser_get_file(edd->chooser);
+	g_autofree gchar *filename = g_file_get_path(file);
+	g_autoptr(GFile) out_file = g_file_new_for_path(filename);
 
-	if (file != nullptr)
+	g_autoptr(GError) error = nullptr;
+	g_autoptr(GFileOutputStream) gfstream = g_file_replace(out_file, nullptr, TRUE, G_FILE_CREATE_NONE, nullptr, &error);
+	if (error)
 		{
-		g_autofree gchar *filename = g_file_get_path(file);
-		g_autoptr(GFile) out_file = g_file_new_for_path(filename);
-		g_autoptr(GError) error = nullptr;
-		g_autoptr(GFileOutputStream) gfstream = g_file_replace(out_file, nullptr, TRUE, G_FILE_CREATE_NONE, nullptr, &error);
-
-		if (error)
-			{
-			log_printf(_("Error creating Export duplicates data file: Error: %s\n"), error->message);
-			}
-		else
-			{
-			const gchar *sep = (edd->separator == EXPORT_CSV) ?  "," : "\t";
-
-			g_autoptr(GString) output_string = g_string_new(nullptr);
-			output_string = g_string_append(output_string, "header");
-
-			export_duplicates_data(edd->dupewindow, sep, output_string);
-
-			g_output_stream_write(G_OUTPUT_STREAM(gfstream), output_string->str, output_string->len, nullptr, &error);
-
-			g_autoptr(GFile) parent = g_file_get_parent(file);
-
-			if (parent != nullptr)
-				{
-				g_autofree gchar *dirname = g_file_get_path(parent);
-				history_list_add_to_key("export_duplicates", g_path_get_dirname(dirname), -1);
-				}
-			}
+		log_printf(_("Error creating Export duplicates data file: Error: %s\n"), error->message);
+		return;
 		}
-	g_free(edd);
+
+	const gchar *sep = (edd->separator == EXPORT_CSV) ?  "," : "\t";
+	g_autoptr(GString) output_string = export_duplicates_data(edd->dupewindow, sep);
+	output_string = g_string_prepend(output_string, "header");
+
+	g_output_stream_write(G_OUTPUT_STREAM(gfstream), output_string->str, output_string->len, nullptr, &error);
+
+	g_autoptr(GFile) parent = g_file_get_parent(file);
+	if (!parent) return;
+
+	g_autofree gchar *parent_path = g_file_get_path(parent);
+	g_autofree gchar *dirname = g_path_get_dirname(parent_path);
+	history_list_add_to_key("export_duplicates", dirname, -1);
 }
 
 static void export_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
@@ -5034,11 +5000,12 @@ static void export_response_cb(GtkFileChooser *chooser, gint response_id, gpoint
 
 		if (file != nullptr)
 			{
-			save_export_file(edd);
-
-			gq_gtk_widget_destroy(GTK_WIDGET(chooser));
+			save_export_file(file, edd);
 			}
 		}
+
+	g_free(edd);
+	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 }
 
 template<SeparatorType separator>
@@ -5050,25 +5017,19 @@ static void dupe_pop_menu_export_cb(GtkWidget *, gpointer data)
 	edd->dupewindow = dw;
 	edd->separator = separator;
 
-	g_autoptr(FileChooserDialogData) fcdd = g_new0(FileChooserDialogData, 1);
+	FileChooserDialogData fcdd{};
 
-	fcdd->action = GTK_FILE_CHOOSER_ACTION_SAVE;
-	fcdd->accept_text = _("Save");
-	fcdd->data = edd;
-	fcdd->entry_text = nullptr;
-	fcdd->entry_tooltip =  nullptr;
-	fcdd->filename = nullptr;
-	fcdd->filter = g_strdup((separator == EXPORT_CSV) ? ".csv" : ".tsv");
-	fcdd->filter_description = (separator == EXPORT_CSV) ? "csv files" : "tsv files";
-	fcdd->history_key = "export_duplicates";
-	fcdd->response_callback = G_CALLBACK(export_response_cb);
-	fcdd->shortcuts = nullptr;
-	fcdd->suggested_name = (separator == EXPORT_CSV) ? _("Untitled.csv") : _("Untitled.tsv");
-	fcdd->title = _("Export duplicates data");
+	fcdd.action = GTK_FILE_CHOOSER_ACTION_SAVE;
+	fcdd.accept_text = _("Save");
+	fcdd.data = edd;
+	fcdd.filter = (separator == EXPORT_CSV) ? ".csv" : ".tsv";
+	fcdd.filter_description = (separator == EXPORT_CSV) ? "csv files" : "tsv files";
+	fcdd.history_key = "export_duplicates";
+	fcdd.response_callback = G_CALLBACK(export_response_cb);
+	fcdd.suggested_name = (separator == EXPORT_CSV) ? _("Untitled.csv") : _("Untitled.tsv");
+	fcdd.title = _("Export duplicates data");
 
 	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
-
-	edd->chooser = GTK_FILE_CHOOSER(dialog);
 
 	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
 }

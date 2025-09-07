@@ -41,6 +41,9 @@
 #include "ui-misc.h"
 #include "ui-tabcomp.h"
 
+static void pan_search_activate_cb(const gchar *text, gpointer data);
+static void pan_search_toggle_cb(GtkWidget *button, gpointer data);
+
 PanViewSearchUi *pan_search_ui_new(PanWindow *pw)
 {
 	auto ui = g_new0(PanViewSearchUi, 1);
@@ -56,8 +59,8 @@ PanViewSearchUi *pan_search_ui_new(PanWindow *pw)
 	gq_gtk_box_pack_start(GTK_BOX(ui->search_box), hbox, TRUE, TRUE, 0);
 	gtk_widget_show(hbox);
 
-	combo = tab_completion_new_with_history(&ui->search_entry, "", "pan_view_search", -1,
-						pan_search_activate_cb, pw);
+	combo = tab_completion_new_with_history(&ui->search_entry, "", "pan_view_search", -1);
+	tab_completion_set_enter_func(ui->search_entry, pan_search_activate_cb, pw);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
 
@@ -379,7 +382,7 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 	return TRUE;
 }
 
-void pan_search_activate_cb(const gchar *text, gpointer data)
+static void pan_search_activate_cb(const gchar *text, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
 
@@ -408,7 +411,7 @@ void pan_search_activate(PanWindow *pw)
 	pan_search_activate_cb(text, pw);
 }
 
-void pan_search_toggle_cb(GtkWidget *button, gpointer data)
+static void pan_search_toggle_cb(GtkWidget *button, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
 	PanViewSearchUi *ui = pw->search_ui;

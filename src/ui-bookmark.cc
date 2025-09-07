@@ -304,8 +304,7 @@ static void bookmark_edit(const gchar *key, const gchar *text, GtkWidget *parent
 
 	pref_table_label(table, 0, 1, _("Path:"), GTK_ALIGN_END);
 
-	label = tab_completion_new_with_history(&p->path_entry, p->bb->path,
-						"bookmark_path", -1, nullptr, nullptr);
+	label = tab_completion_new_with_history(&p->path_entry, p->bb->path, "bookmark_path", -1);
 	tab_completion_add_select_button(p->path_entry, nullptr, TRUE);
 	gq_gtk_grid_attach_default(GTK_GRID(table), label, 1, 2, 1, 2);
 	generic_dialog_attach_default(gd, p->path_entry);
@@ -315,8 +314,7 @@ static void bookmark_edit(const gchar *key, const gchar *text, GtkWidget *parent
 
 	icon = p->bb->icon;
 	if (!icon) icon = "";
-	label = tab_completion_new_with_history(&p->icon_entry, icon,
-						"bookmark_icons", -1, nullptr, nullptr);
+	label = tab_completion_new_with_history(&p->icon_entry, icon, "bookmark_icons", -1);
 	tab_completion_add_select_button(p->icon_entry, _("Select icon"), FALSE);
 	gq_gtk_grid_attach_default(GTK_GRID(table), label, 1, 2, 2, 3);
 	generic_dialog_attach_default(gd, p->icon_entry);
@@ -861,21 +859,16 @@ static void bookmark_add_response_cb(GtkFileChooser *chooser, gint response_id, 
 
 void bookmark_add_dialog(const gchar *title, GtkWidget *list)
 {
-		g_autoptr(FileChooserDialogData) fcdd = g_new0(FileChooserDialogData, 1);
+		FileChooserDialogData fcdd{};
 
-		fcdd->action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-		fcdd->accept_text = _("Open");
-		fcdd->data = list;
-		fcdd->entry_text = _("Optional name...");
-		fcdd->entry_tooltip =  _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used");
-		fcdd->filename = g_strdup(layout_get_path(get_current_layout()));
-		fcdd->filter = nullptr;
-		fcdd->filter_description = nullptr;
-		fcdd->history_key = nullptr;
-		fcdd->response_callback = G_CALLBACK(bookmark_add_response_cb);
-		fcdd->shortcuts = nullptr;
-		fcdd->suggested_name = nullptr;
-		fcdd->title = title;
+		fcdd.action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+		fcdd.accept_text = _("Open");
+		fcdd.data = list;
+		fcdd.entry_text = _("Optional name...");
+		fcdd.entry_tooltip =  _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used");
+		fcdd.filename = layout_get_path(get_current_layout());
+		fcdd.response_callback = G_CALLBACK(bookmark_add_response_cb);
+		fcdd.title = title;
 
 		GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
 

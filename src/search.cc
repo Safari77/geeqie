@@ -3130,21 +3130,17 @@ static void select_collection_clicked_cb(GtkWidget *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
 
-	g_autoptr(FileChooserDialogData) fcdd = g_new0(FileChooserDialogData, 1);
+	FileChooserDialogData fcdd{};
 
-	fcdd->accept_text = _("Open");
-	fcdd->action = GTK_FILE_CHOOSER_ACTION_OPEN;
-	fcdd->data = sd;
-	fcdd->entry_text = nullptr;
-	fcdd->entry_tooltip = nullptr;
-	fcdd->filename = g_strdup(get_collections_dir());
-	fcdd->filter = g_strdup(GQ_COLLECTION_EXT);
-	fcdd->filter_description = _("Collection files");
-	fcdd->history_key = "open_collection";
-	fcdd->response_callback = G_CALLBACK(select_collection_response_cb);
-	fcdd->shortcuts = nullptr;
-	fcdd->suggested_name = nullptr;
-	fcdd->title = _("Select collection");
+	fcdd.accept_text = _("Open");
+	fcdd.action = GTK_FILE_CHOOSER_ACTION_OPEN;
+	fcdd.data = sd;
+	fcdd.filename = get_collections_dir();
+	fcdd.filter = GQ_COLLECTION_EXT;
+	fcdd.filter_description = _("Collection files");
+	fcdd.history_key = "open_collection";
+	fcdd.response_callback = G_CALLBACK(select_collection_response_cb);
+	fcdd.title = _("Select collection");
 
 	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
 
@@ -3244,8 +3240,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	hbox2 = pref_box_new(hbox, TRUE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	GtkWidget *combo = tab_completion_new_with_history(&sd->ui.path_entry, sd->search_dir_fd->path,
-	                                                   "search_path", -1,
-	                                                   nullptr, nullptr);
+	                                                   "search_path", -1);
 	tab_completion_add_select_button(sd->ui.path_entry, nullptr, TRUE);
 	gq_gtk_box_pack_start(GTK_BOX(hbox2), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
@@ -3342,8 +3337,8 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	pref_label_new(hbox, _("% similar to"));
 
 	combo = tab_completion_new_with_history(&sd->ui.entry_similarity,
-	                                        (sd->search_similarity_path) ? sd->search_similarity_path : "",
-	                                        "search_similarity_path", -1, nullptr, nullptr);
+	                                        sd->search_similarity_path ? sd->search_similarity_path : "",
+	                                        "search_similarity_path", -1);
 	tab_completion_add_select_button(sd->ui.entry_similarity, nullptr, FALSE);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
