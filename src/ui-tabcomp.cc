@@ -30,7 +30,8 @@
 #include "history-list.h"
 #include "intl.h"
 #include "main-defines.h"
-#include "misc.h"	/* expand_tilde() */
+#include "main.h"
+#include "misc.h"
 #include "options.h"
 #include "ui-file-chooser.h"
 #include "ui-fileops.h"
@@ -75,12 +76,12 @@ struct TabCompData
 	gchar *history_key;
 	gint history_levels;
 
+	GtkWidget *fd_button;
 	gchar *fd_title;
 	gboolean fd_folders_only;
-	GtkWidget *fd_button;
-	gchar *filter;
-	gchar *filter_desc;
-	gchar *shortcuts;
+	gchar *fd_filter;
+	gchar *fd_filter_desc;
+	gchar *fd_shortcuts;
 };
 
 
@@ -134,10 +135,9 @@ static void tab_completion_destroy(gpointer data)
 	g_free(td->history_key);
 
 	g_free(td->fd_title);
-
-	g_free(td->filter);
-	g_free(td->filter_desc);
-	g_free(td->shortcuts);
+	g_free(td->fd_filter);
+	g_free(td->fd_filter_desc);
+	g_free(td->fd_shortcuts);
 
 	g_free(td);
 }
@@ -293,16 +293,6 @@ static void tab_completion_popup_list(TabCompData *td, GList *list)
 
 	gtk_menu_popup_at_widget(GTK_MENU(menu), td->entry, GDK_GRAVITY_NORTH_EAST, GDK_GRAVITY_NORTH, nullptr);
 }
-
-#ifndef CASE_SORT
-#define CASE_SORT strcmp
-#endif
-
-static gint simple_sort(gconstpointer a, gconstpointer b)
-{
-	return CASE_SORT((gchar *)a, (gchar *)b);
-}
-
 #endif
 
 static gboolean tab_completion_do(TabCompData *td)
@@ -357,7 +347,7 @@ static gboolean tab_completion_do(TabCompData *td)
 				}
 
 			tab_completion_read_dir(td, entry_dir);
-			td->file_list = g_list_sort(td->file_list, simple_sort);
+			td->file_list = g_list_sort(td->file_list, reinterpret_cast<GCompareFunc>(CASE_SORT));
 			if (td->file_list && !td->file_list->next)
 				{
 				const gchar *file;
@@ -460,7 +450,7 @@ static gboolean tab_completion_do(TabCompData *td)
 				gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
 
 #ifdef TAB_COMPLETION_ENABLE_POPUP_MENU
-				poss = g_list_sort(poss, simple_sort);
+				poss = g_list_sort(poss, reinterpret_cast<GCompareFunc>(CASE_SORT));
 				tab_completion_popup_list(td, poss);
 #endif
 
@@ -619,22 +609,6 @@ GtkWidget *tab_completion_new_with_history(GtkWidget **entry, const gchar *text,
 	return box;
 }
 
-const gchar *tab_completion_set_to_last_history(GtkWidget *entry)
-{
-	auto td = static_cast<TabCompData *>(g_object_get_data(G_OBJECT(entry), "tab_completion_data"));
-	const gchar *buf;
-
-	if (!td || !td->has_history) return nullptr;
-
-	buf = history_list_find_last_path_by_key(td->history_key);
-	if (buf)
-		{
-		gq_gtk_entry_set_text(GTK_ENTRY(td->entry), buf);
-		}
-
-	return buf;
-}
-
 void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
 {
 	TabCompData *td;
@@ -668,31 +642,26 @@ void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
 	}
 }
 
-GtkWidget *tab_completion_new(GtkWidget **entry, const gchar *text,
-                              const gchar *filter, const gchar *filter_desc, const gchar *shortcuts)
+GtkWidget *tab_completion_new(GtkWidget *parent_box, const gchar *text)
 {
-	GtkWidget *hbox;
-	GtkWidget *button;
-	GtkWidget *newentry;
+	GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	GtkWidget *entry = gtk_entry_new();
+	if (text) gq_gtk_entry_set_text(GTK_ENTRY(entry), text);
+	gq_gtk_box_pack_start(GTK_BOX(hbox), entry, TRUE, TRUE, 0);
+	gtk_widget_show(entry);
 
-	newentry = gtk_entry_new();
-	if (text) gq_gtk_entry_set_text(GTK_ENTRY(newentry), text);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), newentry, TRUE, TRUE, 0);
-	gtk_widget_show(newentry);
-
-	button = tab_completion_create_complete_button(newentry, newentry);
+	GtkWidget *button = tab_completion_create_complete_button(entry, entry);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 	gtk_widget_show(button);
 
-	TabCompData *td = tab_completion_set_to_entry(newentry);
-	td->filter = g_strdup(filter);
-	td->filter_desc = g_strdup(filter_desc);
-	td->shortcuts = g_strdup(shortcuts);
+	tab_completion_set_to_entry(entry);
 
-	if (entry) *entry = newentry;
-	return hbox;
+	if (parent_box) gq_gtk_box_pack_start(GTK_BOX(parent_box), hbox, TRUE, TRUE, 0);
+
+	gtk_widget_show(hbox);
+
+	return entry;
 }
 
 static TabCompData *tab_completion_set_to_entry(GtkWidget *entry)
@@ -743,18 +712,6 @@ void tab_completion_set_tab_append_func(GtkWidget *entry, TabCompTabAppendFunc t
 	td->tab_append_data = data;
 }
 
-gchar *remove_trailing_slash(const gchar *path)
-{
-	gint l;
-
-	if (!path) return nullptr;
-
-	l = strlen(path);
-	while (l > 1 && path[l - 1] == G_DIR_SEPARATOR) l--;
-
-	return g_strndup(path, l);
-}
-
 static void tab_completion_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
 {
 	auto td = static_cast<TabCompData *>(data);
@@ -778,11 +735,11 @@ static void tab_completion_select_show(TabCompData *td)
 	fcdd.accept_text = _("Open");
 	fcdd.data = td;
 	fcdd.filename = gtk_entry_get_text(GTK_ENTRY(td->entry));
-	fcdd.filter = td->filter;
-	fcdd.filter_description = td->filter_desc;
+	fcdd.filter = td->fd_filter;
+	fcdd.filter_description = td->fd_filter_desc;
 	fcdd.history_key = td->history_key;
 	fcdd.response_callback = G_CALLBACK(tab_completion_response_cb);
-	fcdd.shortcuts = td->shortcuts;
+	fcdd.shortcuts = td->fd_shortcuts;
 	fcdd.title = td->fd_title;
 
 	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
@@ -797,7 +754,8 @@ static void tab_completion_select_pressed(GtkWidget *, gpointer data)
 	tab_completion_select_show(td);
 }
 
-void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboolean folders_only)
+void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboolean folders_only,
+                                      const gchar *filter, const gchar *filter_desc, const gchar *shortcuts)
 {
 	TabCompData *td;
 	GtkWidget *parent;
@@ -805,13 +763,13 @@ void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboo
 
 	td = static_cast<TabCompData *>(g_object_get_data(G_OBJECT(entry), "tab_completion_data"));
 
-	if (!td) return;
+	if (!td || td->fd_button) return;
 
-	g_free(td->fd_title);
 	td->fd_title = g_strdup(title);
 	td->fd_folders_only = folders_only;
-
-	if (td->fd_button) return;
+	td->fd_filter = g_strdup(filter);
+	td->fd_filter_desc = g_strdup(filter_desc);
+	td->fd_shortcuts = g_strdup(shortcuts);
 
 	parent = (td->combo) ? td->combo : td->entry;
 
