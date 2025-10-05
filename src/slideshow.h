@@ -42,51 +42,57 @@ struct LayoutWindow;
  * CollectionData, then finally falls back to the layout listing.
  */
 
-struct SlideShowData
+struct SlideShow
 {
-	LayoutWindow *lw;        /**< use this window to display the slideshow */
-	ImageWindow *imd;        /**< use this window only if lw is not available,
-	                            @FIXME it is probably required only by img-view.cc and should be dropped with it */
+	using StopFunc = std::function<void(SlideShow *)>;
 
-	GList *filelist;
-	CollectionData *cd;
-	FileData *dir_fd;
+	~SlideShow();
 
-	std::deque<gint> list;
-	std::deque<gint> list_done;
+	bool should_continue() const;
 
-	FileData *slide_fd;
+	void next();
+	void prev();
 
-	guint slide_count;
-	guint timeout_id; /**< event source id */
+	static SlideShow *start_from_filelist(LayoutWindow *target_lw, ImageWindow *imd,
+	                                      GList *list, const StopFunc &stop_func);
+	static SlideShow *start_from_collection(LayoutWindow *target_lw, ImageWindow *imd,
+	                                        CollectionData *cd, CollectInfo *start_info,
+	                                        const StopFunc &stop_func);
+	static SlideShow *start(LayoutWindow *lw, const StopFunc &stop_func);
 
-	gboolean from_selection;
+	void get_index_and_total(gint &index, gint &total) const;
 
-	using StopFunc = std::function<void(SlideShowData *)>;
-	StopFunc stop_func;
+	gboolean is_paused() const;
+	void pause_toggle();
 
-	gboolean paused;
+	LayoutWindow *lw = nullptr;        /**< use this window to display the slideshow */
+	ImageWindow *imd = nullptr;        /**< use this window only if lw is not available,
+	                                      @FIXME it is probably required only by img-view.cc and should be dropped with it */
+
+	GList *filelist = nullptr;
+	CollectionData *cd = nullptr;
+	FileData *dir_fd = nullptr;
+
+	std::deque<gint> list{};
+	std::deque<gint> list_done{};
+
+	FileData *slide_fd = nullptr;
+
+	guint slide_count = 0;
+	guint timeout_id = 0; /**< event source id */
+
+	bool from_selection = false;
+
+	StopFunc stop_func{};
+
+	gboolean paused = FALSE;
+
+private:
+	SlideShow(LayoutWindow *target_lw, ImageWindow *imd)
+	    : lw(target_lw)
+	    , imd(imd)
+	{}
 };
-
-void slideshow_free(SlideShowData *ss);
-
-gboolean slideshow_should_continue(SlideShowData *ss);
-
-void slideshow_next(SlideShowData *ss);
-void slideshow_prev(SlideShowData *ss);
-
-SlideShowData *slideshow_start_from_filelist(LayoutWindow *target_lw, ImageWindow *imd, GList *list,
-                                             const SlideShowData::StopFunc &stop_func);
-SlideShowData *slideshow_start_from_collection(LayoutWindow *target_lw, ImageWindow *imd,
-                                               CollectionData *cd, CollectInfo *start_info,
-                                               const SlideShowData::StopFunc &stop_func);
-SlideShowData *slideshow_start(LayoutWindow *lw, gint start_point,
-                               const SlideShowData::StopFunc &stop_func);
-
-void slideshow_get_index_and_total(SlideShowData *ss, gint &index, gint &total);
-
-gboolean slideshow_paused(SlideShowData *ss);
-void slideshow_pause_toggle(SlideShowData *ss);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

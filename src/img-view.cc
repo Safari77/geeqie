@@ -67,7 +67,7 @@ struct ViewWindow
 	GtkWidget *window;
 	ImageWindow *imd;
 	FullScreenData *fs;
-	SlideShowData *ss;
+	SlideShow *ss;
 
 	GList *list;
 	GList *list_pointer;
@@ -581,7 +581,7 @@ static gboolean view_window_key_press_cb(GtkWidget * (widget), GdkEventKey *even
 					}
 				break;
 			case 'P': case 'p':
-				slideshow_pause_toggle(vw->ss);
+				if (vw->ss) vw->ss->pause_toggle();
 				break;
 			case 'F': case 'f':
 			case 'V': case 'v':
@@ -787,12 +787,12 @@ static void view_overlay_toggle(ViewWindow *vw)
 
 static void view_slideshow_next(ViewWindow *vw)
 {
-	if (vw->ss) slideshow_next(vw->ss);
+	if (vw->ss) vw->ss->next();
 }
 
 static void view_slideshow_prev(ViewWindow *vw)
 {
-	if (vw->ss) slideshow_prev(vw->ss);
+	if (vw->ss) vw->ss->prev();
 }
 
 static void view_slideshow_stop_func(ViewWindow *vw)
@@ -814,8 +814,8 @@ static void view_slideshow_start(ViewWindow *vw)
 
 	if (vw->list)
 		{
-		vw->ss = slideshow_start_from_filelist(nullptr, view_window_active_image(vw), filelist_copy(vw->list),
-		                                       [vw](SlideShowData *){ view_slideshow_stop_func(vw); });
+		vw->ss = SlideShow::start_from_filelist(nullptr, view_window_active_image(vw), filelist_copy(vw->list),
+		                                        [vw](SlideShow *){ view_slideshow_stop_func(vw); });
 		vw->list_pointer = nullptr;
 		return;
 		}
@@ -825,14 +825,14 @@ static void view_slideshow_start(ViewWindow *vw)
 
 	if (cd && info)
 		{
-		vw->ss = slideshow_start_from_collection(nullptr, view_window_active_image(vw), cd, info,
-		                                         [vw](SlideShowData *){ view_slideshow_stop_func(vw); });
+		vw->ss = SlideShow::start_from_collection(nullptr, view_window_active_image(vw), cd, info,
+		                                          [vw](SlideShow *){ view_slideshow_stop_func(vw); });
 		}
 }
 
 static void view_slideshow_stop(ViewWindow *vw)
 {
-	if (vw->ss) slideshow_free(vw->ss);
+	delete vw->ss; /* the stop_func sets vv->ss to nullptr for us */
 }
 
 static void view_window_destroy_cb(GtkWidget *, gpointer data)
@@ -1072,7 +1072,7 @@ gboolean view_window_find_image(const ImageWindow *imd, gint &index, gint &total
 
 	if (vw->ss)
 		{
-		slideshow_get_index_and_total(vw->ss, index, total);
+		vw->ss->get_index_and_total(index, total);
 		}
 	else
 		{
@@ -1233,7 +1233,7 @@ static void view_slideshow_pause_cb(GtkWidget *, gpointer data)
 {
 	auto vw = static_cast<ViewWindow *>(data);
 
-	slideshow_pause_toggle(vw->ss);
+	vw->ss->pause_toggle();
 }
 
 static void view_close_cb(GtkWidget *, gpointer data)
@@ -1372,7 +1372,7 @@ static GtkWidget *view_popup_menu(ViewWindow *vw)
 	if (vw->ss)
 		{
 		menu_item_add(menu, _("Toggle _slideshow"), G_CALLBACK(view_slideshow_stop_cb), vw);
-		if (slideshow_paused(vw->ss))
+		if (vw->ss->is_paused())
 			{
 			item = menu_item_add(menu, _("Continue slides_how"),
 					     G_CALLBACK(view_slideshow_pause_cb), vw);
