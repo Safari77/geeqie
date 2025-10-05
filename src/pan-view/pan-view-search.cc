@@ -41,13 +41,12 @@
 #include "ui-misc.h"
 #include "ui-tabcomp.h"
 
-static void pan_search_activate_cb(const gchar *text, gpointer data);
+static void pan_search_activate_cb(PanWindow *pw, const gchar *text);
 static void pan_search_toggle_cb(GtkWidget *button, gpointer data);
 
 PanViewSearchUi *pan_search_ui_new(PanWindow *pw)
 {
 	auto ui = g_new0(PanViewSearchUi, 1);
-	GtkWidget *combo;
 	GtkWidget *hbox;
 
 	// Build the actual search UI.
@@ -59,10 +58,9 @@ PanViewSearchUi *pan_search_ui_new(PanWindow *pw)
 	gq_gtk_box_pack_start(GTK_BOX(ui->search_box), hbox, TRUE, TRUE, 0);
 	gtk_widget_show(hbox);
 
-	combo = tab_completion_new_with_history(&ui->search_entry, "", "pan_view_search", -1);
-	tab_completion_set_enter_func(ui->search_entry, pan_search_activate_cb, pw);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	ui->search_entry = tab_completion_new_with_history(hbox, "", "pan_view_search", -1);
+	tab_completion_set_enter_func(ui->search_entry,
+	                              [pw](const gchar *text){ pan_search_activate_cb(pw, text); });
 
 	ui->search_label = gtk_label_new("");
 	gq_gtk_box_pack_start(GTK_BOX(hbox), ui->search_label, TRUE, TRUE, 0);
@@ -73,7 +71,7 @@ PanViewSearchUi *pan_search_ui_new(PanWindow *pw)
 	gtk_button_set_relief(GTK_BUTTON(ui->search_button), GTK_RELIEF_NONE);
 	gtk_widget_set_focus_on_click(ui->search_button, FALSE);
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-	gq_gtk_container_add(GTK_WIDGET(ui->search_button), hbox);
+	gq_gtk_container_add(ui->search_button, hbox);
 	gtk_widget_show(hbox);
 	ui->search_button_arrow = gtk_image_new_from_icon_name(GQ_ICON_PAN_UP, GTK_ICON_SIZE_BUTTON);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), ui->search_button_arrow, FALSE, FALSE, 0);
@@ -382,10 +380,8 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 	return TRUE;
 }
 
-static void pan_search_activate_cb(const gchar *text, gpointer data)
+static void pan_search_activate_cb(PanWindow *pw, const gchar *text)
 {
-	auto pw = static_cast<PanWindow *>(data);
-
 	if (!text) return;
 
 	tab_completion_append_to_history(pw->search_ui->search_entry, text);
@@ -408,7 +404,7 @@ void pan_search_activate(PanWindow *pw)
 {
 	const gchar *text = gq_gtk_entry_get_text(GTK_ENTRY(pw->search_ui->search_entry));
 
-	pan_search_activate_cb(text, pw);
+	pan_search_activate_cb(pw, text);
 }
 
 static void pan_search_toggle_cb(GtkWidget *button, gpointer data)
@@ -472,7 +468,7 @@ void pan_search_toggle_visible(PanWindow *pw, gboolean enable)
 			{
 			if (gtk_widget_has_focus(ui->search_entry))
 				{
-				gtk_widget_grab_focus(GTK_WIDGET(pw->imd->widget));
+				gtk_widget_grab_focus(pw->imd->widget);
 				}
 			gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui->search_button), FALSE);
 			}

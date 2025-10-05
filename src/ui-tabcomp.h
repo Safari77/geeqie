@@ -22,25 +22,29 @@
 #ifndef UI_TABCOMP_H
 #define UI_TABCOMP_H
 
+#include <functional>
+
 #include <glib.h>
 #include <gtk/gtk.h>
 
-using TabCompEnterFunc = void (*)(const gchar *, gpointer);
-using TabCompTabFunc = void (*)(const gchar *, gpointer);
-using TabCompTabAppendFunc = void (*)(const gchar *, gint, gpointer);
+using TabCompEnterFunc = std::function<void(const gchar *)>;
+using TabCompTabFunc = std::function<void(const gchar *)>;
+using TabCompTabAppendFunc = std::function<void(const gchar *, gint)>;
 
-GtkWidget *tab_completion_new_with_history(GtkWidget **entry, const gchar *text,
+GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *text,
                                            const gchar *history_key, gint max_levels);
 void tab_completion_append_to_history(GtkWidget *entry, const gchar *path);
 
 GtkWidget *tab_completion_new(GtkWidget *parent_box, const gchar *text);
 
-void tab_completion_set_enter_func(GtkWidget *entry, TabCompEnterFunc enter_func, gpointer data);
-void tab_completion_set_tab_func(GtkWidget *entry, TabCompTabFunc tab_func, gpointer data);
-void tab_completion_set_tab_append_func(GtkWidget *entry, TabCompTabAppendFunc tab_append_func, gpointer data);
+void tab_completion_set_enter_func(GtkWidget *entry, const TabCompEnterFunc &enter_func);
+void tab_completion_set_tab_func(GtkWidget *entry, const TabCompTabFunc &tab_func);
+void tab_completion_set_tab_append_func(GtkWidget *entry, const TabCompTabAppendFunc &tab_append_func);
 
 void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboolean folders_only,
                                       const gchar *filter, const gchar *filter_desc, const gchar *shortcuts);
+
+GtkWidget *tab_completion_get_box(GtkWidget *entry);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

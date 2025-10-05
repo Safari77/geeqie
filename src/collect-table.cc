@@ -621,7 +621,7 @@ static void tip_show(CollectTable *ct)
 	label = gtk_label_new(ct->show_text ? ct->tip_info->fd->path : ct->tip_info->fd->name);
 
 	g_object_set_data(G_OBJECT(ct->tip_window), "tip_label", label);
-	gq_gtk_container_add(GTK_WIDGET(ct->tip_window), label);
+	gq_gtk_container_add(ct->tip_window, label);
 	gtk_widget_show(label);
 
 	display = gdk_display_get_default();
@@ -654,28 +654,18 @@ static gboolean tip_schedule_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void tip_schedule(CollectTable *ct)
-{
-	tip_hide(ct);
-
-	if (ct->tip_delay_id)
-		{
-		g_source_remove(ct->tip_delay_id);
-		ct->tip_delay_id = 0;
-		}
-
-	ct->tip_delay_id = g_timeout_add(ct->show_text ? COLLECT_TABLE_TIP_DELAY_PATH : COLLECT_TABLE_TIP_DELAY, tip_schedule_cb, ct);
-}
-
 static void tip_unschedule(CollectTable *ct)
 {
 	tip_hide(ct);
 
-	if (ct->tip_delay_id)
-		{
-		g_source_remove(ct->tip_delay_id);
-		ct->tip_delay_id = 0;
-		}
+	g_clear_handle_id(&ct->tip_delay_id, g_source_remove);
+}
+
+static void tip_schedule(CollectTable *ct)
+{
+	tip_unschedule(ct);
+
+	ct->tip_delay_id = g_timeout_add(ct->show_text ? COLLECT_TABLE_TIP_DELAY_PATH : COLLECT_TABLE_TIP_DELAY, tip_schedule_cb, ct);
 }
 
 static void tip_update(CollectTable *ct, CollectInfo *info)
@@ -721,7 +711,7 @@ static void collection_table_popup_save_as_cb(GtkWidget *, gpointer data)
 {
 	auto ct = static_cast<CollectTable *>(data);
 
-	collection_dialog_save_as(ct->cd);
+	collection_dialog_save(ct->cd);
 }
 
 static void collection_table_popup_save_cb(GtkWidget *widget, gpointer data)
@@ -1565,11 +1555,7 @@ static void collection_table_scroll(CollectTable *ct, gboolean scroll)
 {
 	if (!scroll)
 		{
-		if (ct->drop_idle_id)
-			{
-			g_source_remove(ct->drop_idle_id);
-			ct->drop_idle_id = 0;
-			}
+		g_clear_handle_id(&ct->drop_idle_id, g_source_remove);
 		widget_auto_scroll_stop(ct->listview);
 		}
 	else
@@ -1891,8 +1877,7 @@ static gboolean collection_table_sync_idle_cb(gpointer data)
 
 	if (ct->sync_idle_id)
 		{
-		g_source_remove(ct->sync_idle_id);
-		ct->sync_idle_id = 0;
+		g_clear_handle_id(&ct->sync_idle_id, g_source_remove);
 
 		collection_table_sync(ct);
 		}
@@ -2566,7 +2551,7 @@ CollectTable *collection_table_new(CollectionData *cd)
 	g_signal_connect(G_OBJECT(ct->listview), "key_press_event",
 			 G_CALLBACK(collection_table_press_key_cb), ct);
 
-	gq_gtk_container_add(GTK_WIDGET(ct->scrolled), ct->listview);
+	gq_gtk_container_add(ct->scrolled, ct->listview);
 	gtk_widget_show(ct->listview);
 
 	collection_table_dnd_init(ct);

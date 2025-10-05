@@ -200,7 +200,7 @@ ViewDir *vd_new(LayoutWindow *lw)
 		case DIRVIEW_TREE: vd = vdtree_new(vd, lw->dir_fd); break;
 		}
 
-	gq_gtk_container_add(GTK_WIDGET(vd->widget), vd->view);
+	gq_gtk_container_add(vd->widget, vd->view);
 
 	vd_dnd_init(vd);
 
@@ -961,11 +961,7 @@ static void vd_dnd_drop_update(ViewDir *vd, gint x, gint y)
 
 void vd_dnd_drop_scroll_cancel(ViewDir *vd)
 {
-	if (vd->drop_scroll_id)
-		{
-		g_source_remove(vd->drop_scroll_id);
-		vd->drop_scroll_id = 0;
-		}
+	g_clear_handle_id(&vd->drop_scroll_id, g_source_remove);
 }
 
 static gboolean vd_auto_scroll_idle_cb(gpointer data)

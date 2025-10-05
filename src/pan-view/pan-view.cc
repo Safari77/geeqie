@@ -1762,10 +1762,8 @@ static void pan_window_layout_size_cb(GtkWidget *combo, gpointer data)
 	pan_layout_update(pw);
 }
 
-static void pan_window_entry_activate_cb(const gchar *new_text, gpointer data)
+static void pan_window_entry_activate_cb(PanWindow *pw, const gchar *new_text)
 {
-	auto pw = static_cast<PanWindow *>(data);
-
 	g_autofree gchar *path = remove_trailing_slash(new_text);
 	parse_out_relatives(path);
 
@@ -1792,10 +1790,7 @@ static void pan_window_close(PanWindow *pw)
 	pref_list_int_set(PAN_PREF_GROUP, PAN_PREF_INFO_IMAGE, pw->info_image_size);
 	pref_list_int_set(PAN_PREF_GROUP, PAN_PREF_INFO_EXIF, pw->info_includes_exif);
 
-	if (pw->idle_id)
-		{
-		g_source_remove(pw->idle_id);
-		}
+	if (pw->idle_id) g_source_remove(pw->idle_id);
 
 	pan_fullscreen_toggle(pw, TRUE);
 	pan_search_ui_destroy(g_steal_pointer(&pw->search_ui));
@@ -1867,17 +1862,16 @@ static void pan_window_new_real(FileData *dir_fd)
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(vbox);
-	gq_gtk_container_add(GTK_WIDGET(pw->window), vbox);
+	gq_gtk_container_add(pw->window, vbox);
 	gtk_widget_show(vbox);
 
 	box = pref_box_new(vbox, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 
 	pref_spacer(box, 0);
 	pref_label_new(box, _("Location:"));
-	combo = tab_completion_new_with_history(&pw->path_entry, dir_fd->path, "pan_view_path", -1);
-	tab_completion_set_enter_func(pw->path_entry, pan_window_entry_activate_cb, pw);
-	gq_gtk_box_pack_start(GTK_BOX(box), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	pw->path_entry = tab_completion_new_with_history(box, dir_fd->path, "pan_view_path", -1);
+	tab_completion_set_enter_func(pw->path_entry,
+	                              [pw](const gchar *text){ pan_window_entry_activate_cb(pw, text); });
 
 	combo = gtk_combo_box_text_new();
 	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Timeline"));
@@ -1931,10 +1925,10 @@ static void pan_window_new_real(FileData *dir_fd)
 
 	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox_imd_widget, true, true, 0);
 
-	gtk_widget_show(GTK_WIDGET(hbox_imd_widget));
-	gtk_widget_show(GTK_WIDGET(pw->imd->widget));
-	gtk_widget_show(GTK_WIDGET(vbox));
-	gtk_widget_show(GTK_WIDGET(vbox_imd_widget));
+	gtk_widget_show(hbox_imd_widget);
+	gtk_widget_show(pw->imd->widget);
+	gtk_widget_show(vbox);
+	gtk_widget_show(vbox_imd_widget);
 	gtk_widget_show(pw->scrollbar_h);
 	gtk_widget_show(pw->scrollbar_v);
 
@@ -1963,7 +1957,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_widget_show(frame);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	gq_gtk_container_add(GTK_WIDGET(frame), hbox);
+	gq_gtk_container_add(frame, hbox);
 	gtk_widget_show(hbox);
 
 	pref_spacer(hbox, 0);
@@ -1977,7 +1971,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_widget_show(frame);
 
 	pw->label_zoom = gtk_label_new("");
-	gq_gtk_container_add(GTK_WIDGET(frame), pw->label_zoom);
+	gq_gtk_container_add(frame, pw->label_zoom);
 	gtk_widget_show(pw->label_zoom);
 
 	// Add the "Find" button to the status bar area.
@@ -1995,7 +1989,7 @@ static void pan_window_new_real(FileData *dir_fd)
 
 	pan_layout_update(pw);
 
-	gtk_widget_grab_focus(GTK_WIDGET(pw->imd->widget));
+	gtk_widget_grab_focus(pw->imd->widget);
 	gtk_widget_show(pw->window);
 
 	pan_window_list = g_list_append(pan_window_list, pw);

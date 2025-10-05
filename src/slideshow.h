@@ -22,6 +22,9 @@
 #ifndef SLIDESHOW_H
 #define SLIDESHOW_H
 
+#include <deque>
+#include <functional>
+
 #include <glib.h>
 
 struct CollectInfo;
@@ -49,8 +52,8 @@ struct SlideShowData
 	CollectionData *cd;
 	FileData *dir_fd;
 
-	GList *list;
-	GList *list_done;
+	std::deque<gint> list;
+	std::deque<gint> list_done;
 
 	FileData *slide_fd;
 
@@ -59,8 +62,8 @@ struct SlideShowData
 
 	gboolean from_selection;
 
-	void (*stop_func)(SlideShowData *, gpointer);
-	gpointer stop_data;
+	using StopFunc = std::function<void(SlideShowData *)>;
+	StopFunc stop_func;
 
 	gboolean paused;
 };
@@ -73,17 +76,17 @@ void slideshow_next(SlideShowData *ss);
 void slideshow_prev(SlideShowData *ss);
 
 SlideShowData *slideshow_start_from_filelist(LayoutWindow *target_lw, ImageWindow *imd, GList *list,
-					      void (*stop_func)(SlideShowData *, gpointer), gpointer stop_data);
-SlideShowData *slideshow_start_from_collection(LayoutWindow *target_lw, ImageWindow *imd, CollectionData *cd,
-					       void (*stop_func)(SlideShowData *, gpointer), gpointer stop_data,
-					       CollectInfo *start_info);
+                                             const SlideShowData::StopFunc &stop_func);
+SlideShowData *slideshow_start_from_collection(LayoutWindow *target_lw, ImageWindow *imd,
+                                               CollectionData *cd, CollectInfo *start_info,
+                                               const SlideShowData::StopFunc &stop_func);
 SlideShowData *slideshow_start(LayoutWindow *lw, gint start_point,
-			       void (*stop_func)(SlideShowData *, gpointer), gpointer stop_data);
+                               const SlideShowData::StopFunc &stop_func);
+
+void slideshow_get_index_and_total(SlideShowData *ss, gint &index, gint &total);
 
 gboolean slideshow_paused(SlideShowData *ss);
-void slideshow_pause_set(SlideShowData *ss, gboolean paused);
-gboolean slideshow_pause_toggle(SlideShowData *ss);
-
+void slideshow_pause_toggle(SlideShowData *ss);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

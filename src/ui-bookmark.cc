@@ -271,7 +271,6 @@ static void bookmark_edit(const gchar *key, const gchar *text, GtkWidget *parent
 	BookPropData *p;
 	GenericDialog *gd;
 	GtkWidget *table;
-	GtkWidget *label;
 	const gchar *icon;
 
 	if (!key) key = "bookmarks";
@@ -304,21 +303,19 @@ static void bookmark_edit(const gchar *key, const gchar *text, GtkWidget *parent
 
 	pref_table_label(table, 0, 1, _("Path:"), GTK_ALIGN_END);
 
-	label = tab_completion_new_with_history(&p->path_entry, p->bb->path, "bookmark_path", -1);
+	p->path_entry = tab_completion_new_with_history(nullptr, p->bb->path, "bookmark_path", -1);
 	tab_completion_add_select_button(p->path_entry, nullptr, TRUE, nullptr, nullptr, nullptr);
-	gq_gtk_grid_attach_default(GTK_GRID(table), label, 1, 2, 1, 2);
+	gq_gtk_grid_attach_default(GTK_GRID(table), tab_completion_get_box(p->path_entry), 1, 2, 1, 2);
 	generic_dialog_attach_default(gd, p->path_entry);
-	gtk_widget_show(label);
 
 	pref_table_label(table, 0, 2, _("Icon:"), GTK_ALIGN_END);
 
 	icon = p->bb->icon;
 	if (!icon) icon = "";
-	label = tab_completion_new_with_history(&p->icon_entry, icon, "bookmark_icons", -1);
+	p->icon_entry = tab_completion_new_with_history(nullptr, icon, "bookmark_icons", -1);
 	tab_completion_add_select_button(p->icon_entry, _("Select icon"), FALSE, nullptr, nullptr, nullptr);
-	gq_gtk_grid_attach_default(GTK_GRID(table), label, 1, 2, 2, 3);
+	gq_gtk_grid_attach_default(GTK_GRID(table), tab_completion_get_box(p->icon_entry), 1, 2, 2, 3);
 	generic_dialog_attach_default(gd, p->icon_entry);
-	gtk_widget_show(label);
 
 	gtk_widget_show(gd->dialog);
 }
@@ -496,7 +493,7 @@ static gboolean bookmark_path_tooltip_cb(GtkWidget *button, gpointer)
 	BookButtonData *b;
 
 	b = static_cast<BookButtonData *>(g_object_get_data(G_OBJECT(button), "bookbuttondata"));
-	gtk_widget_set_tooltip_text(GTK_WIDGET(button), b->path);
+	gtk_widget_set_tooltip_text(button, b->path);
 
 	return FALSE;
 }
@@ -582,7 +579,7 @@ static void bookmark_populate(BookMarkData *bm)
 					       b, reinterpret_cast<GDestroyNotify>(bookmark_free));
 
 			box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
-			gq_gtk_container_add(GTK_WIDGET(b->button), box);
+			gq_gtk_container_add(b->button, box);
 			gtk_widget_show(box);
 
 			if (b->icon)
@@ -653,7 +650,7 @@ static void bookmark_populate(BookMarkData *bm)
 			g_signal_connect(G_OBJECT(b->button), "drag_begin",
 					 G_CALLBACK(bookmark_drag_begin), bm);
 
-			gtk_widget_set_has_tooltip(GTK_WIDGET(b->button), TRUE);
+			gtk_widget_set_has_tooltip(b->button, TRUE);
 			g_signal_connect(G_OBJECT(b->button), "query_tooltip", G_CALLBACK(bookmark_path_tooltip_cb), bm);
 			}
 
@@ -720,7 +717,6 @@ static void bookmark_list_destroy(gpointer data)
 
 GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_func)
 {
-	GtkWidget *scrolled;
 	BookMarkData *bm;
 
 	if (!key) key = "bookmarks";
@@ -734,13 +730,13 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 	bm->editable = TRUE;
 	bm->only_directories = FALSE;
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 
 	PangoLayout *layout;
 	gint width;
 	gint height;
 
-	layout = gtk_widget_create_pango_layout(GTK_WIDGET(scrolled), "reasonable width");
+	layout = gtk_widget_create_pango_layout(scrolled, "reasonable width");
 	pango_layout_get_pixel_size(layout, &width, &height);
 	gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled), width);
 	g_object_unref(layout);
@@ -748,7 +744,7 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 
 	bm->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(GTK_WIDGET(scrolled), bm->box);
+	gq_gtk_container_add(scrolled, bm->box);
 	gtk_widget_show(bm->box);
 
 	bookmark_populate(bm);
@@ -859,20 +855,20 @@ static void bookmark_add_response_cb(GtkFileChooser *chooser, gint response_id, 
 
 void bookmark_add_dialog(const gchar *title, GtkWidget *list)
 {
-		FileChooserDialogData fcdd{};
+	FileChooserDialogData fcdd{};
 
-		fcdd.action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-		fcdd.accept_text = _("Open");
-		fcdd.data = list;
-		fcdd.entry_text = _("Optional name...");
-		fcdd.entry_tooltip =  _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used");
-		fcdd.filename = layout_get_path(get_current_layout());
-		fcdd.response_callback = G_CALLBACK(bookmark_add_response_cb);
-		fcdd.title = title;
+	fcdd.action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+	fcdd.accept_text = _("Open");
+	fcdd.data = list;
+	fcdd.entry_text = _("Optional name...");
+	fcdd.entry_tooltip =  _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used");
+	fcdd.filename = layout_get_path(get_current_layout());
+	fcdd.response_callback = G_CALLBACK(bookmark_add_response_cb);
+	fcdd.title = title;
 
-		GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
+	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
 
-		gq_gtk_widget_show_all(GTK_WIDGET(dialog));
+	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
 }
 
 /*

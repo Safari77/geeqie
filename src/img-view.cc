@@ -795,10 +795,8 @@ static void view_slideshow_prev(ViewWindow *vw)
 	if (vw->ss) slideshow_prev(vw->ss);
 }
 
-static void view_slideshow_stop_func(SlideShowData *, gpointer data)
+static void view_slideshow_stop_func(ViewWindow *vw)
 {
-	auto vw = static_cast<ViewWindow *>(data);
-
 	vw->ss = nullptr;
 
 	FileData *fd = image_get_fd(view_window_active_image(vw));
@@ -812,26 +810,23 @@ static void view_slideshow_stop_func(SlideShowData *, gpointer data)
 
 static void view_slideshow_start(ViewWindow *vw)
 {
-	if (!vw->ss)
+	if (vw->ss) return;
+
+	if (vw->list)
 		{
-		CollectionData *cd;
-		CollectInfo *info;
+		vw->ss = slideshow_start_from_filelist(nullptr, view_window_active_image(vw), filelist_copy(vw->list),
+		                                       [vw](SlideShowData *){ view_slideshow_stop_func(vw); });
+		vw->list_pointer = nullptr;
+		return;
+		}
 
-		if (vw->list)
-			{
-			vw->ss = slideshow_start_from_filelist(nullptr, view_window_active_image(vw),
-								filelist_copy(vw->list),
-								view_slideshow_stop_func, vw);
-			vw->list_pointer = nullptr;
-			return;
-			}
+	CollectInfo *info;
+	CollectionData *cd = image_get_collection(view_window_active_image(vw), &info);
 
-		cd = image_get_collection(view_window_active_image(vw), &info);
-		if (cd && info)
-			{
-			vw->ss = slideshow_start_from_collection(nullptr, view_window_active_image(vw), cd,
-								 view_slideshow_stop_func, vw, info);
-			}
+	if (cd && info)
+		{
+		vw->ss = slideshow_start_from_collection(nullptr, view_window_active_image(vw), cd, info,
+		                                         [vw](SlideShowData *){ view_slideshow_stop_func(vw); });
 		}
 }
 
@@ -907,7 +902,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 	image_auto_refresh_enable(vw->imd, TRUE);
 	image_top_window_set_sync(vw->imd, TRUE);
 
-	gq_gtk_container_add(GTK_WIDGET(vw->window), vw->imd->widget);
+	gq_gtk_container_add(vw->window, vw->imd->widget);
 	gtk_widget_show(vw->imd->widget);
 
 	view_window_dnd_init(vw);
@@ -971,7 +966,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 	req_size.x = req_size.y = 0;
 	req_size.width = w;
 	req_size.height = h;
-	gtk_widget_size_allocate(GTK_WIDGET(vw->window), &req_size);
+	gtk_widget_size_allocate(vw->window, &req_size);
 
 	gtk_window_set_focus_on_map(GTK_WINDOW(vw->window), FALSE);
 	gtk_widget_show(vw->window);
@@ -1077,17 +1072,11 @@ gboolean view_window_find_image(const ImageWindow *imd, gint &index, gint &total
 
 	if (vw->ss)
 		{
-		gint n = g_list_length(vw->ss->list_done);
-		gint t = n + g_list_length(vw->ss->list);
-
-		if (n == 0) n = t;
-
-		index = n - 1;
-		total = t;
+		slideshow_get_index_and_total(vw->ss, index, total);
 		}
 	else
 		{
-		index = g_list_position(vw->list, vw->list_pointer);
+		index = g_list_position(vw->list, vw->list_pointer) + 1;
 		total = g_list_length(vw->list);
 		}
 

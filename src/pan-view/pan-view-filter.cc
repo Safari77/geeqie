@@ -90,10 +90,9 @@ void pan_filter_kw_button_cb(GtkButton *widget, gpointer data)
 	pan_layout_update(pw);
 }
 
-void pan_filter_activate_cb(const gchar *text, gpointer data)
+void pan_filter_activate_cb(PanWindow *pw, const gchar *text)
 {
 	GtkWidget *kw_button;
-	auto pw = static_cast<PanWindow *>(data);
 	PanViewFilterUi *ui = pw->filter_ui;
 	GtkTreeIter iter;
 
@@ -219,7 +218,6 @@ gchar *pan_view_list_find_kw_pattern(GList *haystack, const PanViewFilterElement
 PanViewFilterUi *pan_filter_ui_new(PanWindow *pw)
 {
 	auto ui = g_new0(PanViewFilterUi, 1);
-	GtkWidget *combo;
 	GtkWidget *hbox;
 
 	/* Since we're using the GHashTable as a HashSet (in which key and value pointers
@@ -263,10 +261,9 @@ PanViewFilterUi *pan_filter_ui_new(PanWindow *pw)
 	gq_gtk_box_pack_start(GTK_BOX(ui->filter_box), hbox, TRUE, TRUE, 0);
 	gtk_widget_show(hbox);
 
-	combo = tab_completion_new_with_history(&ui->filter_entry, "", "pan_view_filter", -1);
-	tab_completion_set_enter_func(ui->filter_entry, pan_filter_activate_cb, pw);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	ui->filter_entry = tab_completion_new_with_history(hbox, "", "pan_view_filter", -1);
+	tab_completion_set_enter_func(ui->filter_entry,
+	                              [pw](const gchar *text){ pan_filter_activate_cb(pw, text); });
 
 	ui->filter_label = gtk_label_new("");/** @todo (xsdg): Figure out whether it's useful to keep this label around. */
 
@@ -279,7 +276,7 @@ PanViewFilterUi *pan_filter_ui_new(PanWindow *pw)
 	gtk_button_set_relief(GTK_BUTTON(ui->filter_button), GTK_RELIEF_NONE);
 	gtk_widget_set_focus_on_click(ui->filter_button, FALSE);
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-	gq_gtk_container_add(GTK_WIDGET(ui->filter_button), hbox);
+	gq_gtk_container_add(ui->filter_button, hbox);
 	gtk_widget_show(hbox);
 	ui->filter_button_arrow = gtk_image_new_from_icon_name(GQ_ICON_PAN_UP, GTK_ICON_SIZE_BUTTON);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), ui->filter_button_arrow, FALSE, FALSE, 0);

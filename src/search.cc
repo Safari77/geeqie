@@ -866,15 +866,6 @@ static gboolean search_result_update_idle_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void search_result_update_idle_cancel(SearchData *sd)
-{
-	if (sd->update_idle_id)
-		{
-		g_source_remove(sd->update_idle_id);
-		sd->update_idle_id = 0;
-		}
-}
-
 static gboolean search_result_select_cb(GtkTreeSelection *, GtkTreeModel *, GtkTreePath *, gboolean, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
@@ -1604,7 +1595,7 @@ static void search_path_entry_dnd_received_cb(GtkWidget *, GdkDragContext *,
 			auto *fd = static_cast<FileData *>(list->data);
 			g_autofree gchar *text = g_strdup_printf("%s", fd->path);
 			gq_gtk_entry_set_text(GTK_ENTRY(sd->ui.path_entry), text);
-			gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.path_entry), text);
+			gtk_widget_set_tooltip_text(sd->ui.path_entry, text);
 			}
 		}
 	else if (info == TARGET_TEXT_PLAIN)
@@ -1630,7 +1621,7 @@ static void search_image_content_dnd_received_cb(GtkWidget *, GdkDragContext *,
 			auto *fd = static_cast<FileData *>(list->data);
 			g_autofree gchar *text = g_strdup_printf("%s", fd->path);
 			gq_gtk_entry_set_text(GTK_ENTRY(sd->ui.entry_similarity), text);
-			gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.entry_similarity), text);
+			gtk_widget_set_tooltip_text(sd->ui.entry_similarity, text);
 			}
 		}
 	else if (info == TARGET_TEXT_PLAIN)
@@ -1649,7 +1640,7 @@ static void search_dnd_init(SearchData *sd)
 	g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_begin",
 	                 G_CALLBACK(search_dnd_begin), sd);
 
-	gtk_drag_dest_set(GTK_WIDGET(sd->ui.entry_gps_coord),
+	gtk_drag_dest_set(sd->ui.entry_gps_coord,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
@@ -1657,7 +1648,7 @@ static void search_dnd_init(SearchData *sd)
 	g_signal_connect(G_OBJECT(sd->ui.entry_gps_coord), "drag_data_received",
 	                 G_CALLBACK(search_gps_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(GTK_WIDGET(sd->ui.path_entry),
+	gtk_drag_dest_set(sd->ui.path_entry,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
@@ -1665,7 +1656,7 @@ static void search_dnd_init(SearchData *sd)
 	g_signal_connect(G_OBJECT(sd->ui.path_entry), "drag_data_received",
 	                 G_CALLBACK(search_path_entry_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(GTK_WIDGET(sd->ui.entry_similarity),
+	gtk_drag_dest_set(sd->ui.entry_similarity,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
@@ -1703,11 +1694,7 @@ static void search_buffer_flush(SearchData *sd)
 
 static void search_stop(SearchData *sd)
 {
-	if (sd->search_idle_id)
-		{
-		g_source_remove(sd->search_idle_id);
-		sd->search_idle_id = 0;
-		}
+	g_clear_handle_id(&sd->search_idle_id, g_source_remove);
 
 	image_loader_free(sd->img_loader);
 	sd->img_loader = nullptr;
@@ -3062,7 +3049,7 @@ static void search_window_destroy_cb(GtkWidget *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
 
-	search_result_update_idle_cancel(sd);
+	g_clear_handle_id(&sd->update_idle_id, g_source_remove);
 
 	static const auto mfd_fd_unref = [](gpointer data)
 	{
@@ -3225,7 +3212,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gtk_container_set_border_width(GTK_CONTAINER(vbox), PREF_PAD_GAP);
-	gq_gtk_container_add(GTK_WIDGET(sd->ui.window), vbox);
+	gq_gtk_container_add(sd->ui.window, vbox);
 	gtk_widget_show(vbox);
 
 	sd->ui.box_search = pref_box_new(vbox, FALSE, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
@@ -3238,11 +3225,9 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                                    G_CALLBACK(menu_choice_path_cb), sd);
 
 	hbox2 = pref_box_new(hbox, TRUE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	GtkWidget *combo = tab_completion_new_with_history(&sd->ui.path_entry, sd->search_dir_fd->path,
-	                                                   "search_path", -1);
+	sd->ui.path_entry = tab_completion_new_with_history(hbox2, sd->search_dir_fd->path,
+	                                                    "search_path", -1);
 	tab_completion_add_select_button(sd->ui.path_entry, nullptr, TRUE, nullptr, nullptr, nullptr);
-	gq_gtk_box_pack_start(GTK_BOX(hbox2), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
 	sd->ui.check_recurse = pref_checkbox_new_int(hbox2, _("Recurse"),
 	                                             sd->search_path_recurse, &sd->search_path_recurse);
 
@@ -3263,13 +3248,13 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	hbox = menu_choice(sd->ui.box_search, _("File"), &sd->match_name_enable);
 	sd->ui.menu_name = menu_choice_menu(hbox, text_search_menu_name,
 	                                    nullptr, nullptr);
-	combo = history_combo_new(&sd->ui.entry_name, "", "search_name", -1);
+	GtkWidget *combo = history_combo_new(&sd->ui.entry_name, "", "search_name", -1);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
 	pref_checkbox_new_int(hbox, _("Match case"),
 			      sd->search_name_match_case, &sd->search_name_match_case);
 	pref_checkbox_new_int(hbox, _("Symbolic link"), sd->search_name_symbolic_link, &sd->search_name_symbolic_link);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(combo),
+	gtk_widget_set_tooltip_text(combo,
 	                            _("When set to 'contains' or 'path contains', this field uses Perl Compatible Regular Expressions.\ne.g. use \n.*\\.jpg\n and not \n*.jpg\n\nSee the Help file."));
 
 	/* Search for file size */
@@ -3335,12 +3320,10 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	/* xgettext:no-c-format */
 	pref_label_new(hbox, _("% similar to"));
 
-	combo = tab_completion_new_with_history(&sd->ui.entry_similarity,
-	                                        sd->search_similarity_path ? sd->search_similarity_path : "",
-	                                        "search_similarity_path", -1);
+	sd->ui.entry_similarity = tab_completion_new_with_history(hbox, sd->search_similarity_path ?
+	                                                              sd->search_similarity_path : "",
+	                                                          "search_similarity_path", -1);
 	tab_completion_add_select_button(sd->ui.entry_similarity, nullptr, FALSE, nullptr, nullptr, nullptr);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
 	pref_checkbox_new_int(hbox, _("Ignore rotation"),
 				options->rot_invariant_sim, &options->rot_invariant_sim);
 
@@ -3371,7 +3354,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_show(sd->ui.entry_comment);
 	pref_checkbox_new_int(hbox, _("Match case"),
 			      sd->search_comment_match_case, &sd->search_comment_match_case);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.entry_comment),
+	gtk_widget_set_tooltip_text(sd->ui.entry_comment,
 	                            _("This field uses Perl Compatible Regular Expressions.\ne.g. use \nabc.*ghk\n and not \nabc*ghk\n\nSee the Help file."));
 
 	/* Search for Exif tag */
@@ -3389,7 +3372,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	g_signal_connect(G_OBJECT(check_exif), "toggled",
 	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_exif_tag);
 	gtk_widget_show(sd->ui.entry_exif_tag);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.entry_exif_tag),
+	gtk_widget_set_tooltip_text(sd->ui.entry_exif_tag,
 	                            _("e.g. Exif.Image.Model\nThis always case-sensitive\n\nYou may drag-and-drop from the Exif Window\n\nSee https://exiv2.org/tags.html"));
 
 	pref_label_new(hbox, _("Value"));
@@ -3401,7 +3384,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                 G_CALLBACK(menu_choice_check_cb), sd->ui.entry_exif_value);
 	gtk_widget_show(sd->ui.entry_exif_value);
 
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.entry_exif_value),
+	gtk_widget_set_tooltip_text(sd->ui.entry_exif_value,
 	                            _("e.g. Canon EOS\n\nThis field uses Perl Compatible Regular Expressions.\ne.g. use \nabc.*ghk\n and not \nabc*ghk\n\nSee the Help file."));
 
 	pref_checkbox_new_int(hbox, _("Match case"), sd->search_exif_match_case, &sd->search_exif_match_case);
@@ -3521,7 +3504,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	sd->ui.result_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
 	g_object_unref(store);
-	gq_gtk_container_add(GTK_WIDGET(scrolled), sd->ui.result_view);
+	gq_gtk_container_add(scrolled, sd->ui.result_view);
 	gtk_widget_show(sd->ui.result_view);
 
 	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(sd->ui.result_view));
@@ -3552,7 +3535,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	sd->ui.button_thumbs = pref_checkbox_new(hbox, _("Thumbnails"), FALSE,
 	                                         G_CALLBACK(search_thumb_toggle_cb), sd);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.button_thumbs), _("Ctrl-T"));
+	gtk_widget_set_tooltip_text(sd->ui.button_thumbs, _("Ctrl-T"));
 
 	frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
@@ -3562,7 +3545,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 
 	sd->ui.label_status = gtk_label_new("");
 	gtk_widget_set_size_request(sd->ui.label_status, 50, -1);
-	gq_gtk_container_add(GTK_WIDGET(frame), sd->ui.label_status);
+	gq_gtk_container_add(frame, sd->ui.label_status);
 	gtk_widget_show(sd->ui.label_status);
 
 	sd->ui.label_progress = gtk_progress_bar_new();
@@ -3579,20 +3562,20 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gtk_widget_show(sd->ui.spinner);
 
 	GtkWidget *button_help = pref_button_new(hbox, GQ_ICON_HELP, _("Help"), G_CALLBACK(search_window_help_cb), sd);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(button_help), "F1");
+	gtk_widget_set_tooltip_text(button_help, "F1");
 	gtk_widget_set_sensitive(button_help, TRUE);
 	pref_spacer(hbox, PREF_PAD_BUTTON_GAP);
 	sd->ui.button_start = pref_button_new(hbox, GQ_ICON_FIND, _("Find"),
 	                                      G_CALLBACK(search_start_cb), sd);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.button_start), _("Ctrl-Return"));
+	gtk_widget_set_tooltip_text(sd->ui.button_start, _("Ctrl-Return"));
 	pref_spacer(hbox, PREF_PAD_BUTTON_GAP);
 	sd->ui.button_stop = pref_button_new(hbox, GQ_ICON_STOP, _("Stop"),
 	                                     G_CALLBACK(search_start_cb), sd);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(sd->ui.button_stop), _("Ctrl-Return"));
+	gtk_widget_set_tooltip_text(sd->ui.button_stop, _("Ctrl-Return"));
 	gtk_widget_set_sensitive(sd->ui.button_stop, FALSE);
 	pref_spacer(hbox, PREF_PAD_BUTTON_GAP);
 	GtkWidget *button_close = pref_button_new(hbox, GQ_ICON_CLOSE, _("Close"), G_CALLBACK(search_window_close_cb), sd);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(button_close), _("Ctrl-W"));
+	gtk_widget_set_tooltip_text(button_close, _("Ctrl-W"));
 	gtk_widget_set_sensitive(button_close, TRUE);
 
 	search_result_thumb_enable(sd, TRUE);

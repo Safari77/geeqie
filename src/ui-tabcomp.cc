@@ -35,16 +35,7 @@
 #include "options.h"
 #include "ui-file-chooser.h"
 #include "ui-fileops.h"
-
-/* define this to enable a pop-up menu that shows possible matches
- * #define TAB_COMPLETION_ENABLE_POPUP_MENU
- */
-#define TAB_COMPLETION_ENABLE_POPUP_MENU 1
-#define TAB_COMP_POPUP_MAX 1000
-
-#ifdef TAB_COMPLETION_ENABLE_POPUP_MENU
 #include "ui-menu.h"
-#endif
 
 
 /**
@@ -61,6 +52,8 @@
 namespace
 {
 
+constexpr gint TAB_COMP_POPUP_MAX = 1000;
+
 struct TabCompData
 {
 	GtkWidget *entry;
@@ -69,10 +62,6 @@ struct TabCompData
 	TabCompEnterFunc enter_func;
 	TabCompTabFunc tab_func;
 	TabCompTabAppendFunc tab_append_func;
-
-	gpointer enter_data;
-	gpointer tab_data;
-	gpointer tab_append_data;
 
 	GtkWidget *combo;
 	gboolean has_history;
@@ -85,6 +74,18 @@ struct TabCompData
 	gchar *fd_filter;
 	gchar *fd_filter_desc;
 	gchar *fd_shortcuts;
+};
+
+struct TabCompPrefix
+{
+	bool match(const gchar *text) const
+	{
+		return strlen(text) >= prefix_len && strncmp(text, prefix, prefix_len) == 0;
+	}
+
+	const gchar *prefix;
+	size_t prefix_len;
+	guint choices;
 };
 
 inline TabCompData *tab_completion_get_from_entry(GtkWidget *entry)
@@ -171,7 +172,7 @@ static gboolean tab_completion_emit_enter_signal(TabCompData *td)
 	if (!td->enter_func) return FALSE;
 
 	g_autofree gchar *text = tab_completion_get_text(td);
-	td->enter_func(text, td->enter_data);
+	td->enter_func(text);
 
 	return TRUE;
 }
@@ -181,16 +182,8 @@ static void tab_completion_emit_tab_signal(TabCompData *td)
 	if (!td->tab_func) return;
 
 	g_autofree gchar *text = tab_completion_get_text(td);
-	td->tab_func(text, td->tab_data);
+	td->tab_func(text);
 }
-
-#ifdef TAB_COMPLETION_ENABLE_POPUP_MENU
-struct TabCompPrefix
-{
-	const gchar *prefix;
-	const size_t prefix_len;
-	guint choices;
-};
 
 static void tab_completion_iter_menu_items(GtkWidget *widget, gpointer data)
 {
@@ -202,7 +195,7 @@ static void tab_completion_iter_menu_items(GtkWidget *widget, gpointer data)
 	auto *tp = static_cast<TabCompPrefix *>(data);
 	const gchar *text = gtk_label_get_text(GTK_LABEL(child));
 
-	if (strlen(text) < tp->prefix_len || strncmp(text, tp->prefix, tp->prefix_len) != 0)
+	if (!tp->match(text))
 		{
 		/* Hide menu items not matching */
 		gtk_widget_hide(widget);
@@ -300,7 +293,6 @@ static void tab_completion_popup_list(TabCompData *td, GList *list)
 
 	gtk_menu_popup_at_widget(GTK_MENU(menu), td->entry, GDK_GRAVITY_NORTH_EAST, GDK_GRAVITY_NORTH, nullptr);
 }
-#endif
 
 static gboolean tab_completion_do(TabCompData *td)
 {
@@ -369,12 +361,10 @@ static gboolean tab_completion_do(TabCompData *td)
 				gq_gtk_entry_set_text(GTK_ENTRY(td->entry), buf);
 				gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
 				}
-#ifdef TAB_COMPLETION_ENABLE_POPUP_MENU
 			else
 				{
 				tab_completion_popup_list(td, td->file_list);
 				}
-#endif
 
 			return home_exp;
 			}
@@ -398,7 +388,7 @@ static gboolean tab_completion_do(TabCompData *td)
 	if (isdir(entry_dir))
 		{
 		GList *list;
-		GList *poss = nullptr;
+		g_autoptr(GList) poss = nullptr;
 		size_t l = strlen(entry_file);
 
 		if (!td->dir_path || !td->file_list || strcmp(td->dir_path, entry_dir) != 0)
@@ -426,46 +416,35 @@ static gboolean tab_completion_do(TabCompData *td)
 				g_autofree gchar *buf = g_build_filename(entry_dir, file, NULL);
 				gq_gtk_entry_set_text(GTK_ENTRY(td->entry), buf);
 				gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
-				g_list_free(poss);
 				return TRUE;
 				}
 
-			gboolean done = FALSE;
-			auto test_file = static_cast<gchar *>(poss->data);
+			static const auto prefix_not_match = [](gconstpointer data, gconstpointer user_data)
+			{
+				const auto *tp = static_cast<const TabCompPrefix *>(user_data);
+				return (!tp->match(static_cast<const gchar *>(data))) ? 0 : 1;
+			};
+			TabCompPrefix tp{ static_cast<gchar *>(poss->data), l, 0 };
 
-			while (!done)
+			while (!g_list_find_custom(poss->next, &tp, prefix_not_match))
 				{
-				list = poss;
-				while (list && !done)
-					{
-					auto file = static_cast<gchar *>(list->data);
-					if (strlen(file) < l || strncmp(test_file, file, l) != 0)
-						{
-						done = TRUE;
-						}
-					list = list->next;
-					}
-				l++;
+				tp.prefix_len++;
 				}
-			l -= 2;
+
+			l = tp.prefix_len - 1;
 			if (l > 0)
 				{
-				g_autofree gchar *file = g_strdup(test_file);
+				g_autofree gchar *file = g_strdup(tp.prefix); // @FIXME: Use g_strndup?
 				file[l] = '\0';
 				g_autofree gchar *buf = g_build_filename(entry_dir, file, NULL);
 				gq_gtk_entry_set_text(GTK_ENTRY(td->entry), buf);
 				gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
 
-#ifdef TAB_COMPLETION_ENABLE_POPUP_MENU
 				poss = g_list_sort(poss, reinterpret_cast<GCompareFunc>(CASE_SORT));
 				tab_completion_popup_list(td, poss);
-#endif
 
-				g_list_free(poss);
 				return TRUE;
 				}
-
-			g_list_free(poss);
 			}
 		}
 
@@ -583,7 +562,7 @@ static TabCompData *tab_completion_set_to_entry(GtkWidget *entry)
  *----------------------------------------------------------------------------
  */
 
-GtkWidget *tab_completion_new_with_history(GtkWidget **entry, const gchar *text,
+GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *text,
                                            const gchar *history_key, gint max_levels)
 {
 	GtkWidget *box;
@@ -628,8 +607,11 @@ GtkWidget *tab_completion_new_with_history(GtkWidget **entry, const gchar *text,
 		gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
 		}
 
-	if (entry) *entry = combo_entry;
-	return box;
+	if (parent_box) gq_gtk_box_pack_start(GTK_BOX(parent_box), box, TRUE, TRUE, 0);
+
+	gtk_widget_show(box);
+
+	return combo_entry;
 }
 
 void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
@@ -658,9 +640,7 @@ void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
 		n++;
 		}
 
-	if (td->tab_append_func) {
-		td->tab_append_func(path, n, td->tab_append_data);
-	}
+	if (td->tab_append_func) td->tab_append_func(path, n);
 }
 
 GtkWidget *tab_completion_new(GtkWidget *parent_box, const gchar *text)
@@ -685,32 +665,29 @@ GtkWidget *tab_completion_new(GtkWidget *parent_box, const gchar *text)
 	return entry;
 }
 
-void tab_completion_set_enter_func(GtkWidget *entry, TabCompEnterFunc enter_func, gpointer data)
+void tab_completion_set_enter_func(GtkWidget *entry, const TabCompEnterFunc &enter_func)
 {
 	TabCompData *td = tab_completion_get_from_entry(entry);
 	if (!td) return;
 
 	td->enter_func = enter_func;
-	td->enter_data = data;
 }
 
-void tab_completion_set_tab_func(GtkWidget *entry, TabCompTabFunc tab_func, gpointer data)
+void tab_completion_set_tab_func(GtkWidget *entry, const TabCompTabFunc &tab_func)
 {
 	TabCompData *td = tab_completion_get_from_entry(entry);
 	if (!td) return;
 
 	td->tab_func = tab_func;
-	td->tab_data = data;
 }
 
 /* Add a callback function called when a new entry is appended to the list */
-void tab_completion_set_tab_append_func(GtkWidget *entry, TabCompTabAppendFunc tab_append_func, gpointer data)
+void tab_completion_set_tab_append_func(GtkWidget *entry, const TabCompTabAppendFunc &tab_append_func)
 {
 	TabCompData *td = tab_completion_get_from_entry(entry);
 	if (!td) return;
 
 	td->tab_append_func = tab_append_func;
-	td->tab_append_data = data;
 }
 
 static void tab_completion_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
@@ -784,6 +761,14 @@ void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboo
 	gq_gtk_box_pack_start(GTK_BOX(hbox), td->fd_button, FALSE, FALSE, 0);
 
 	gtk_widget_show(td->fd_button);
+}
+
+GtkWidget *tab_completion_get_box(GtkWidget *entry)
+{
+	TabCompData *td = tab_completion_get_from_entry(entry);
+	if (!td) return nullptr;
+
+	return gtk_widget_get_parent(td->combo ? td->combo : td->entry);
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

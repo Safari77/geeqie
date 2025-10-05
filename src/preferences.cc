@@ -88,6 +88,25 @@ namespace
 constexpr gint PRE_FORMATTED_COLUMNS = 5;
 constexpr gint KEYWORD_DIALOG_WIDTH = 400;
 
+struct TZData
+{
+	GenericDialog *gd;
+	GCancellable *cancellable;
+
+	GtkWidget *progress;
+	GFile *tmp_g_file;
+	GFile *timezone_database_gq;
+	gchar *timezone_database_user;
+};
+
+void tz_data_free(TZData *tz)
+{
+	if (!tz) return;
+
+	g_free(tz->timezone_database_user);
+	g_free(tz);
+}
+
 } // namespace
 
 struct ZoneDetect;
@@ -1407,7 +1426,7 @@ static void image_overlay_template_view_changed_cb(GtkWidget *buffer, gpointer d
 	gint i = GPOINTER_TO_INT(profile_number_pointer);
 
 	g_free(c_options->image_overlay_n.template_string[i]);
-	c_options->image_overlay_n.template_string[i] = text_widget_text_pull(GTK_WIDGET(data), TRUE);
+	c_options->image_overlay_n.template_string[i] = text_widget_text_pull(static_cast<GtkWidget *>(data), TRUE);
 }
 
 static void image_overlay_default_template_ok_cb(GenericDialog *, gpointer data)
@@ -1770,10 +1789,8 @@ static GtkWidget *scrolled_notebook_page(GtkWidget *notebook, const gchar *title
 {
 	GtkWidget *label;
 	GtkWidget *vbox;
-	GtkWidget *scrolled;
-	GtkWidget *viewport;
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gtk_container_set_border_width(GTK_CONTAINER(scrolled), PREF_PAD_BORDER);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -1781,13 +1798,13 @@ static GtkWidget *scrolled_notebook_page(GtkWidget *notebook, const gchar *title
 	gtk_notebook_append_page(GTK_NOTEBOOK(notebook), scrolled, label);
 	gtk_widget_show(scrolled);
 
-	viewport = gtk_viewport_new(nullptr, nullptr);
+	GtkWidget *viewport = gtk_viewport_new(nullptr, nullptr);
 	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
-	gq_gtk_container_add(GTK_WIDGET(scrolled), viewport);
+	gq_gtk_container_add(scrolled, viewport);
 	gtk_widget_show(viewport);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(GTK_WIDGET(viewport), vbox);
+	gq_gtk_container_add(viewport, vbox);
 	gtk_widget_show(vbox);
 
 	return vbox;
@@ -1832,42 +1849,27 @@ static void help_search_engine_entry_icon_cb(GtkEntry *, GtkEntryIconPosition po
 		}
 }
 
-static void star_rating_star_icon_cb(GtkEntry *, GtkEntryIconPosition pos, GdkEvent *, gpointer userdata)
+template<gunichar star_rating>
+static void star_rating_icon_cb(GtkEntry *entry, GtkEntryIconPosition pos, GdkEvent *, gpointer)
 {
 	if (pos == GTK_ENTRY_ICON_PRIMARY)
 		{
-		g_autofree gchar *rating_symbol = g_strdup_printf("U+%X", STAR_RATING_STAR);
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), rating_symbol);
+		g_autofree gchar *rating_symbol = g_strdup_printf("U+%X", star_rating);
+		gq_gtk_entry_set_text(entry, rating_symbol);
 		}
 	else
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), "U+");
-		gtk_widget_grab_focus(GTK_WIDGET(userdata));
-		gtk_editable_select_region(GTK_EDITABLE(userdata), 2, 2);
+		gq_gtk_entry_set_text(entry, "U+");
+		gtk_widget_grab_focus(GTK_WIDGET(entry));
+		gtk_editable_select_region(GTK_EDITABLE(entry), 2, 2);
 		}
 }
 
-static void star_rating_rejected_icon_cb(GtkEntry *, GtkEntryIconPosition pos, GdkEvent *, gpointer userdata)
+static gunichar star_rating_symbol_test(gpointer data)
 {
-	if (pos == GTK_ENTRY_ICON_PRIMARY)
-		{
-		g_autofree gchar *rating_symbol = g_strdup_printf("U+%X", STAR_RATING_REJECTED);
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), rating_symbol);
-		}
-	else
-		{
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), "U+");
-		gtk_widget_grab_focus(GTK_WIDGET(userdata));
-		gtk_editable_select_region(GTK_EDITABLE(userdata), 2, 2);
-		}
-}
-
-static guint star_rating_symbol_test(GtkWidget *, gpointer data)
-{
-	auto hbox = static_cast<GtkContainer *>(data);
 	guint64 hex_value = 0;
 
-	g_autoptr(GList) list = gtk_container_get_children(hbox);
+	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(data));
 
 	auto *hex_code_entry = static_cast<GtkEntry *>(g_list_nth_data(list, 2));
 	const gchar *hex_code_full = gq_gtk_entry_get_text(hex_code_entry);
@@ -1890,34 +1892,53 @@ static guint star_rating_symbol_test(GtkWidget *, gpointer data)
 	return hex_value;
 }
 
-static void star_rating_star_test_cb(GtkWidget *widget, gpointer data)
+static void star_rating_star_test_cb(GtkWidget *, gpointer data)
 {
-	guint64 star_symbol;
-
-	star_symbol = star_rating_symbol_test(widget, data);
-	c_options->star_rating.star = star_symbol;
+	c_options->star_rating.star = star_rating_symbol_test(data);
 }
 
-static void star_rating_rejected_test_cb(GtkWidget *widget, gpointer data)
+static void star_rating_rejected_test_cb(GtkWidget *, gpointer data)
 {
-	guint64 rejected_symbol;
+	c_options->star_rating.rejected = star_rating_symbol_test(data);
+}
 
-	rejected_symbol = star_rating_symbol_test(widget, data);
-	c_options->star_rating.rejected = rejected_symbol;
+template<gunichar star_rating_default>
+static void add_star_rating(GtkWidget *group, const gchar *label, gunichar star_rating, GCallback star_rating_test_cb)
+{
+	GtkWidget *hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
+	pref_label_new(hbox, label);
+
+	g_autoptr(GString) star_rating_str = g_string_new(nullptr);
+	star_rating_str = g_string_append_unichar(star_rating_str, star_rating);
+	pref_label_new(hbox, star_rating_str->str);
+
+	GtkWidget *star_rating_entry = gtk_entry_new();
+	g_autofree gchar *rating_symbol = g_strdup_printf("U+%X", star_rating);
+	gq_gtk_entry_set_text(GTK_ENTRY(star_rating_entry), rating_symbol);
+	gtk_entry_set_width_chars(GTK_ENTRY(star_rating_entry), 15);
+	gtk_widget_set_tooltip_text(star_rating_entry, _("Hexadecimal representation of a Unicode character. A list of all Unicode characters may be found on the Internet."));
+	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
+	                                  GTK_ENTRY_ICON_SECONDARY, GQ_ICON_CLEAR);
+	gtk_entry_set_icon_tooltip_text(GTK_ENTRY(star_rating_entry),
+	                                GTK_ENTRY_ICON_SECONDARY, _("Clear"));
+	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
+	                                  GTK_ENTRY_ICON_PRIMARY, GQ_ICON_REVERT);
+	gtk_entry_set_icon_tooltip_text(GTK_ENTRY(star_rating_entry),
+	                                GTK_ENTRY_ICON_PRIMARY, _("Default"));
+	g_signal_connect(GTK_ENTRY(star_rating_entry), "icon-press",
+	                 G_CALLBACK(star_rating_icon_cb<star_rating_default>), nullptr);
+	gq_gtk_box_pack_start(GTK_BOX(hbox), star_rating_entry, FALSE, FALSE, 0);
+	gtk_widget_show(star_rating_entry);
+
+	GtkWidget *button = pref_button_new(nullptr, nullptr, _("Set"),
+	                                    star_rating_test_cb, hbox);
+	gtk_widget_set_tooltip_text(button, _("Display selected character"));
+	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
+	gtk_widget_show(button);
 }
 
 /* general options tab */
 static void timezone_database_install_cb(GtkWidget *widget, gpointer data);
-struct TZData
-{
-	GenericDialog *gd;
-	GCancellable *cancellable;
-
-	GtkWidget *progress;
-	GFile *tmp_g_file;
-	GFile *timezone_database_gq;
-	gchar *timezone_database_user;
-};
 
 static void config_tab_general(GtkWidget *notebook)
 {
@@ -1934,11 +1955,9 @@ static void config_tab_general(GtkWidget *notebook)
 	gint minutes;
 	gint remainder;
 	gdouble seconds;
-	GtkWidget *star_rating_entry;
 	GNetworkMonitor *net_mon;
 	GSocketConnectable *tz_org;
 	gboolean internet_available = FALSE;
-	TZData *tz;
 
 	vbox = scrolled_notebook_page(notebook, _("General"));
 
@@ -2001,66 +2020,12 @@ static void config_tab_general(GtkWidget *notebook)
 
 	group = pref_group_new(vbox, FALSE, _("Star Rating"), GTK_ORIENTATION_VERTICAL);
 
-	c_options->star_rating.star = options->star_rating.star;
-	c_options->star_rating.rejected = options->star_rating.rejected;
+	c_options->star_rating = options->star_rating;
 
-	g_autoptr(GString) star_str = g_string_new(nullptr);
-	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	pref_label_new(hbox, _("Star character: "));
-	star_str = g_string_append_unichar(star_str, options->star_rating.star);
-	pref_label_new(hbox, star_str->str);
-	g_autofree gchar *star_rating_symbol = g_strdup_printf("U+%X", options->star_rating.star);
-	star_rating_entry = gtk_entry_new();
-	gq_gtk_entry_set_text(GTK_ENTRY(star_rating_entry), star_rating_symbol);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), star_rating_entry, FALSE, FALSE, 0);
-	gtk_entry_set_width_chars(GTK_ENTRY(star_rating_entry), 15);
-	gtk_widget_show(star_rating_entry);
-	button = pref_button_new(nullptr, nullptr, _("Set"),
-					G_CALLBACK(star_rating_star_test_cb), hbox);
-	gtk_widget_set_tooltip_text(button, _("Display selected character"));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
-	gtk_widget_set_tooltip_text(star_rating_entry, _("Hexadecimal representation of a Unicode character. A list of all Unicode characters may be found on the Internet."));
-	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_SECONDARY, GQ_ICON_CLEAR);
-	gtk_entry_set_icon_tooltip_text (GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_SECONDARY, _("Clear"));
-	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_PRIMARY, GQ_ICON_REVERT);
-	gtk_entry_set_icon_tooltip_text (GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_PRIMARY, _("Default"));
-	g_signal_connect(GTK_ENTRY(star_rating_entry), "icon-press",
-						G_CALLBACK(star_rating_star_icon_cb),
-						star_rating_entry);
-
-	g_autoptr(GString) rejected_str = g_string_new(nullptr);
-	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	pref_label_new(hbox, _("Rejected character: "));
-	rejected_str = g_string_append_unichar(rejected_str, options->star_rating.rejected);
-	pref_label_new(hbox, rejected_str->str);
-	g_autofree gchar *rejected_rating_symbol = g_strdup_printf("U+%X", options->star_rating.rejected);
-	star_rating_entry = gtk_entry_new();
-	gq_gtk_entry_set_text(GTK_ENTRY(star_rating_entry), rejected_rating_symbol);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), star_rating_entry, FALSE, FALSE, 0);
-	gtk_entry_set_width_chars(GTK_ENTRY(star_rating_entry), 15);
-	gtk_widget_show(star_rating_entry);
-	button = pref_button_new(nullptr, nullptr, _("Set"),
-					G_CALLBACK(star_rating_rejected_test_cb), hbox);
-	gtk_widget_set_tooltip_text(button, _("Display selected character"));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
-	gtk_widget_set_tooltip_text(star_rating_entry, _("Hexadecimal representation of a Unicode character. A list of all Unicode characters may be found on the Internet."));
-	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_SECONDARY, GQ_ICON_CLEAR);
-	gtk_entry_set_icon_tooltip_text (GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_SECONDARY, _("Clear"));
-	gtk_entry_set_icon_from_icon_name(GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_PRIMARY, GQ_ICON_REVERT);
-	gtk_entry_set_icon_tooltip_text (GTK_ENTRY(star_rating_entry),
-						GTK_ENTRY_ICON_PRIMARY, _("Default"));
-	g_signal_connect(GTK_ENTRY(star_rating_entry), "icon-press",
-						G_CALLBACK(star_rating_rejected_icon_cb),
-						star_rating_entry);
+	add_star_rating<STAR_RATING_STAR>(group, _("Star character: "), options->star_rating.star,
+	                                  G_CALLBACK(star_rating_star_test_cb));
+	add_star_rating<STAR_RATING_REJECTED>(group, _("Rejected character: "), options->star_rating.rejected,
+	                                      G_CALLBACK(star_rating_rejected_test_cb));
 
 	pref_spacer(group, PREF_PAD_GROUP);
 
@@ -2163,21 +2128,12 @@ static void config_tab_general(GtkWidget *notebook)
 
 	hbox = pref_box_new(group, TRUE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 
-	tz = g_new0(TZData, 1);
-
+	auto *tz = g_new0(TZData, 1);
 	tz->timezone_database_user = g_build_filename(get_rc_dir(), TIMEZONE_DATABASE_FILE, NULL);
 
-	if (isfile(tz->timezone_database_user))
-		{
-		button = pref_button_new(GTK_WIDGET(hbox), nullptr, _("Update"), G_CALLBACK(timezone_database_install_cb), tz);
-		}
-	else
-		{
-		button = pref_button_new(GTK_WIDGET(hbox), nullptr, _("Install"), G_CALLBACK(timezone_database_install_cb), tz);
-		}
-
-	g_autofree gchar *download_locn = g_strconcat(_("Download database from: "), TIMEZONE_DATABASE_WEB, NULL);
-	pref_label_new(GTK_WIDGET(hbox), download_locn);
+	button = pref_button_new(hbox, nullptr, isfile(tz->timezone_database_user) ? _("Update") : _("Install"),
+	                         G_CALLBACK(timezone_database_install_cb), tz);
+	g_signal_connect_swapped(G_OBJECT(button), "destroy", G_CALLBACK(tz_data_free), tz);
 
 	if (!internet_available)
 		{
@@ -2188,6 +2144,9 @@ static void config_tab_general(GtkWidget *notebook)
 		gtk_widget_set_tooltip_text(button, _("The timezone database is used to display exif time and date\ncorrected for UTC offset and Daylight Saving Time"));
 		}
 	gtk_widget_show(button);
+
+	g_autofree gchar *download_locn = g_strconcat(_("Download database from: "), TIMEZONE_DATABASE_WEB, NULL);
+	pref_label_new(hbox, download_locn);
 
 	pref_spacer(group, PREF_PAD_GROUP);
 
@@ -2253,7 +2212,8 @@ static void config_tab_image(GtkWidget *notebook)
 				 100, 999, 1,
 				 options->image.max_enlargement_size, &c_options->image.max_enlargement_size);
 	pref_checkbox_link_sensitivity(enlargement_button, spin);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(hbox), _("Enable this to allow Geeqie to increase the image size for images that are smaller than the current view area when the zoom is set to 'Fit image to window'. This value sets the maximum expansion permitted in percent i.e. 100% is full-size."));
+	gtk_widget_set_tooltip_text(hbox,
+	                            _("Enable this to allow Geeqie to increase the image size for images that are smaller than the current view area when the zoom is set to 'Fit image to window'. This value sets the maximum expansion permitted in percent i.e. 100% is full-size."));
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	ct_button = pref_checkbox_new_int(hbox, _("Virtual window size (%% of actual window):"),
@@ -2262,7 +2222,8 @@ static void config_tab_image(GtkWidget *notebook)
 				 10, 150, 1,
 				 options->image.max_autofit_size, &c_options->image.max_autofit_size);
 	pref_checkbox_link_sensitivity(ct_button, spin);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(hbox), _("This value will set the virtual size of the window when 'Fit image to window' is set. Instead of using the actual size of the window, the specified percentage of the window will be used. It allows one to keep a border around the image (values lower than 100%) or to auto zoom the image (values greater than 100%). It affects fullscreen mode too."));
+	gtk_widget_set_tooltip_text(hbox,
+	                            _("This value will set the virtual size of the window when 'Fit image to window' is set. Instead of using the actual size of the window, the specified percentage of the window will be used. It allows one to keep a border around the image (values lower than 100%) or to auto zoom the image (values greater than 100%). It affects fullscreen mode too."));
 
 	group = pref_group_new(vbox, FALSE, _("Tile size"), GTK_ORIENTATION_VERTICAL);
 
@@ -2270,7 +2231,8 @@ static void config_tab_image(GtkWidget *notebook)
 	spin = pref_spin_new_int(hbox, _("Pixels"), _("(Requires restart)"),
 				 128, 4096, 128,
 				 options->image.tile_size, &c_options->image.tile_size);
-	gtk_widget_set_tooltip_text(GTK_WIDGET(hbox), _("This value changes the size of the tiles large images are split into. Increasing the size of the tiles will reduce the tiling effect seen on image changes, but will also slightly increase the delay before the first part of a large image is seen."));
+	gtk_widget_set_tooltip_text(hbox,
+	                            _("This value changes the size of the tiles large images are split into. Increasing the size of the tiles will reduce the tiling effect seen on image changes, but will also slightly increase the delay before the first part of a large image is seen."));
 
 	group = pref_group_new(vbox, FALSE, _("Appearance"), GTK_ORIENTATION_VERTICAL);
 
@@ -2329,11 +2291,10 @@ static void default_layout_changed_cb(GtkWidget *, GtkPopover *popover)
 
 static GtkWidget *create_popover(GtkWidget *parent, GtkWidget *child, GtkPositionType pos)
 {
-	GtkWidget *popover;
+	GtkWidget *popover = gtk_popover_new(parent);
 
-	popover = gtk_popover_new(parent);
 	gtk_popover_set_position(GTK_POPOVER (popover), pos);
-	gq_gtk_container_add(GTK_WIDGET(popover), child);
+	gq_gtk_container_add(popover, child);
 	gtk_container_set_border_width(GTK_CONTAINER (popover), 6);
 	gtk_widget_show (child);
 
@@ -2422,7 +2383,6 @@ static GtkWidget *osd_profiles(gint i)
 	GtkWidget *button;
 	GtkWidget *group;
 	GtkWidget *hbox;
-	GtkWidget *image_overlay_template_view;
 	GtkWidget *page;
 	GtkWidget *scrolled;
 	GtkWidget *scrolled_pre_formatted;
@@ -2430,7 +2390,7 @@ static GtkWidget *osd_profiles(gint i)
 
 	page = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 
-	image_overlay_template_view = gtk_text_view_new();
+	GtkWidget *image_overlay_template_view = gtk_text_view_new();
 
 	group = pref_group_new(page, FALSE, nullptr, GTK_ORIENTATION_VERTICAL);
 	subgroup = pref_box_new(group, FALSE, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
@@ -2454,7 +2414,7 @@ static GtkWidget *osd_profiles(gint i)
 
 	gtk_widget_set_tooltip_markup(image_overlay_template_view, _("Extensive formatting options are shown in the Help file"));
 
-	gq_gtk_container_add(GTK_WIDGET(scrolled), image_overlay_template_view);
+	gq_gtk_container_add(scrolled, image_overlay_template_view);
 	gtk_widget_show(image_overlay_template_view);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
@@ -2485,7 +2445,8 @@ static GtkWidget *osd_profiles(gint i)
 	if (options->image_overlay_n.template_string[i]) gtk_text_buffer_set_text(buffer, options->image_overlay_n.template_string[i], -1);
 	g_object_set_data(G_OBJECT(buffer), "osd_profile_number", GINT_TO_POINTER(i));
 
-	g_signal_connect(G_OBJECT(buffer), "changed", G_CALLBACK(image_overlay_template_view_changed_cb), image_overlay_template_view);
+	g_signal_connect(G_OBJECT(buffer), "changed",
+	                 G_CALLBACK(image_overlay_template_view_changed_cb), image_overlay_template_view);
 
 	return page;
 }
@@ -2798,7 +2759,7 @@ static void config_tab_files(GtkWidget *notebook)
 	gtk_tree_view_column_set_sort_column_id(column, FILETYPES_COLUMN_SIDECAR);
 
 	filter_store_populate();
-	gq_gtk_container_add(GTK_WIDGET(scrolled), filter_view);
+	gq_gtk_container_add(scrolled, filter_view);
 	gtk_widget_show(filter_view);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
@@ -3230,7 +3191,7 @@ static void config_tab_keywords(GtkWidget *notebook)
 		}
 #endif
 
-	gq_gtk_container_add(GTK_WIDGET(scrolled), keyword_text);
+	gq_gtk_container_add(scrolled, keyword_text);
 	gtk_widget_show(keyword_text);
 
 	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(keyword_text));
@@ -3359,7 +3320,8 @@ static void config_tab_color(GtkWidget *notebook)
 		entry = tab_completion_new(nullptr, options->color_profile.input_file[i]);
 		tab_completion_add_select_button(entry, _("Select color profile"), FALSE, ".icc", "ICC Files", shortcuts_list);
 		gtk_widget_set_size_request(entry, 160, -1);
-		gq_gtk_grid_attach(GTK_GRID(table), gtk_widget_get_parent(entry), 2, 3, i + 1, i + 2, static_cast<GtkAttachOptions>(GTK_FILL | GTK_EXPAND), static_cast<GtkAttachOptions>(0), 0, 0);
+		gq_gtk_grid_attach(GTK_GRID(table), tab_completion_get_box(entry), 2, 3, i + 1, i + 2,
+		                   static_cast<GtkAttachOptions>(GTK_FILL | GTK_EXPAND), static_cast<GtkAttachOptions>(0), 0, 0);
 		color_profile_input_file_entry[i] = entry;
 		}
 
@@ -3379,7 +3341,7 @@ static void config_tab_color(GtkWidget *notebook)
 #if HAVE_LCMS
 	add_intent_menu(table, 0, 1, _("Render Intent:"), options->color_profile.render_intent, &c_options->color_profile.render_intent);
 #endif
-	gq_gtk_grid_attach(GTK_GRID(table), gtk_widget_get_parent(color_profile_screen_file_entry), 1, 2, 0, 1,
+	gq_gtk_grid_attach(GTK_GRID(table), tab_completion_get_box(color_profile_screen_file_entry), 1, 2, 0, 1,
 	                   static_cast<GtkAttachOptions>(GTK_FILL | GTK_EXPAND), static_cast<GtkAttachOptions>(0), 0, 0);
 }
 
@@ -3719,7 +3681,7 @@ static void config_tab_accelerators(GtkWidget *notebook)
 	gtk_tree_view_set_search_equal_func(GTK_TREE_VIEW(accel_view), accel_search_function_cb, nullptr, nullptr);
 
 	accel_store_populate();
-	gq_gtk_container_add(GTK_WIDGET(scrolled), accel_view);
+	gq_gtk_container_add(scrolled, accel_view);
 	gtk_widget_show(accel_view);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
@@ -3920,7 +3882,6 @@ static void config_tab_stereo(GtkWidget *notebook)
 static void config_window_create(LayoutWindow *lw)
 {
 	GtkWidget *win_vbox;
-	GtkWidget *hbox;
 	GtkWidget *notebook;
 	GtkWidget *button;
 	GtkWidget *ct_button;
@@ -3945,7 +3906,7 @@ static void config_window_create(LayoutWindow *lw)
 	gtk_container_set_border_width(GTK_CONTAINER(configwindow), PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
-	gq_gtk_container_add(GTK_WIDGET(configwindow), win_vbox);
+	gq_gtk_container_add(configwindow, win_vbox);
 	gtk_widget_show(win_vbox);
 
 	notebook = gtk_notebook_new();
@@ -3970,7 +3931,7 @@ static void config_window_create(LayoutWindow *lw)
 
 	gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), lw->options.preferences_window.page_number);
 
-	hbox = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
+	GtkWidget *hbox = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
 	gtk_button_box_set_layout(GTK_BUTTON_BOX(hbox), GTK_BUTTONBOX_END);
 	gtk_box_set_spacing(GTK_BOX(hbox), PREF_PAD_BUTTON_GAP);
 	gq_gtk_box_pack_end(GTK_BOX(win_vbox), hbox, FALSE, FALSE, 0);
@@ -3978,13 +3939,13 @@ static void config_window_create(LayoutWindow *lw)
 
 	button = pref_button_new(nullptr, GQ_ICON_HELP, _("Help"),
 				 G_CALLBACK(config_window_help_cb), notebook);
-	gq_gtk_container_add(GTK_WIDGET(hbox), button);
+	gq_gtk_container_add(hbox, button);
 	gtk_widget_set_can_default(button, TRUE);
 	gtk_widget_show(button);
 
 	button = pref_button_new(nullptr, GQ_ICON_OK, "OK",
 				 G_CALLBACK(config_window_ok_cb), notebook);
-	gq_gtk_container_add(GTK_WIDGET(hbox), button);
+	gq_gtk_container_add(hbox, button);
 	gtk_widget_set_can_default(button, TRUE);
 	gtk_widget_grab_default(button);
 	gtk_widget_show(button);
@@ -3993,7 +3954,7 @@ static void config_window_create(LayoutWindow *lw)
 
 	button = pref_button_new(nullptr, GQ_ICON_CANCEL, _("Cancel"),
 				 G_CALLBACK(config_window_close_cb), nullptr);
-	gq_gtk_container_add(GTK_WIDGET(hbox), button);
+	gq_gtk_container_add(hbox, button);
 	gtk_widget_set_can_default(button, TRUE);
 	gtk_widget_show(button);
 
@@ -4144,7 +4105,6 @@ static void image_overlay_set_text_colors(gint i)
 static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, gpointer data)
 {
 	auto tz = static_cast<TZData *>(data);
-	FileData *fd;
 
 	if (!g_cancellable_is_cancelled(tz->cancellable))
 		{
@@ -4155,7 +4115,7 @@ static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, g
 	if (g_file_copy_finish(G_FILE(source_object), res, &error))
 		{
 		g_autofree gchar *tmp_filename = g_file_get_path(tz->tmp_g_file);
-		fd = file_data_new_simple(tmp_filename);
+		FileData *fd = file_data_new_simple(tmp_filename);
 
 		g_autofree gchar *tmp_dir = open_archive(fd);
 		if (tmp_dir)
@@ -4184,8 +4144,7 @@ static void timezone_async_ready_cb(GObject *source_object, GAsyncResult *res, g
 		}
 
 	g_file_delete(tz->tmp_g_file, nullptr, nullptr);
-	g_object_unref(tz->tmp_g_file);
-	tz->tmp_g_file = nullptr;
+	g_clear_object(&tz->tmp_g_file);
 	g_object_unref(tz->cancellable);
 	g_object_unref(tz->timezone_database_gq);
 }
@@ -4194,10 +4153,9 @@ static void timezone_progress_cb(goffset current_num_bytes, goffset total_num_by
 {
 	auto tz = static_cast<TZData *>(data);
 
-	if (!g_cancellable_is_cancelled(tz->cancellable))
-		{
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(tz->progress), static_cast<gdouble>(current_num_bytes) / total_num_bytes);
-		}
+	if (g_cancellable_is_cancelled(tz->cancellable)) return;
+
+	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(tz->progress), static_cast<gdouble>(current_num_bytes) / total_num_bytes);
 }
 
 static void timezone_cancel_button_cb(GenericDialog *, gpointer data)
@@ -4210,13 +4168,10 @@ static void timezone_cancel_button_cb(GenericDialog *, gpointer data)
 static void timezone_database_install_cb(GtkWidget *widget, gpointer data)
 {
 	auto tz = static_cast<TZData *>(data);
+
+	if (tz->tmp_g_file) return;
+
 	GFileIOStream *io_stream;
-
-	if (tz->tmp_g_file)
-		{
-		return;
-		}
-
 	g_autoptr(GError) error = nullptr;
 	tz->tmp_g_file = g_file_new_tmp("geeqie_timezone_XXXXXX", &io_stream, &error);
 
@@ -4224,25 +4179,24 @@ static void timezone_database_install_cb(GtkWidget *widget, gpointer data)
 		{
 		file_util_warning_dialog(_("Timezone database download failed"), error->message, GQ_ICON_DIALOG_ERROR, nullptr);
 		log_printf("Error: Download timezone database failed:\n%s", error->message);
-		g_object_unref(tz->tmp_g_file);
+		g_clear_object(&tz->tmp_g_file);
+		return;
 		}
-	else
-		{
-		tz->timezone_database_gq = g_file_new_for_uri(TIMEZONE_DATABASE_WEB);
 
-		tz->gd = generic_dialog_new(_("Timezone database"), "download_timezone_database", nullptr, TRUE, timezone_cancel_button_cb, tz);
+	tz->timezone_database_gq = g_file_new_for_uri(TIMEZONE_DATABASE_WEB);
 
-		generic_dialog_add_message(tz->gd, GQ_ICON_DIALOG_INFO, _("Downloading timezone database"), nullptr, FALSE);
+	tz->gd = generic_dialog_new(_("Timezone database"), "download_timezone_database", nullptr, TRUE, timezone_cancel_button_cb, tz);
 
-		tz->progress = gtk_progress_bar_new();
-		gq_gtk_box_pack_start(GTK_BOX(tz->gd->vbox), tz->progress, FALSE, FALSE, 0);
-		gtk_widget_show(tz->progress);
+	generic_dialog_add_message(tz->gd, GQ_ICON_DIALOG_INFO, _("Downloading timezone database"), nullptr, FALSE);
 
-		gtk_widget_show(tz->gd->dialog);
-		tz->cancellable = g_cancellable_new();
-		g_file_copy_async(tz->timezone_database_gq, tz->tmp_g_file, G_FILE_COPY_OVERWRITE, G_PRIORITY_LOW, tz->cancellable, timezone_progress_cb, tz, timezone_async_ready_cb, tz);
+	tz->progress = gtk_progress_bar_new();
+	gq_gtk_box_pack_start(GTK_BOX(tz->gd->vbox), tz->progress, FALSE, FALSE, 0);
+	gtk_widget_show(tz->progress);
 
-		gtk_button_set_label(GTK_BUTTON(widget), _("Update"));
-		}
+	gtk_widget_show(tz->gd->dialog);
+	tz->cancellable = g_cancellable_new();
+	g_file_copy_async(tz->timezone_database_gq, tz->tmp_g_file, G_FILE_COPY_OVERWRITE, G_PRIORITY_LOW, tz->cancellable, timezone_progress_cb, tz, timezone_async_ready_cb, tz);
+
+	gtk_button_set_label(GTK_BUTTON(widget), _("Update"));
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

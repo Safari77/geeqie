@@ -112,7 +112,7 @@ void layout_image_full_screen_start(LayoutWindow *lw)
 	g_signal_connect(G_OBJECT(lw->full_screen->window), "key_press_event",
 			 G_CALLBACK(layout_key_press_cb), lw);
 
-	lw->touchpad_zoom = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new(GTK_WIDGET(lw->full_screen->window)));
+	lw->touchpad_zoom = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new(lw->full_screen->window));
 	g_signal_connect(lw->touchpad_zoom, "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
 
 	layout_actions_add_window(lw, lw->full_screen->window);
@@ -180,34 +180,29 @@ static void layout_image_slideshow_prev(LayoutWindow *lw)
 	if (lw->slideshow) slideshow_prev(lw->slideshow);
 }
 
-static void layout_image_slideshow_stop_func(SlideShowData *, gpointer data)
+static void layout_image_slideshow_stop_func(LayoutWindow *lw)
 {
-	auto lw = static_cast<LayoutWindow *>(data);
-
 	lw->slideshow = nullptr;
 	layout_status_update_info(lw, nullptr);
 }
 
 void layout_image_slideshow_start(LayoutWindow *lw)
 {
-	CollectionData *cd;
-	CollectInfo *info;
-
 	if (!layout_valid(&lw)) return;
 	if (lw->slideshow) return;
 
-	cd = image_get_collection(lw->image, &info);
+	CollectInfo *info;
+	CollectionData *cd = image_get_collection(lw->image, &info);
 
 	if (cd && info)
 		{
-		lw->slideshow = slideshow_start_from_collection(lw, nullptr, cd,
-				layout_image_slideshow_stop_func, lw, info);
+		lw->slideshow = slideshow_start_from_collection(lw, nullptr, cd, info,
+		                                                [lw](SlideShowData *){ layout_image_slideshow_stop_func(lw); });
 		}
 	else
 		{
-		lw->slideshow = slideshow_start(lw,
-				layout_list_get_index(lw, layout_image_get_fd(lw)),
-				layout_image_slideshow_stop_func, lw);
+		lw->slideshow = slideshow_start(lw, layout_list_get_index(lw, layout_image_get_fd(lw)),
+		                                [lw](SlideShowData *){ layout_image_slideshow_stop_func(lw); });
 		}
 
 	layout_status_update_info(lw, nullptr);
@@ -225,7 +220,7 @@ void layout_image_slideshow_start_from_list(LayoutWindow *lw, GList *list)
 		}
 
 	lw->slideshow = slideshow_start_from_filelist(lw, nullptr, list,
-						       layout_image_slideshow_stop_func, lw);
+	                                              [lw](SlideShowData *){ layout_image_slideshow_stop_func(lw); });
 
 	layout_status_update_info(lw, nullptr);
 }
@@ -261,17 +256,13 @@ gboolean layout_image_slideshow_active(LayoutWindow *lw)
 	return (lw->slideshow != nullptr);
 }
 
-gboolean layout_image_slideshow_pause_toggle(LayoutWindow *lw)
+void layout_image_slideshow_pause_toggle(LayoutWindow *lw)
 {
-	gboolean ret;
+	if (!layout_valid(&lw)) return;
 
-	if (!layout_valid(&lw)) return FALSE;
-
-	ret = slideshow_pause_toggle(lw->slideshow);
+	slideshow_pause_toggle(lw->slideshow);
 
 	layout_status_update_info(lw, nullptr);
-
-	return ret;
 }
 
 gboolean layout_image_slideshow_paused(LayoutWindow *lw)
@@ -342,19 +333,19 @@ static gboolean show_next_frame(gpointer data)
 
 	PixbufRenderer *pr = PIXBUF_RENDERER(fd->iw->pr);
 
-	if (gdk_pixbuf_animation_iter_advance(fd->iter,nullptr)==FALSE)
+	if (!gq_gdk_pixbuf_animation_iter_advance(fd->iter, nullptr))
 		{
 		/* This indicates the animation is complete.
 		   Return FALSE here to disable looping. */
 		}
 
-	fd->gpb = gdk_pixbuf_animation_iter_get_pixbuf(fd->iter);
+	fd->gpb = gq_gdk_pixbuf_animation_iter_get_pixbuf(fd->iter);
 	image_change_pixbuf(fd->iw,fd->gpb,pr->zoom,FALSE);
 
 	if (fd->iw->func_update)
 		fd->iw->func_update(fd->iw, fd->iw->data_update);
 
-	delay = gdk_pixbuf_animation_iter_get_delay_time(fd->iter);
+	delay = gq_gdk_pixbuf_animation_iter_get_delay_time(fd->iter);
 	if (delay!=fd->delay)
 		{
 		if (delay>0) /* Current frame not static. */
@@ -415,7 +406,7 @@ static void animation_async_ready_cb(GObject *, GAsyncResult *res, gpointer data
 
 	if (g_cancellable_is_cancelled(animation->cancellable))
 		{
-		gdk_pixbuf_animation_new_from_stream_finish(res, nullptr);
+		gq_gdk_pixbuf_animation_new_from_stream_finish(res, nullptr);
 		g_object_unref(animation->in_file);
 		g_object_unref(animation->gfstream);
 		image_animation_data_free(animation);
@@ -423,16 +414,16 @@ static void animation_async_ready_cb(GObject *, GAsyncResult *res, gpointer data
 		}
 
 	g_autoptr(GError) error = nullptr;
-	animation->gpa = gdk_pixbuf_animation_new_from_stream_finish(res, &error);
+	animation->gpa = gq_gdk_pixbuf_animation_new_from_stream_finish(res, &error);
 	if (animation->gpa)
 		{
-		if (!gdk_pixbuf_animation_is_static_image(animation->gpa))
+		if (!gq_gdk_pixbuf_animation_is_static_image(animation->gpa))
 			{
-			animation->iter = gdk_pixbuf_animation_get_iter(animation->gpa, nullptr);
+			animation->iter = gq_gdk_pixbuf_animation_get_iter(animation->gpa, nullptr);
 			if (animation->iter)
 				{
 				animation->data_adr = animation->lw->image->image_fd;
-				animation->delay = gdk_pixbuf_animation_iter_get_delay_time(animation->iter);
+				animation->delay = gq_gdk_pixbuf_animation_iter_get_delay_time(animation->iter);
 				animation->valid = TRUE;
 
 				layout_image_animate_update_image(animation->lw);
@@ -477,7 +468,7 @@ static gboolean layout_image_animate_new_file(LayoutWindow *lw)
 	if (gfstream)
 		{
 		animation->gfstream = gfstream;
-		gdk_pixbuf_animation_new_from_stream_async(G_INPUT_STREAM(gfstream), animation->cancellable, animation_async_ready_cb, animation);
+		gq_gdk_pixbuf_animation_new_from_stream_async(G_INPUT_STREAM(gfstream), animation->cancellable, animation_async_ready_cb, animation);
 		}
 	else
 		{
@@ -2076,7 +2067,7 @@ GtkWidget *layout_image_new(LayoutWindow *lw, gint i)
 
 		image_set_focus_in_func(lw->split_images[i], layout_image_focus_in_cb, lw);
 
-		lw->split_images_touchpad_zoom[i] = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new(GTK_WIDGET(lw->split_images[i]->pr)));
+		lw->split_images_touchpad_zoom[i] = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new(lw->split_images[i]->pr));
 		g_signal_connect(lw->split_images_touchpad_zoom[i], "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
 		}
 

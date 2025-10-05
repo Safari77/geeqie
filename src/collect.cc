@@ -921,7 +921,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 				file_util_delete(nullptr, collection_table_selection_get_list(cw->table), cw->window, TRUE);
 				break;
 			case 'S': case 's':
-				collection_dialog_save_as(cw->cd);
+				collection_dialog_save(cw->cd);
 				break;
 			case 'W': case 'w':
 				collection_window_close(cw);
@@ -946,7 +946,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 			case 'S': case 's':
 				if (!cw->cd->path)
 					{
-					collection_dialog_save_as(cw->cd);
+					collection_dialog_save(cw->cd);
 					}
 				else if (!collection_save(cw->cd, cw->cd->path))
 					{
@@ -1112,7 +1112,7 @@ static void collection_close_save_cb(GenericDialog *gd, gpointer data)
 
 	if (!cw->cd->path)
 		{
-		collection_dialog_save_close(cw->cd);
+		collection_dialog_save(cw->cd);
 		return;
 		}
 
@@ -1235,7 +1235,6 @@ CollectWindow *collection_window_new(const gchar *path)
 {
 	CollectWindow *cw;
 	GtkWidget *vbox;
-	GtkWidget *frame;
 	GtkWidget *status_label;
 	GtkWidget *extra_label;
 	GdkGeometry geometry;
@@ -1289,7 +1288,7 @@ CollectWindow *collection_window_new(const gchar *path)
 			 G_CALLBACK(collection_window_keypress), cw);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(GTK_WIDGET(cw->window), vbox);
+	gq_gtk_container_add(cw->window, vbox);
 	gtk_widget_show(vbox);
 
 	cw->table = collection_table_new(cw->cd);
@@ -1300,14 +1299,14 @@ CollectWindow *collection_window_new(const gchar *path)
 	gq_gtk_box_pack_start(GTK_BOX(vbox), cw->status_box, FALSE, FALSE, 0);
 	gtk_widget_show(cw->status_box);
 
-	frame = gtk_frame_new(nullptr);
+	GtkWidget *frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
 	gq_gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
 	gq_gtk_box_pack_start(GTK_BOX(cw->status_box), frame, TRUE, TRUE, 0);
 	gtk_widget_show(frame);
 
 	status_label = gtk_label_new("");
-	gq_gtk_container_add(GTK_WIDGET(frame), status_label);
+	gq_gtk_container_add(frame, status_label);
 	gtk_widget_show(status_label);
 
 	extra_label = gtk_progress_bar_new();

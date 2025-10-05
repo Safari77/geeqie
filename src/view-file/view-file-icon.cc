@@ -336,7 +336,7 @@ static void tip_show(ViewFile *vf)
 	label = gtk_label_new(VFICON(vf)->tip_fd->name);
 
 	g_object_set_data(G_OBJECT(VFICON(vf)->tip_window), "tip_label", label);
-	gq_gtk_container_add(GTK_WIDGET(VFICON(vf)->tip_window), label);
+	gq_gtk_container_add(VFICON(vf)->tip_window, label);
 	gtk_widget_show(label);
 
 	display = gdk_display_get_default();
@@ -375,30 +375,20 @@ static gboolean tip_schedule_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void tip_schedule(ViewFile *vf)
-{
-	tip_hide(vf);
-
-	if (VFICON(vf)->tip_delay_id)
-		{
-		g_source_remove(VFICON(vf)->tip_delay_id);
-		VFICON(vf)->tip_delay_id = 0;
-		}
-
-	if (!VFICON(vf)->show_text)
-		{
-		VFICON(vf)->tip_delay_id = g_timeout_add(VFICON_TIP_DELAY, tip_schedule_cb, vf);
-		}
-}
-
 static void tip_unschedule(ViewFile *vf)
 {
 	tip_hide(vf);
 
-	if (VFICON(vf)->tip_delay_id)
+	g_clear_handle_id(&(VFICON(vf)->tip_delay_id), g_source_remove);
+}
+
+static void tip_schedule(ViewFile *vf)
+{
+	tip_unschedule(vf);
+
+	if (!VFICON(vf)->show_text)
 		{
-		g_source_remove(VFICON(vf)->tip_delay_id);
-		VFICON(vf)->tip_delay_id = 0;
+		VFICON(vf)->tip_delay_id = g_timeout_add(VFICON_TIP_DELAY, tip_schedule_cb, vf);
 		}
 }
 
