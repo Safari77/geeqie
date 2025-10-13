@@ -73,16 +73,17 @@ struct PixbufRenderer;
 #define ROUND_DOWN(A,B) ((gint)(((A))/(B))*(B))
 
 
-enum ImageRenderType {
-	TILE_RENDER_NONE = 0, /**< do nothing */
-	TILE_RENDER_AREA, /**< render an area of the tile */
-	TILE_RENDER_ALL /**< render the whole tile */
-};
-
 enum OverlayRendererFlags {
 	OVL_NORMAL 	= 0,
 	OVL_RELATIVE 	= 1 << 0, /**< x,y coordinates are relative, negative values start bottom right */
 	/* OVL_HIDE_ON_SCROLL = 1 << 1*/ /**< hide temporarily when scrolling (not yet implemented) */
+};
+
+enum StereoPixbufData : gint {
+	STEREO_PIXBUF_DEFAULT  = 0,
+	STEREO_PIXBUF_SBS      = 1,
+	STEREO_PIXBUF_CROSS    = 2,
+	STEREO_PIXBUF_NONE     = 3
 };
 
 struct RendererFuncs
