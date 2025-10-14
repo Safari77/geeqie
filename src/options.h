@@ -28,6 +28,7 @@
 #include "typedefs.h"
 
 enum DupeSelectType : guint;
+enum ScrollReset : guint;
 enum TextPosition : gint;
 
 #define COLOR_PROFILE_INPUTS 4
@@ -333,14 +334,6 @@ struct ConfOptions
 		gboolean use_x11_screen_profile;
 		gint render_intent;
 	} color_profile;
-
-	/* Helpers programs */
-	struct {
-		struct {
-			gchar *command_name;
-			gchar *command_line;
-		} html_browser;
-	} helpers;
 
 	/* Metadata */
 	struct {

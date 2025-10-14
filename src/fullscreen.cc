@@ -382,7 +382,7 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
                                  const FullScreenData::StopFunc &stop_func)
 {
 	FullScreenData *fs;
-	GdkDisplay *display;
+	GdkDisplay *display = nullptr;
 	GdkGeometry geometry;
 	GdkMonitor *monitor;
 	GdkScreen *screen;
@@ -407,7 +407,7 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 	DEBUG_1("full screen requests screen %d", options->fullscreen.screen);
 	GdkRectangle rect = fullscreen_prefs_get_geometry(options->fullscreen.screen, window, screen, fs->same_region);
 
-	fs->window = window_new("fullscreen", nullptr, nullptr, _("Full screen"));
+	fs->window = window_new("fullscreen", nullptr, _("Full screen"));
 	DEBUG_NAME(fs->window);
 
 	g_signal_connect(G_OBJECT(fs->window), "delete_event",
@@ -496,6 +496,25 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 	if (options->stereo.enable_fsmode)
 		{
 		image_stereo_set(fs->imd, options->stereo.fsmode);
+		}
+
+	/* Use the XDG Activation protocol to get the newly created fullscreen
+	 * window automatically activated also on Wayland with focus stealing
+	 * prevention in strict mode.
+	 *
+	 * https://blogs.gnome.org/shell-dev/2024/09/20/understanding-gnome-shells-focus-stealing-prevention/
+	 */
+	if (g_getenv("WAYLAND_DISPLAY"))
+		{
+		if (display == nullptr)
+			{
+			display = gtk_widget_get_display(window);
+			}
+
+		GdkAppLaunchContext *context = gdk_display_get_app_launch_context(display);
+		g_autofree char *id = g_app_launch_context_get_startup_notify_id(G_APP_LAUNCH_CONTEXT(context), nullptr, nullptr);
+		DEBUG_1("full screen setting startup id %s", id);
+		gtk_window_set_startup_id(GTK_WINDOW(fs->window), id);
 		}
 
 	gtk_widget_show(fs->window);
