@@ -36,12 +36,6 @@ enum MouseButton {
 	MOUSE_BUTTON_9	= 9
 };
 
-#define	CMD_COPY     "geeqie-copy-command.desktop"
-#define	CMD_MOVE     "geeqie-move-command.desktop"
-#define	CMD_RENAME   "geeqie-rename-command.desktop"
-#define	CMD_DELETE   "geeqie-delete-command.desktop"
-#define	CMD_FOLDER   "geeqie-folder-command.desktop"
-
 enum SortType {
 	SORT_NONE,
 	SORT_NAME,
@@ -54,36 +48,6 @@ enum SortType {
 	SORT_EXIFTIMEDIGITIZED,
 	SORT_RATING,
 	SORT_CLASS
-};
-
-enum AlterType {
-	ALTER_NONE,		/**< do nothing */
-	ALTER_ROTATE_90,
-	ALTER_ROTATE_90_CC,	/**< counterclockwise */
-	ALTER_ROTATE_180,
-	ALTER_MIRROR,
-	ALTER_FLIP,
-};
-
-enum ImageSplitMode {
-	SPLIT_NONE = 0,
-	SPLIT_VERT,
-	SPLIT_HOR,
-	SPLIT_TRIPLE,
-	SPLIT_QUAD,
-};
-
-enum MarkToSelectionMode {
-	MTS_MODE_MINUS,
-	MTS_MODE_SET,
-	MTS_MODE_OR,
-	MTS_MODE_AND
-};
-
-enum SelectionToMarkMode {
-	STM_MODE_RESET,
-	STM_MODE_SET,
-	STM_MODE_TOGGLE
 };
 
 enum FileFormatClass {
