@@ -109,8 +109,7 @@ void layout_image_full_screen_start(LayoutWindow *lw)
 
 	layout_image_set_buttons(lw);
 
-	g_signal_connect(G_OBJECT(lw->full_screen->window), "key_press_event",
-			 G_CALLBACK(layout_key_press_cb), lw);
+	layout_keyboard_init(lw, lw->full_screen->window);
 
 	lw->touchpad_zoom = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new(lw->full_screen->window));
 	g_signal_connect(lw->touchpad_zoom, "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
@@ -1744,7 +1743,7 @@ static void layout_image_button_cb(ImageWindow *imd, GdkEventButton *event, gpoi
 
 	switch (event->button)
 		{
-		case MOUSE_BUTTON_LEFT:
+		case GDK_BUTTON_PRIMARY:
 			if (event->type == GDK_2BUTTON_PRESS)
 				{
 				layout_image_full_screen_toggle(lw);
@@ -1770,11 +1769,11 @@ static void layout_image_button_cb(ImageWindow *imd, GdkEventButton *event, gpoi
 			else if (options->image_lm_click_nav && lw->split_mode == SPLIT_NONE)
 				layout_image_next(lw);
 			break;
-		case MOUSE_BUTTON_MIDDLE:
+		case GDK_BUTTON_MIDDLE:
 			if (options->image_lm_click_nav && lw->split_mode == SPLIT_NONE)
 				layout_image_prev(lw);
 			break;
-		case MOUSE_BUTTON_RIGHT:
+		case GDK_BUTTON_SECONDARY:
 			menu = layout_image_pop_menu(lw);
 			if (imd == lw->image)
 				{
@@ -1909,7 +1908,7 @@ static void layout_image_button_inactive_cb(ImageWindow *imd, GdkEventButton *ev
 
 	switch (event->button)
 		{
-		case MOUSE_BUTTON_RIGHT:
+		case GDK_BUTTON_SECONDARY:
 			menu = layout_image_pop_menu(lw);
 			if (imd == lw->image)
 				{

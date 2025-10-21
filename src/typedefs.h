@@ -26,16 +26,6 @@
 
 #include <glib.h>
 
-enum MouseButton {
-	MOUSE_BUTTON_LEFT	= 1,
-	MOUSE_BUTTON_MIDDLE	= 2,
-	MOUSE_BUTTON_RIGHT	= 3,
-	MOUSE_BUTTON_WHEEL_UP	= 4,
-	MOUSE_BUTTON_WHEEL_DOWN	= 5,
-	MOUSE_BUTTON_8	= 8,
-	MOUSE_BUTTON_9	= 9
-};
-
 enum SortType {
 	SORT_NONE,
 	SORT_NAME,
@@ -86,12 +76,6 @@ enum ChangeError {
 enum MetadataFormat {
 	METADATA_PLAIN		= 0, /**< format that can be edited and written back */
 	METADATA_FORMATTED	= 1  /**< for display only */
-};
-
-enum ToolbarType {
-	TOOLBAR_MAIN,
-	TOOLBAR_STATUS,
-	TOOLBAR_COUNT
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(FILE, fclose)

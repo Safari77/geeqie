@@ -33,6 +33,7 @@
 #include "filedata.h"
 #include "intl.h"
 #include "layout-image.h"
+#include "layout-util.h"
 #include "layout.h"
 #include "main-defines.h"
 #include "metadata.h"
@@ -40,7 +41,6 @@
 #include "options.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
-#include "ui-misc.h"
 #include "ui-tree-edit.h"
 #include "utilops.h"
 #include "view-file.h"
@@ -463,7 +463,7 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 		GtkTreeModel *store;
 		gint col_idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "column_store_idx"));
 
-		if (bevent->button == MOUSE_BUTTON_LEFT &&
+		if (bevent->button == GDK_BUTTON_PRIMARY &&
 		    col_idx >= FILE_COLUMN_MARKS && col_idx <= FILE_COLUMN_MARKS_LAST)
 			return FALSE;
 
@@ -479,7 +479,7 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 
 	vf->click_fd = fd;
 
-	if (bevent->button == MOUSE_BUTTON_RIGHT)
+	if (bevent->button == GDK_BUTTON_SECONDARY)
 		{
 		vf->popup = vf_pop_menu(vf);
 		gtk_menu_popup_at_pointer(GTK_MENU(vf->popup), nullptr);
@@ -488,7 +488,7 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 
 	if (!fd) return FALSE;
 
-	if (bevent->button == MOUSE_BUTTON_MIDDLE)
+	if (bevent->button == GDK_BUTTON_MIDDLE)
 		{
 		if (!vflist_row_is_selected(vf, fd))
 			{
@@ -498,7 +498,7 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 		}
 
 
-	if (bevent->button == MOUSE_BUTTON_LEFT && bevent->type == GDK_BUTTON_PRESS &&
+	if (bevent->button == GDK_BUTTON_PRIMARY && bevent->type == GDK_BUTTON_PRESS &&
 	    !(bevent->state & GDK_SHIFT_MASK ) &&
 	    !(bevent->state & GDK_CONTROL_MASK ) &&
 	    vflist_row_is_selected(vf, fd))
@@ -516,7 +516,7 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 		return (gtk_tree_selection_count_selected_rows(selection) > 1);
 		}
 
-	if (bevent->button == MOUSE_BUTTON_LEFT && bevent->type == GDK_2BUTTON_PRESS)
+	if (bevent->button == GDK_BUTTON_PRIMARY && bevent->type == GDK_2BUTTON_PRESS)
 		{
 		if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
 			{
@@ -537,17 +537,17 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
 
-	if (defined_mouse_buttons(bevent, vf->layout))
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent))
 		{
 		return TRUE;
 		}
 
-	if (bevent->button == MOUSE_BUTTON_MIDDLE)
+	if (bevent->button == GDK_BUTTON_MIDDLE)
 		{
 		vflist_color_set(vf, vf->click_fd, FALSE);
 		}
 
-	if (bevent->button != MOUSE_BUTTON_LEFT && bevent->button != MOUSE_BUTTON_MIDDLE)
+	if (bevent->button != GDK_BUTTON_PRIMARY && bevent->button != GDK_BUTTON_MIDDLE)
 		{
 		return TRUE;
 		}
@@ -564,7 +564,7 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 		gtk_tree_path_free(tpath);
 		}
 
-	if (bevent->button == MOUSE_BUTTON_MIDDLE)
+	if (bevent->button == GDK_BUTTON_MIDDLE)
 		{
 		if (fd && vf->click_fd == fd)
 			{

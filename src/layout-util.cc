@@ -91,7 +91,6 @@ namespace
 
 struct WindowNames
 {
-	gboolean displayed;
 	gchar *name;
 	gchar *path;
 };
@@ -186,13 +185,9 @@ void keyboard_scroll_calc(gint &x, gint &y, const GdkEventKey *event)
 	y *= delta * options->keyboard_scroll_step;
 }
 
-gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
-	GtkWidget *focused;
-	gboolean stop_signal = FALSE;
-	gint x = 0;
-	gint y = 0;
 
 	if (lw->path_entry && gtk_widget_has_focus(lw->path_entry))
 		{
@@ -210,9 +205,10 @@ gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer dat
 			}
 		}
 
-	if (lw->vf->file_filter.combo && gtk_widget_has_focus(gtk_bin_get_child(GTK_BIN(lw->vf->file_filter.combo))))
+	if (lw->vf->file_filter.combo)
 		{
-		if (gtk_widget_event(gtk_bin_get_child(GTK_BIN(lw->vf->file_filter.combo)), reinterpret_cast<GdkEvent *>(event)))
+		GtkWidget *combo_entry = gtk_bin_get_child(GTK_BIN(lw->vf->file_filter.combo));
+		if (gtk_widget_has_focus(combo_entry) && gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;
 			}
@@ -224,13 +220,17 @@ gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer dat
 		{
 		return TRUE;
 		}
+
 	if (lw->bar &&
 	    bar_event(lw->bar, reinterpret_cast<GdkEvent *>(event)))
 		{
 		return TRUE;
 		}
 
-	focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
+	GtkWidget *focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
+	gboolean stop_signal = FALSE;
+	gint x = 0;
+	gint y = 0;
 	if (lw->image &&
 	    ((focused && gtk_widget_has_focus(focused)) || (lw->tools && widget == lw->window) || lw->full_screen) )
 		{
@@ -283,6 +283,44 @@ void layout_keyboard_init(LayoutWindow *lw, GtkWidget *window)
 {
 	g_signal_connect(G_OBJECT(window), "key_press_event",
 			 G_CALLBACK(layout_key_press_cb), lw);
+}
+
+bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *event)
+{
+	enum MouseButton {
+		MOUSE_BUTTON_8 = 8,
+		MOUSE_BUTTON_9 = 9
+	};
+
+	const auto handle_button = [lw](const gchar *action_name)
+	{
+		if (!action_name) return false;
+
+		if (g_strstr_len(action_name, -1, ".desktop") != nullptr)
+			{
+			file_util_start_editor_from_filelist(action_name, layout_selection_list(lw), layout_get_path(lw), lw->window);
+			}
+		else
+			{
+			GtkAction *action = gq_gtk_action_group_get_action(lw->action_group, action_name);
+			if (action)
+				{
+				gq_gtk_action_activate(action);
+				}
+			}
+
+		return true;
+	};
+
+	switch (event->button)
+		{
+		case MOUSE_BUTTON_8:
+			return handle_button(options->mouse_button_8);
+		case MOUSE_BUTTON_9:
+			return handle_button(options->mouse_button_9);
+		default:
+			return false;
+		}
 }
 
 /*
@@ -863,24 +901,38 @@ static void layout_menu_open_with_cb(GtkAction *, gpointer data)
 
 	if (layout_selection_list(lw))
 		{
-		open_with_data = g_new(OpenWithData, 1);
+		if (g_getenv("SNAP"))
+			{
+			/** FIXME The app chooser cannot be used within a sandbox as it does
+			 * not see system .desktop files. The correct way is to use XDG DESKTOP PORTAL,
+			 * but this method is far simpler.
+			 * The video player .desktop is used, rather than creating a new one with
+			 * the same function.
+			 * The .desktop calls xdg-open which works as required when called externally.
+			 */
+			file_util_start_editor_from_filelist("org.geeqie.video-player.desktop", layout_selection_list(lw), nullptr, nullptr);
+			}
+		else
+			{
+			open_with_data = g_new(OpenWithData, 1);
 
-		fd = static_cast<FileData *>(g_list_first(layout_selection_list(lw))->data);
+			fd = static_cast<FileData *>(g_list_first(layout_selection_list(lw))->data);
 
-		open_with_data->g_file_list = g_list_append(nullptr, g_file_new_for_path(fd->path));
+			open_with_data->g_file_list = g_list_append(nullptr, g_file_new_for_path(fd->path));
 
-		open_with_data->app_chooser_dialog = gtk_app_chooser_dialog_new(nullptr, GTK_DIALOG_MODAL, G_FILE(g_list_first(open_with_data->g_file_list)->data));
+			open_with_data->app_chooser_dialog = gtk_app_chooser_dialog_new(nullptr, GTK_DIALOG_MODAL, G_FILE(g_list_first(open_with_data->g_file_list)->data));
 
-		widget = gtk_app_chooser_dialog_get_widget(GTK_APP_CHOOSER_DIALOG(open_with_data->app_chooser_dialog));
+			widget = gtk_app_chooser_dialog_get_widget(GTK_APP_CHOOSER_DIALOG(open_with_data->app_chooser_dialog));
 
-		open_with_data->application = gtk_app_chooser_get_app_info(GTK_APP_CHOOSER(open_with_data->app_chooser_dialog));
+			open_with_data->application = gtk_app_chooser_get_app_info(GTK_APP_CHOOSER(open_with_data->app_chooser_dialog));
 
-		g_signal_connect(G_OBJECT(widget), "application-selected", G_CALLBACK(open_with_application_selected_cb), open_with_data);
-		g_signal_connect(G_OBJECT(widget), "application-activated", G_CALLBACK(open_with_application_activated_cb), open_with_data);
-		g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "response", G_CALLBACK(open_with_response_cb), open_with_data);
-		g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "close", G_CALLBACK(open_with_close), open_with_data);
+			g_signal_connect(G_OBJECT(widget), "application-selected", G_CALLBACK(open_with_application_selected_cb), open_with_data);
+			g_signal_connect(G_OBJECT(widget), "application-activated", G_CALLBACK(open_with_application_activated_cb), open_with_data);
+			g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "response", G_CALLBACK(open_with_response_cb), open_with_data);
+			g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "close", G_CALLBACK(open_with_close), open_with_data);
 
-		gtk_widget_show(open_with_data->app_chooser_dialog);
+			gtk_widget_show(open_with_data->app_chooser_dialog);
+			}
 		}
 }
 
@@ -1997,7 +2049,6 @@ struct RenameWindow
 	GenericDialog *gd;
 	LayoutWindow *lw;
 
-	GtkWidget *button_ok;
 	GtkWidget *window_name_entry;
 };
 
@@ -2005,9 +2056,6 @@ struct DeleteWindow
 {
 	GenericDialog *gd;
 	LayoutWindow *lw;
-
-	GtkWidget *button_ok;
-	GtkWidget *group;
 };
 
 static gint layout_window_menu_list_sort_cb(gconstpointer a, gconstpointer b)
@@ -2020,7 +2068,6 @@ static gint layout_window_menu_list_sort_cb(gconstpointer a, gconstpointer b)
 
 static GList *layout_window_menu_list()
 {
-	WindowNames *wn;
 	DIR *dp;
 	struct dirent *dir;
 
@@ -2041,12 +2088,11 @@ static GList *layout_window_menu_list()
 		if (g_str_has_suffix(name_file, ".xml"))
 			{
 			g_autofree gchar *name_utf8 = path_to_utf8(name_file);
-			gchar *name_base = g_strndup(name_utf8, strlen(name_utf8) - 4);
 
-			wn  = g_new0(WindowNames, 1);
-			wn->displayed = layout_window_is_displayed(name_base);
-			wn->name = name_base;
+			auto *wn  = g_new0(WindowNames, 1);
+			wn->name = g_strndup(name_utf8, strlen(name_utf8) - 4);
 			wn->path = g_build_filename(pathl, name_utf8, NULL);
+
 			list = g_list_prepend(list, wn);
 			}
 		}
@@ -2099,10 +2145,7 @@ static void layout_menu_new_window_update(LayoutWindow *lw)
 		auto *wn = static_cast<WindowNames *>(work->data);
 		GtkWidget *item = menu_item_add_simple(sub_menu, wn->name,
 		                                       G_CALLBACK(layout_menu_new_window_cb), GINT_TO_POINTER(n));
-		if (wn->displayed)
-			{
-			gtk_widget_set_sensitive(item, FALSE);
-			}
+		gtk_widget_set_sensitive(item, !layout_window_is_displayed(wn->name));
 		}
 }
 
@@ -2114,10 +2157,8 @@ static void window_rename_cancel_cb(GenericDialog *, gpointer data)
 	g_free(rw);
 }
 
-static void window_rename_ok(GenericDialog *, gpointer data)
+static void window_rename_ok(RenameWindow *rw)
 {
-	auto rw = static_cast<RenameWindow *>(data);
-
 	g_autolist(WindowNames) list = layout_window_menu_list();
 	const gchar *new_id = gq_gtk_entry_get_text(GTK_ENTRY(rw->window_name_entry));
 
@@ -2154,18 +2195,11 @@ static void window_rename_ok(GenericDialog *, gpointer data)
 	g_free(rw);
 }
 
-static void window_rename_ok_cb(GenericDialog *gd, gpointer data)
+static void window_rename_ok_cb(GenericDialog *, gpointer data)
 {
 	auto rw = static_cast<RenameWindow *>(data);
 
-	window_rename_ok(gd, rw);
-}
-
-static void window_rename_entry_activate_cb(GenericDialog *gd, gpointer data)
-{
-	auto rw = static_cast<RenameWindow *>(data);
-
-	window_rename_ok(gd, rw);
+	window_rename_ok(rw);
 }
 
 static void window_delete_cancel_cb(GenericDialog *, gpointer data)
@@ -2334,8 +2368,8 @@ static void layout_menu_window_rename_cb(GtkWidget *, gpointer data)
 	rw->lw = lw;
 
 	rw->gd = generic_dialog_new(_("Rename window"), "rename_window", nullptr, FALSE, window_rename_cancel_cb, rw);
-	rw->button_ok = generic_dialog_add_button(rw->gd, GQ_ICON_OK, _("OK"), window_rename_ok_cb, TRUE);
 
+	generic_dialog_add_button(rw->gd, GQ_ICON_OK, _("OK"), window_rename_ok_cb, TRUE);
 	generic_dialog_add_message(rw->gd, nullptr, _("rename window"), nullptr, FALSE);
 
 	hbox = pref_box_new(rw->gd->vbox, FALSE, GTK_ORIENTATION_HORIZONTAL, 0);
@@ -2350,7 +2384,7 @@ static void layout_menu_window_rename_cb(GtkWidget *, gpointer data)
 	gq_gtk_box_pack_start(GTK_BOX(hbox), rw->window_name_entry, TRUE, TRUE, 0);
 	gtk_widget_grab_focus(rw->window_name_entry);
 	gtk_widget_show(rw->window_name_entry);
-	g_signal_connect(rw->window_name_entry, "activate", G_CALLBACK(window_rename_entry_activate_cb), rw);
+	g_signal_connect_swapped(rw->window_name_entry, "activate", G_CALLBACK(window_rename_ok), rw);
 
 	gtk_widget_show(rw->gd->dialog);
 }
@@ -2365,16 +2399,16 @@ static void layout_menu_window_delete_cb(GtkWidget *, gpointer data)
 	dw->lw = lw;
 
 	dw->gd = generic_dialog_new(_("Delete window"), "delete_window", nullptr, TRUE, window_delete_cancel_cb, dw);
-	dw->button_ok = generic_dialog_add_button(dw->gd, GQ_ICON_OK, _("OK"), window_delete_ok_cb, TRUE);
 
+	generic_dialog_add_button(dw->gd, GQ_ICON_OK, _("OK"), window_delete_ok_cb, TRUE);
 	generic_dialog_add_message(dw->gd, nullptr, _("Delete window layout"), nullptr, FALSE);
 
 	hbox = pref_box_new(dw->gd->vbox, FALSE, GTK_ORIENTATION_HORIZONTAL, 0);
 	pref_spacer(hbox, PREF_PAD_INDENT);
-	dw->group = pref_box_new(hbox, TRUE, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 
-	hbox = pref_box_new(dw->group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	pref_label_new(hbox, (lw->options.id));
+	GtkWidget *group = pref_box_new(hbox, TRUE, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
+	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
+	pref_label_new(hbox, lw->options.id);
 
 	gtk_widget_show(dw->gd->dialog);
 }
@@ -3036,11 +3070,11 @@ static gboolean layout_editors_reload_idle_cb(gpointer user_data)
 	/* The toolbars need to be regenerated in case they contain a plugin */
 	LayoutWindow *lw = get_current_layout();
 
-	toolbar_select_new(lw, TOOLBAR_MAIN);
-	toolbar_apply(TOOLBAR_MAIN);
-
-	toolbar_select_new(lw, TOOLBAR_STATUS);
-	toolbar_apply(TOOLBAR_STATUS);
+	for (gint i = 0; i < TOOLBAR_COUNT; i++)
+		{
+		toolbar_select_new(lw, static_cast<ToolbarType>(i));
+		toolbar_apply(static_cast<ToolbarType>(i));
+		}
 
 	layout_editors->reload_idle_id = -1;
 	return G_SOURCE_REMOVE;
@@ -3312,20 +3346,6 @@ void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type)
 		return;
 		}
 
-	LayoutWindow *lw_first = layout_window_first();
-	if (lw_first && lw_first->toolbar_actions[type])
-		{
-		GList *work_action = lw_first->toolbar_actions[type];
-		while (work_action)
-			{
-			auto action = static_cast<gchar *>(work_action->data);
-			work_action = work_action->next;
-			layout_toolbar_add(lw, type, action); // TODO May change lw_first->toolbar_actions[type]?
-			}
-
-		return;
-		}
-
 	switch (type)
 		{
 		case TOOLBAR_MAIN:
@@ -3354,31 +3374,16 @@ void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type)
 }
 
 
-
 void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, GString *outstr, gint indent)
 {
-	const gchar *name = nullptr;
-	GList *work = lw->toolbar_actions[type];
-
-	switch (type)
-		{
-		case TOOLBAR_MAIN:
-			name = "toolbar";
-			break;
-		case TOOLBAR_STATUS:
-			name = "statusbar";
-			break;
-		default:
-			break;
-		}
+	const gchar *name = toolbar_type_config_name(type);
 
 	WRITE_NL(); WRITE_FORMAT_STRING("<%s>", name);
 	indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
-	while (work)
+	for (GList *work = lw->toolbar_actions[type]; work; work = work->next)
 		{
 		auto action = static_cast<gchar *>(work->data);
-		work = work->next;
 		WRITE_NL(); WRITE_STRING("<toolitem ");
 		write_char_option(outstr, "action", action);
 		WRITE_STRING("/>");

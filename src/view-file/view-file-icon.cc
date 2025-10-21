@@ -35,12 +35,12 @@
 #include "filedata.h"
 #include "intl.h"
 #include "layout-image.h"
+#include "layout-util.h"
 #include "main-defines.h"
 #include "misc.h"
 #include "options.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
-#include "ui-misc.h"
 #include "ui-tree-edit.h"
 #include "utilops.h"
 #include "view-file.h"
@@ -1191,7 +1191,7 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 		switch (bevent->button)
 			{
-			case MOUSE_BUTTON_LEFT:
+			case GDK_BUTTON_PRIMARY:
 				if (!gtk_widget_has_focus(vf->listview))
 					{
 					gtk_widget_grab_focus(vf->listview);
@@ -1210,7 +1210,7 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 						}
 					}
 				break;
-			case MOUSE_BUTTON_RIGHT:
+			case GDK_BUTTON_SECONDARY:
 				vf->popup = vf_pop_menu(vf);
 				gtk_menu_popup_at_pointer(GTK_MENU(vf->popup), nullptr);
 				break;
@@ -1230,7 +1230,7 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	tip_schedule(vf);
 
-	if (defined_mouse_buttons(bevent, vf->layout))
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent))
 		{
 		return TRUE;
 		}
@@ -1251,7 +1251,7 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	switch (bevent->button)
 		{
-		case MOUSE_BUTTON_LEFT:
+		case GDK_BUTTON_PRIMARY:
 			{
 			vficon_set_focus(vf, fd);
 
@@ -1285,7 +1285,7 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 				}
 			}
 			break;
-		case MOUSE_BUTTON_MIDDLE:
+		case GDK_BUTTON_MIDDLE:
 			{
 			vficon_select_util(vf, fd, !(fd->selected & SELECTION_SELECTED));
 			}

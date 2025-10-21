@@ -39,9 +39,6 @@
 #include "layout.h"
 #include "main-defines.h"
 #include "misc.h"
-#include "options.h"
-#include "typedefs.h"
-#include "utilops.h"
 
 /*
  *-----------------------------------------------------------------------------
@@ -1375,47 +1372,6 @@ std::vector<ActionItem> get_action_items()
 		}
 
 	return list_unique;
-}
-
-bool defined_mouse_buttons(GdkEventButton *event, gpointer data)
-{
-	bool ret = false;
-
-	const auto handle_button = [data](const gchar *action_name)
-	{
-		if (!action_name) return false;
-
-		auto *lw = static_cast<LayoutWindow *>(data);
-
-		if (g_strstr_len(action_name, -1, ".desktop") != nullptr)
-			{
-			file_util_start_editor_from_filelist(action_name, layout_selection_list(lw), layout_get_path(lw), lw->window);
-			}
-		else
-			{
-			GtkAction *action = gq_gtk_action_group_get_action(lw->action_group, action_name);
-			if (action)
-				{
-				gq_gtk_action_activate(action);
-				}
-			}
-
-		return true;
-	};
-
-	switch (event->button)
-		{
-		case MOUSE_BUTTON_8:
-			ret = handle_button(options->mouse_button_8);
-			break;
-		case MOUSE_BUTTON_9:
-			ret = handle_button(options->mouse_button_9);
-			break;
-		default:
-			break;
-		}
-
-	return ret;
 }
 
 GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gchar *icon_name, gint size, GtkIconLookupFlags flags)
