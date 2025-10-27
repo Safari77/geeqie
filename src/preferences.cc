@@ -72,7 +72,6 @@
 #include "third-party/zonedetect.h"
 #include "toolbar.h"
 #include "trash.h"
-#include "typedefs.h"
 #include "ui-fileops.h"
 #include "ui-misc.h"
 #include "ui-tabcomp.h"
@@ -172,17 +171,6 @@ enum {
 	FILETYPES_COLUMN_SIDECAR,
 	FILETYPES_COLUMN_COUNT
 };
-
-const gchar *format_class_list[] = {
-	N_("Unknown"),
-	N_("Image"),
-	N_("RAW Image"),
-	N_("Metadata"),
-	N_("Video"),
-	N_("Collection"),
-	N_("Document"),
-	N_("Archive")
-	};
 
 /* config memory values */
 static ConfOptions *c_options = nullptr;
@@ -1366,18 +1354,11 @@ static void filter_default_ok_cb(GenericDialog *gd, gpointer)
 	g_idle_add(filter_default_ok_scroll, gd->data);
 }
 
-static void dummy_cancel_cb(GenericDialog *, gpointer)
-{
-	/* no op, only so cancel button appears */
-}
-
 static void filter_default_cb(GtkWidget *widget, gpointer data)
 {
-	GenericDialog *gd;
-
-	gd = generic_dialog_new(_("Reset filters"),
-				"reset_filter", widget, TRUE,
-				dummy_cancel_cb, data);
+	GenericDialog *gd = generic_dialog_new(_("Reset filters"), "reset_filter",
+	                                       widget, TRUE,
+	                                       generic_dialog_dummy_cb, data);
 	generic_dialog_add_message(gd, GQ_ICON_DIALOG_QUESTION, _("Reset filters"),
 				   _("This will reset the file filters to the defaults.\nContinue?"), TRUE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", filter_default_ok_cb, TRUE);
@@ -1404,20 +1385,20 @@ static void safe_delete_clear_ok_cb(GenericDialog *, gpointer)
 
 static void safe_delete_clear_cb(GtkWidget *widget, gpointer)
 {
-	GenericDialog *gd;
-	GtkWidget *entry;
-	gd = generic_dialog_new(_("Clear trash"),
-				"clear_trash", widget, TRUE,
-				dummy_cancel_cb, nullptr);
+	GenericDialog *gd = generic_dialog_new(_("Clear trash"), "clear_trash",
+	                                       widget, TRUE,
+	                                       generic_dialog_dummy_cb, nullptr);
 	generic_dialog_add_message(gd, GQ_ICON_DIALOG_QUESTION, _("Clear trash"),
 				    _("This will remove the trash contents."), FALSE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", safe_delete_clear_ok_cb, TRUE);
-	entry = gtk_entry_new();
+
+	GtkWidget *entry = gtk_entry_new();
 	gtk_widget_set_can_focus(entry, FALSE);
 	gtk_editable_set_editable(GTK_EDITABLE(entry), FALSE);
 	if (options->file_ops.safe_delete_path) gq_gtk_entry_set_text(GTK_ENTRY(entry), options->file_ops.safe_delete_path);
 	gq_gtk_box_pack_start(GTK_BOX(gd->vbox), entry, FALSE, FALSE, 0);
 	gtk_widget_show(entry);
+
 	gtk_widget_show(gd->dialog);
 }
 
@@ -1444,11 +1425,9 @@ static void image_overlay_default_template_ok_cb(GenericDialog *, gpointer data)
 
 static void image_overlay_default_template_cb(GtkWidget *widget, gpointer data)
 {
-	GenericDialog *gd;
-
-	gd = generic_dialog_new(_("Reset image overlay template string"),
-				"reset_image_overlay_template_string", widget, TRUE,
-				dummy_cancel_cb, data);
+	GenericDialog *gd = generic_dialog_new(_("Reset image overlay template string"),
+	                                       "reset_image_overlay_template_string", widget, TRUE,
+	                                       generic_dialog_dummy_cb, data);
 	generic_dialog_add_message(gd, GQ_ICON_DIALOG_QUESTION, _("Reset image overlay template string"),
 				   _("This will reset the image overlay template string to the default.\nContinue?"), TRUE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", image_overlay_default_template_ok_cb, TRUE);
@@ -1838,15 +1817,15 @@ static void cache_local_cb(GtkWidget *widget, gpointer)
 		}
 }
 
-static void help_search_engine_entry_icon_cb(GtkEntry *, GtkEntryIconPosition pos, GdkEvent *, gpointer userdata)
+static void help_search_engine_entry_icon_cb(GtkEntry *entry, GtkEntryIconPosition pos, GdkEvent *, gpointer)
 {
 	if (pos == GTK_ENTRY_ICON_PRIMARY)
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), HELP_SEARCH_ENGINE);
+		gq_gtk_entry_set_text(entry, HELP_SEARCH_ENGINE);
 		}
 	else
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(userdata), "");
+		gq_gtk_entry_set_text(entry, "");
 		}
 }
 
@@ -2169,8 +2148,7 @@ static void config_tab_general(GtkWidget *notebook)
 	gtk_entry_set_icon_tooltip_text (GTK_ENTRY(help_search_engine_entry),
 						GTK_ENTRY_ICON_PRIMARY, _("Default"));
 	g_signal_connect(GTK_ENTRY(help_search_engine_entry), "icon-press",
-						G_CALLBACK(help_search_engine_entry_icon_cb),
-						help_search_engine_entry);
+	                 G_CALLBACK(help_search_engine_entry_icon_cb), nullptr);
 }
 
 /* image tab */
@@ -2617,7 +2595,6 @@ static void config_tab_files(GtkWidget *notebook)
 	GtkWidget *scrolled;
 	GtkWidget *filter_view;
 	GtkCellRenderer *renderer;
-	GtkTreeSelection *selection;
 	GtkTreeViewColumn *column;
 
 	vbox = scrolled_notebook_page(notebook, _("File Filters"));
@@ -2659,8 +2636,9 @@ static void config_tab_files(GtkWidget *notebook)
 	filter_store = gtk_list_store_new(1, G_TYPE_POINTER);
 	filter_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(filter_store));
 	g_object_unref(filter_store);
-	selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(filter_view));
-	gtk_tree_selection_set_mode(GTK_TREE_SELECTION(selection), GTK_SELECTION_SINGLE);
+
+	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(filter_view));
+	gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
 
 	gtk_tree_view_set_enable_search(GTK_TREE_VIEW(filter_view), FALSE);
 
@@ -3588,7 +3566,6 @@ static void config_tab_accelerators(GtkWidget *notebook)
 	GtkWidget *scrolled;
 	GtkWidget *accel_view;
 	GtkCellRenderer *renderer;
-	GtkTreeSelection *selection;
 	GtkTreeViewColumn *column;
 
 	vbox = scrolled_notebook_page(notebook, _("Keyboard"));
@@ -3605,8 +3582,9 @@ static void config_tab_accelerators(GtkWidget *notebook)
 
 	accel_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(accel_store));
 	g_object_unref(accel_store);
-	selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(accel_view));
-	gtk_tree_selection_set_mode(GTK_TREE_SELECTION(selection), GTK_SELECTION_MULTIPLE);
+
+	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(accel_view));
+	gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
 
 	gtk_tree_view_set_enable_search(GTK_TREE_VIEW(accel_view), FALSE);
 

@@ -17,6 +17,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "exif.h"
+
 #include <config.h>
 
 #ifdef __linux__
@@ -37,16 +39,15 @@
 
 #include "cache.h"
 #include "color-man-heif.h"
-#include "exif.h"
 #include "filecache.h"
 #include "filedata.h"
+#include "filefilter.h"
 #include "glua.h"
 #include "intl.h"
 #include "jpeg-parser.h"
 #include "main-defines.h"
 #include "misc.h"
 #include "third-party/zonedetect.h"
-#include "typedefs.h"
 #include "ui-fileops.h"
 
 struct ExifData;

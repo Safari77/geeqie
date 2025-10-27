@@ -19,43 +19,27 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef PAN_VIEW_PAN_VIEW_FILTER_H
-#define PAN_VIEW_PAN_VIEW_FILTER_H
+#ifndef SORT_TYPE_H
+#define SORT_TYPE_H
 
 #include <glib.h>
-#include <gtk/gtk.h>
 
-#include "filefilter.h"
-
-struct PanWindow;
-
-struct PanViewFilterUi
-{
-	GtkWidget *filter_box;
-	GtkWidget *filter_entry;
-	GtkWidget *filter_label;
-	GtkWidget *filter_button;
-	GtkWidget *filter_button_arrow;
-	GtkWidget *filter_kw_hbox;
-	GtkWidget *filter_check_buttons[FILE_FORMAT_CLASSES];
-	GtkWidget *filter_mode_combo;
-	GList *filter_elements;  /**< List of #PanViewFilterElement. */
-	gint filter_classes;
+enum SortType : gint {
+	SORT_NONE,
+	SORT_NAME,
+	SORT_SIZE,
+	SORT_TIME,
+	SORT_CTIME,
+	SORT_PATH,
+	SORT_NUMBER,
+	SORT_EXIFTIME,
+	SORT_EXIFTIMEDIGITIZED,
+	SORT_RATING,
+	SORT_CLASS
 };
 
-/**
- * @headerfile pan_filter_ui_new
- * Creates a new #PanViewFilterUi instance and returns it.
- */
-PanViewFilterUi *pan_filter_ui_new(PanWindow *pw);
-
-/**
- * @headerfile pan_filter_ui_destroy
- * Destroys the specified #PanViewFilterUi.
- */
-void pan_filter_ui_destroy(PanViewFilterUi *ui);
-
-gboolean pan_filter_fd_list(GList **fd_list, GList *filter_elements, gint filter_classes);
+gchar *sort_type_get_text(SortType method);
+bool sort_type_requires_metadata(SortType method);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
