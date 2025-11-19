@@ -65,9 +65,9 @@ constexpr gint THUMB_SIZE = 100;
 constexpr int DIRECTION_SIZE = 300;
 
 // PRIVACY PROTECTION: Cryptographic hash-based offset
-constexpr gdouble PRIVACY_OFFSET_KM = 1.5;            // Maximum random offset in km
+constexpr gdouble PRIVACY_OFFSET_KM = 1.5;            // Maximum random offset in km at Reference Zoom
 constexpr gdouble PRIVACY_OFFSET_MIN_KM = 0.2;        // Always keep at least 200m offset
-constexpr gint REFERENCE_Z = 14;                      // Zoom level where offset is 1.0 km
+constexpr gint REFERENCE_Z = 14;                      // Zoom level where offset is 1.5 km
 constexpr gdouble KM_PER_DEGREE_LAT = 111.32;
 
 // 5000 Tiles in RAM
@@ -142,7 +142,7 @@ static gchar *get_privacy_salt()
 	{
 		static const unsigned char base32chars[] = "abcdefghijklmnopqrstuvwxyz234567";
 		// 2. Generate new salt (High Entropy)
-		guint8 rnd_data[65];
+		guint8 rnd_data[65] = {0};
 		ssize_t ret = getrandom(rnd_data, sizeof(rnd_data), 0);
 		if (ret != sizeof(rnd_data)) {
 			if (ret == -1) {
@@ -203,20 +203,27 @@ void add_privacy_offset_shake256(PaneGPSData *pgd, gdouble *latitude, gdouble *l
 	shake_out(&ctx, &rnd_angle, sizeof(rnd_angle));
 	gdouble angle = ((gdouble)rnd_angle / (gdouble)UINT64_MAX) * 2.0 * G_PI;
 	shake_out(&ctx, &rnd_dist, sizeof(rnd_dist));
-	gint zoom;
+	gint zoom = REFERENCE_Z;
 	g_object_get(G_OBJECT(pgd->gps_view), "zoom-level", &zoom, NULL);
 	gdouble zoom_scale = pow(2.0, (gdouble)REFERENCE_Z - zoom);
 	gdouble max_dist = PRIVACY_OFFSET_KM * zoom_scale;
 	if (max_dist < PRIVACY_OFFSET_MIN_KM) max_dist = PRIVACY_OFFSET_MIN_KM;
-	gdouble distance_km = ((gdouble)rnd_dist / (gdouble)UINT64_MAX) * max_dist;
+	// Use sqrt() on the random fraction. Without sqrt, points cluster near the center
+	// because the area of outer rings is larger than inner rings.
+	gdouble rnd_fraction = (gdouble)rnd_dist / (gdouble)UINT64_MAX;
+	gdouble distance_km = sqrt(rnd_fraction) * max_dist;
+	fprintf(stderr, "zoom=%u max_dist=%g fraction=%g dist=%g\n", zoom, max_dist, rnd_fraction, distance_km);
 	// Convert to degrees
 	gdouble offset_degrees = distance_km / KM_PER_DEGREE_LAT;
 	// Apply offset
 	*latitude += offset_degrees * cos(angle);
+	*latitude = CLAMP(*latitude, -90.0, 90.0);
 	// Correct Longitude (Clamp latitude to avoid division by zero at poles)
 	gdouble safe_lat = CLAMP(*latitude, -89.0, 89.0);
 	gdouble lat_radians = safe_lat * G_PI / 180.0;
 	*longitude += offset_degrees * sin(angle) / cos(lat_radians);
+	while (*longitude > 180.0) *longitude -= 360.0;
+	while (*longitude < -180.0) *longitude += 360.0;
 }
 
 /*
@@ -723,7 +730,7 @@ void bar_pane_gps_set_map_source(PaneGPSData *pgd, const gchar *map_id)
 		champlain_map_source_chain_push(source_chain, memory_cache);
 
 		/* 6. Assign to view - the view takes ownership, DON'T unref the chain */
-		champlain_view_set_map_source(CHAMPLAIN_VIEW(pgd->gps_view), 
+		champlain_view_set_map_source(CHAMPLAIN_VIEW(pgd->gps_view),
 		                               CHAMPLAIN_MAP_SOURCE(source_chain));
 	}
 
