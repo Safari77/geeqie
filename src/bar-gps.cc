@@ -70,6 +70,9 @@ constexpr gdouble PRIVACY_OFFSET_MIN_KM = 0.2;        // Always keep at least 20
 constexpr gint REFERENCE_Z = 14;                      // Zoom level where offset is 1.0 km
 constexpr gdouble KM_PER_DEGREE_LAT = 111.32;
 
+// 5000 Tiles in RAM
+constexpr guint CHAMPLAIN_MEMORY_CACHE_LIMIT = 5000;
+
 #define MARKER_COLOUR 0x00, 0x00, 0xff, 0xff
 #define TEXT_COLOUR 0x00, 0x00, 0x00, 0xff
 #define THUMB_COLOUR 0xff, 0xff, 0xff, 0xff
@@ -691,16 +694,38 @@ void bar_pane_gps_update(PaneGPSData *pgd)
 
 void bar_pane_gps_set_map_source(PaneGPSData *pgd, const gchar *map_id)
 {
-	ChamplainMapSource *map_source;
 	ChamplainMapSourceFactory *map_factory;
+	ChamplainMapSource *network_source;
+	ChamplainMapSource *memory_cache;
+	ChamplainMapSourceChain *source_chain;
+	ChamplainRenderer *renderer;
 
+	/* 1. Create the Factory and get the network source */
 	map_factory = champlain_map_source_factory_dup_default();
-	map_source = champlain_map_source_factory_create(map_factory, map_id);
+	network_source = champlain_map_source_factory_create(map_factory, map_id);
 
-	if (map_source != nullptr)
-		{
-		g_object_set(G_OBJECT(pgd->gps_view), "map-source", map_source, NULL);
-		}
+	if (network_source != nullptr)
+	{
+		/* 2. Create the renderer */
+		renderer = CHAMPLAIN_RENDERER(champlain_image_renderer_new());
+
+		/* 3. Create memory cache with custom size */
+		memory_cache = CHAMPLAIN_MAP_SOURCE(champlain_memory_cache_new_full(
+			CHAMPLAIN_MEMORY_CACHE_LIMIT,
+			renderer
+		));
+
+		/* 4. Create the chain */
+		source_chain = champlain_map_source_chain_new();
+
+		/* 5. Push in correct order */
+		champlain_map_source_chain_push(source_chain, network_source);
+		champlain_map_source_chain_push(source_chain, memory_cache);
+
+		/* 6. Assign to view - the view takes ownership, DON'T unref the chain */
+		champlain_view_set_map_source(CHAMPLAIN_VIEW(pgd->gps_view), 
+		                               CHAMPLAIN_MAP_SOURCE(source_chain));
+	}
 
 	g_object_unref(map_factory);
 }
