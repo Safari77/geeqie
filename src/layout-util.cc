@@ -3656,9 +3656,11 @@ static void layout_util_sync_views(LayoutWindow *lw)
 	gq_gtk_action_set_sensitive(action, lw->split_mode != SPLIT_NONE);
 
 	// @todo `which` is deprecated, use command -v
-	gboolean is_write_rotation = !runcmd("which exiftran >/dev/null 2>&1")
-	                          && !runcmd("which mogrify >/dev/null 2>&1")
-	                          && !options->metadata.write_orientation;
+	gboolean is_write_rotation = !options->metadata.write_orientation;
+#if 0
+				  && !runcmd("which exiftran >/dev/null 2>&1")
+	                          && !runcmd("which mogrify >/dev/null 2>&1");
+#endif
 	action = gq_gtk_action_group_get_action(lw->action_group, "WriteRotation");
 	gq_gtk_action_set_sensitive(action, is_write_rotation);
 	action = gq_gtk_action_group_get_action(lw->action_group, "WriteRotationKeepDate");

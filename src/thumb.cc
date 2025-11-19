@@ -67,12 +67,12 @@ static gboolean thumb_loader_save_thumbnail(ThumbLoader *tl, gboolean mark_failu
 
 	if (mark_failure)
 		{
-		FILE *f = fopen(pathl, "w");
+		FILE *f = fopen(pathl, "wbx");
 
 		DEBUG_1("Marking thumb failure: %s", cache_path);
-		if (f)
+		if (f || (errno == EEXIST))
 			{
-			fclose(f);
+			if (f) fclose(f);
 			success = TRUE;
 			}
 		}

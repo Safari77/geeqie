@@ -115,12 +115,12 @@ const gchar *FileData::text_from_time(time_t t)
 	static gchar *ret = nullptr;
 	gchar buf[128];
 	gint buflen;
-	struct tm *btime;
+	struct tm btime;
 
-	btime = localtime(&t);
+	localtime_r(&t, &btime);
 
 	/* the %x warning about 2 digit years is not an error */
-	buflen = strftime(buf, sizeof(buf), "%x %X", btime);
+	buflen = strftime(buf, sizeof(buf), "%F %X", &btime);
 	if (buflen < 1) return "";
 
 	g_free(ret);

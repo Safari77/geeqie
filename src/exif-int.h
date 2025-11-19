@@ -54,13 +54,6 @@ extern ExifFormatAttrib ExifFormatList[]; /**< the list of known tag data format
  *-----------------------------------------------------------------------------
  */
 
-struct ExifData
-{
-	gchar *path;
-	GList *items;	/**< list of (ExifItem *) */
-	GList *current; /**< for exif_get_next_item */
-};
-
 struct ExifTextList
 {
 	gint value;

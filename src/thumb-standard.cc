@@ -27,6 +27,7 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <errno.h>
 
 #include <glib-object.h>
 
@@ -216,9 +217,13 @@ static gboolean thumb_loader_std_fail_check(ThumbLoaderStd *tl)
 	if (pixbuf)
 		{
 		const gchar *mtime_str;
+		const gchar *size_str;
 
 		mtime_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_MTIME);
-		if (mtime_str && strtol(mtime_str, nullptr, 10) == tl->source_mtime)
+		size_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_SIZE);
+		if (mtime_str && size_str &&
+			strtoll(mtime_str, NULL, 10) == tl->source_mtime &&
+			strtoll(size_str, NULL, 10) == tl->source_size)
 			{
 			result = TRUE;
 			DEBUG_1("thumb fail valid: %s", tl->fd->path);
@@ -238,8 +243,10 @@ static gboolean thumb_loader_std_validate(ThumbLoaderStd *tl, GdkPixbuf *pixbuf)
 	const gchar *valid_uri;
 	const gchar *uri;
 	const gchar *mtime_str;
+	const gchar *size_str;
 	time_t mtime;
 	gint w;
+	off_t fsize;
 	gint h;
 
 	if (!pixbuf) return FALSE;
@@ -254,12 +261,16 @@ static gboolean thumb_loader_std_validate(ThumbLoaderStd *tl, GdkPixbuf *pixbuf)
 
 	uri = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_URI);
 	mtime_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_MTIME);
+	size_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_SIZE);
 
-	if (!mtime_str || !uri || !valid_uri) return FALSE;
+	if (!mtime_str || !size_str || !uri || !valid_uri) return FALSE;
 	if (strcmp(uri, valid_uri) != 0) return FALSE;
 
-	mtime = strtol(mtime_str, nullptr, 10);
-	if (tl->source_mtime != mtime) return FALSE;
+	errno = 0;
+	mtime = strtoll(mtime_str, NULL, 10);
+	if (errno || tl->source_mtime != mtime) return FALSE;
+	fsize = strtoll(size_str, NULL, 10);
+	if (errno || tl->source_size != fsize) return FALSE;
 
 	return TRUE;
 }
@@ -314,7 +325,6 @@ static void thumb_loader_std_save(ThumbLoaderStd *tl, GdkPixbuf *pixbuf)
 		}
 
 	DEBUG_1("thumb saving: %s", tl->fd->path);
-	DEBUG_1("       saved: %s", tl->thumb_path);
 
 	/* save thumb, using a temp file then renaming into place */
 	g_autofree gchar *tmp_path = unique_filename(tl->thumb_path, ".tmp", "_", 2);
@@ -327,22 +337,21 @@ static void thumb_loader_std_save(ThumbLoaderStd *tl, GdkPixbuf *pixbuf)
 
 		g_autofree gchar *mark_app = g_strdup_printf("%s %s", GQ_APPNAME, VERSION);
 		const std::string mark_mtime = std::to_string(static_cast<unsigned long long>(tl->source_mtime));
+		const std::string mark_size = std::to_string(static_cast<unsigned long long>(tl->source_size));
 		g_autofree gchar *pathl = path_from_utf8(tmp_path);
 		success = gdk_pixbuf_save(pixbuf, pathl, "png", nullptr,
 		                          THUMB_MARKER_URI, mark_uri,
 		                          THUMB_MARKER_MTIME, mark_mtime.c_str(),
+					  THUMB_MARKER_SIZE, mark_size.c_str(),
 		                          THUMB_MARKER_APP, mark_app,
 		                          NULL);
 		if (success)
 			{
 			chmod(pathl, (tl->cache_local) ? tl->source_mode : S_IRUSR | S_IWUSR);
 			success = rename_file(tmp_path, tl->thumb_path);
-			}
-
-		if (!success)
-			{
-			DEBUG_1("thumb save failed: %s", tl->fd->path);
-			DEBUG_1("            thumb: %s", tl->thumb_path);
+			DEBUG_1("thumb saved:       %s", tl->thumb_path);
+			} else {
+			DEBUG_1("thumb save failed: %s", tl->thumb_path);
 			}
 		}
 
@@ -818,10 +827,12 @@ static void thumb_loader_std_thumb_file_validate_done_cb(ThumbLoaderStd *, gpoin
 		{
 		const gchar *uri;
 		const gchar *mtime_str;
+		const gchar *size_str;
 
 		uri = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_URI);
 		mtime_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_MTIME);
-		if (uri && mtime_str)
+		size_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_SIZE);
+		if (uri && mtime_str && size_str)
 			{
 			if (strncmp(uri, "file:", strlen("file:")) == 0)
 				{
@@ -829,7 +840,8 @@ static void thumb_loader_std_thumb_file_validate_done_cb(ThumbLoaderStd *, gpoin
 
 				g_autofree gchar *target = g_filename_from_uri(uri, nullptr, nullptr);
 				if (stat(target, &st) == 0 &&
-				    st.st_mtime == strtol(mtime_str, nullptr, 10))
+				    st.st_mtime == strtol(mtime_str, nullptr, 10) &&
+				    st.st_size == strtoll(size_str, nullptr, 10))
 					{
 					valid = TRUE;
 					}
@@ -979,11 +991,13 @@ static void thumb_std_maint_move_validate_cb(const gchar *, gboolean, gpointer d
 		{
 		const gchar *uri;
 		const gchar *mtime_str;
+		const gchar *size_str;
 
 		uri = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_URI);
 		mtime_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_MTIME);
+		size_str = gdk_pixbuf_get_option(pixbuf, THUMB_MARKER_SIZE);
 
-		if (uri && mtime_str && strcmp(uri, tm->source_uri) == 0)
+		if (uri && mtime_str && size_str && strcmp(uri, tm->source_uri) == 0)
 			{
 			/* The validation utility abuses ThumbLoader, and we
 			 * abuse the utility just to load the thumbnail,
@@ -996,6 +1010,7 @@ static void thumb_std_maint_move_validate_cb(const gchar *, gboolean, gpointer d
 			file_data_unref(tm->tl->fd);
 			tm->tl->fd = file_data_new_group(tm->dest);
 			tm->tl->source_mtime = strtol(mtime_str, nullptr, 10);
+			tm->tl->source_size = strtol(size_str, nullptr, 10);
 
 			g_autofree gchar *pathl = path_from_utf8(tm->tl->fd->path);
 			g_free(tm->tl->thumb_uri);

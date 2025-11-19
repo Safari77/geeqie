@@ -813,14 +813,6 @@ void startup_common(GtkApplication *, gpointer)
 	lua_init();
 #endif
 
-	/* setup random seed for random slideshow */
-	srand(time(nullptr));
-
-#if 0
-	/* See later comment; this handler leads to UB. */
-	setup_sigbus_handler();
-#endif
-
 	/* register global notify functions */
 	file_data_register_notify_func(cache_notify_cb, nullptr, NOTIFY_PRIORITY_HIGH);
 	file_data_register_notify_func(thumb_notify_cb, nullptr, NOTIFY_PRIORITY_HIGH);
@@ -910,6 +902,7 @@ void startup_cb(GtkApplication *app, gpointer)
 	if (gq_disable_clutter && (gq_disable_clutter[0] == 'y' || gq_disable_clutter[0] == 'Y'))
 		{
 		options->disable_gpu = TRUE;
+		DEBUG_1("GPU disabled due to $GQ_DISABLE_CLUTTER setting, GPS MAP will not work");
 		}
 
 	/* restore session from the config file */
@@ -1017,6 +1010,8 @@ gint main(gint argc, gchar *argv[])
 {
 	gint status;
 	GtkApplication *app;
+
+	tzset();
 	// We handle unit tests here because it takes the place of running the
 	// rest of the app.
 	if (search_command_line_for_unit_test_option(argc, argv))

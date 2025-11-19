@@ -1546,7 +1546,7 @@ gboolean rt_queue_schedule_next_draw(RendererTiles *rt, gboolean force_set)
 	if (!pr->loading)
 		{
 		/* 2pass prio */
-		DEBUG_2("redraw priority: 2pass");
+		DEBUG_4("redraw priority: 2pass");
 		rt->draw_idle_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, rt_queue_draw_idle_cb, rt, nullptr);
 		return G_SOURCE_REMOVE;
 		}

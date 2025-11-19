@@ -207,15 +207,16 @@ static gchar *exif_build_formatted_DateTime(ExifData *exif, const gchar *text_ke
 		}
 
 	/* Convert the stuff into a tm struct */
-	std::tm tm{}; /* Uh, strptime could let garbage in tm! */
-	if (strptime(text, "%Y:%m:%d %H:%M:%S", &tm))
+	std::tm tm{};
+	if (text && strptime(text, "%Y:%m:%d %H:%M:%S", &tm))
 		{
-		gchar buf[128];
-		const gint buflen = strftime(buf, sizeof(buf), "%x %X", &tm);
+		char buf[128];
+		size_t buflen = strftime(buf, sizeof(buf), "%F %X", &tm);
 		if (buflen > 0)
 			{
 			g_autoptr(GError) error = nullptr;
 			g_autofree gchar *tmp = g_locale_to_utf8(buf, buflen, nullptr, nullptr, &error);
+			DEBUG_2("exif_build_formatted_DateTime Exif.Image.Datetime [%s] to [%s]\n", text, tmp); 
 			if (error)
 				{
 				log_printf("Error converting locale strftime to UTF-8: %s\n", error->message);
@@ -671,9 +672,12 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 {
 	gchar buf[128];
 	gint buflen;
-	struct tm *tm_local;
-	struct tm tm_utc;
-	time_t stamp;
+	struct tm tm_local{};
+	struct tm tm_utc{};
+	struct tm tm_gmt_res{};
+	struct tm tm_loc_res{};
+	time_t utc_stamp, local_stamp;
+	double utc_offset;
 	gchar *exif_date_time = nullptr;
 	g_autofree gchar *timezone = nullptr;
 	g_autofree gchar *countryname = nullptr;
@@ -681,24 +685,24 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 
 	if (exif_build_tz_data(exif, &exif_date_time, &timezone, &countryname, &countryalpha2))
 		{
-		g_autofree gchar *time_zone_image = g_strconcat("TZ=", timezone, NULL);
-		g_autofree gchar *time_zone_org = g_strconcat("TZ=", getenv("TZ"), NULL);
-		setenv("TZ", "UTC", TRUE);
-
-		memset(&tm_utc, 0, sizeof(tm_utc));
 		if (exif_date_time && strptime(exif_date_time, "%Y:%m:%d:%H:%M:%S", &tm_utc))
 			{
-			stamp = mktime(&tm_utc);	// Convert the struct to a Unix timestamp
-			putenv(time_zone_image);	// Switch to destination time zone
-
-			tm_local = localtime(&stamp);
+			tm_utc.tm_isdst = 0;
+			utc_stamp = mktime(&tm_utc);	// Convert the struct to a Unix timestamp
+			gmtime_r(&utc_stamp, &tm_gmt_res);
+			localtime_r(&utc_stamp, &tm_loc_res);
+			utc_offset = difftime(mktime(&tm_loc_res), mktime(&tm_gmt_res));
+			local_stamp = utc_stamp + lrint(utc_offset);
+			localtime_r(&local_stamp, &tm_local);
 
 			/* Convert to localtime using locale */
-			buflen = strftime(buf, sizeof(buf), "%x %X", tm_local);
+			buflen = strftime(buf, sizeof(buf), "%F %X", &tm_local);
 			if (buflen > 0)
 				{
 				g_autoptr(GError) error = nullptr;
 				g_autofree gchar *tmp = g_locale_to_utf8(buf, buflen, nullptr, nullptr, &error);
+				DEBUG_2("exif_build_formatted_localtime Exif.Image.Datetime [%s] to [%s]\n",
+					   exif_date_time, tmp);
 				if (error)
 					{
 					log_printf("Error converting locale strftime to UTF-8: %s\n", error->message);
@@ -709,8 +713,6 @@ static gchar *exif_build_formatted_localtime(ExifData *exif)
 					}
 				}
 			}
-
-		putenv(time_zone_org);
 		}
 
 	return exif_date_time;

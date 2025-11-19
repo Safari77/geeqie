@@ -191,7 +191,6 @@ GList *collection_list_sort(GList *list, SortType method)
 
 static GList *collection_list_randomize(GList *list)
 {
-	guint random;
 	guint length;
 	guint i;
 	GList *nlist;
@@ -200,13 +199,10 @@ static GList *collection_list_randomize(GList *list)
 	length = g_list_length(list);
 	if (!length) return nullptr;
 
-	srand(static_cast<unsigned int>(time(nullptr))); // Initialize random generator (hasn't to be that much strong)
-
 	for (i = 0; i < length; i++)
 		{
-		random = static_cast<guint>(1.0 * length * rand()/(RAND_MAX + 1.0));
 		olist = g_list_nth(list, i);
-		nlist = g_list_nth(list, random);
+		nlist = g_list_nth(list, g_random_int_range(0, length));
 		std::swap(olist->data, nlist->data);
 		}
 

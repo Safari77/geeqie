@@ -1996,10 +1996,10 @@ static gboolean search_file_next(SearchData *sd)
 
 		if (sd->match_date == SEARCH_MATCH_EQUAL)
 			{
-			struct tm *lt;
+			struct tm lt;
 
-			lt = localtime(&file_date);
-			match = (lt && sd->search_date.is_equal(lt));
+			localtime_r(&file_date, &lt);
+			match = sd->search_date.is_equal(&lt);
 			}
 		else if (sd->match_date == SEARCH_MATCH_UNDER)
 			{
