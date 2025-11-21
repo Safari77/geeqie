@@ -212,11 +212,12 @@ void add_privacy_offset_shake256(PaneGPSData *pgd, gdouble *latitude, gdouble *l
 	// because the area of outer rings is larger than inner rings.
 	gdouble rnd_fraction = (gdouble)rnd_dist / (gdouble)UINT64_MAX;
 	gdouble distance_km = sqrt(rnd_fraction) * max_dist;
-	fprintf(stderr, "zoom=%u max_dist=%g fraction=%g dist=%g\n", zoom, max_dist, rnd_fraction, distance_km);
+	// fprintf(stderr, "zoom=%u max_dist=%g fraction=%g dist=%g\n", zoom, max_dist, rnd_fraction, distance_km);
 	// Convert to degrees
 	gdouble offset_degrees = distance_km / KM_PER_DEGREE_LAT;
 	// Apply offset
 	*latitude += offset_degrees * cos(angle);
+	// Actually Mercator projection ends at 85.05
 	*latitude = CLAMP(*latitude, -90.0, 90.0);
 	// Correct Longitude (Clamp latitude to avoid division by zero at poles)
 	gdouble safe_lat = CLAMP(*latitude, -89.0, 89.0);
