@@ -78,7 +78,7 @@ public:
 		_pos = pos;
 	}
 
-	bool isMemoryMapped() const override
+	[[nodiscard]] bool isMemoryMapped() const override
 	{
 		return true;
 	}

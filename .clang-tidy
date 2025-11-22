@@ -66,5 +66,4 @@ CheckOptions:
   - key:   misc-header-include-cycle.IgnoredFilesList
     value: gio.h;glib-object.h;gtk.h;poppler.h
 
-ExtraArgs: [-Wno-unknown-warning-option, -Wno-unused-lambda-capture, -Wno-unused-but-set-variable]
 WarningsAsErrors: "*"

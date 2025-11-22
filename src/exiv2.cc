@@ -136,7 +136,7 @@ struct ExifData
 
 	virtual guchar *get_jpeg_color_profile(guint *data_len) = 0;
 
-	virtual std::string image_comment() const = 0;
+	[[nodiscard]] virtual std::string image_comment() const = 0;
 
 	virtual void set_image_comment(const std::string& comment) = 0;
 };
@@ -248,7 +248,7 @@ public:
 		return nullptr;
 	}
 
-	std::string image_comment() const override
+	[[nodiscard]] std::string image_comment() const override
 	{
 		return image_.get() ? image_->comment() : "";
 	}
@@ -377,7 +377,7 @@ public:
 		return imageData_->get_jpeg_color_profile(data_len);
 	}
 
-	std::string image_comment() const override
+	[[nodiscard]] std::string image_comment() const override
 	{
 		return imageData_->image_comment();
 	}

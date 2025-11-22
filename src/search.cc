@@ -196,7 +196,7 @@ const SearchDateType search_date_types[] = {
 struct SearchDate
 {
 	void set_date(GtkWidget *date_sel);
-	time_t to_time() const;
+	[[nodiscard]] time_t to_time() const;
 	bool is_equal(const std::tm *lt) const;
 
 private:
