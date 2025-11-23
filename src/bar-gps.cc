@@ -188,7 +188,7 @@ static gchar *get_privacy_salt()
  * - Same location = same offset (consistent UX)
  * - Cryptographically secure (server cannot reverse-engineer)
  */
-void add_privacy_offset_shake256(PaneGPSData *pgd, gdouble *latitude, gdouble *longitude)
+void add_privacy_offset_shake256(gdouble *latitude, gdouble *longitude, gint zoom)
 {
 	gchar *salt = get_privacy_salt();
 
@@ -203,8 +203,7 @@ void add_privacy_offset_shake256(PaneGPSData *pgd, gdouble *latitude, gdouble *l
 	shake_out(&ctx, &rnd_angle, sizeof(rnd_angle));
 	gdouble angle = ((gdouble)rnd_angle / (gdouble)UINT64_MAX) * 2.0 * G_PI;
 	shake_out(&ctx, &rnd_dist, sizeof(rnd_dist));
-	gint zoom = REFERENCE_Z;
-	g_object_get(G_OBJECT(pgd->gps_view), "zoom-level", &zoom, NULL);
+
 	gdouble zoom_scale = pow(2.0, (gdouble)REFERENCE_Z - zoom);
 	gdouble max_dist = PRIVACY_OFFSET_KM * zoom_scale;
 	if (max_dist < PRIVACY_OFFSET_MIN_KM) max_dist = PRIVACY_OFFSET_MIN_KM;
@@ -212,7 +211,8 @@ void add_privacy_offset_shake256(PaneGPSData *pgd, gdouble *latitude, gdouble *l
 	// because the area of outer rings is larger than inner rings.
 	gdouble rnd_fraction = (gdouble)rnd_dist / (gdouble)UINT64_MAX;
 	gdouble distance_km = sqrt(rnd_fraction) * max_dist;
-	// fprintf(stderr, "zoom=%u max_dist=%g fraction=%g dist=%g\n", zoom, max_dist, rnd_fraction, distance_km);
+	DEBUG_2("GPS: add_privacy_offset_shake256 zoom=%u max_dist=%g fraction=%g dist=%g",
+		zoom, max_dist, rnd_fraction, distance_km);
 	// Convert to degrees
 	gdouble offset_degrees = distance_km / KM_PER_DEGREE_LAT;
 	// Apply offset
@@ -368,6 +368,7 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 		if (!(g_strstr_len(location,-1,"Error")))
 			{
 			g_auto(GStrv) latlong = g_strsplit(location, " ", 2);
+			gint current_zoom;
 
 			// 1. Parse the TRUE location (for internal metadata only)
 			gdouble lat_true = g_ascii_strtod(latlong[0], nullptr);
@@ -378,7 +379,8 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 			gdouble lon_view = lon_true;
 
 			// Apply cryptographic offset to the VIEW coordinates
-			add_privacy_offset_shake256(pgd, &lat_view, &lon_view);
+			g_object_get(G_OBJECT(pgd->gps_view), "zoom-level", &current_zoom, NULL);
+			add_privacy_offset_shake256(&lat_view, &lon_view, current_zoom);
 
 			// Center the map on the FUZZED location
 			champlain_view_center_on(CHAMPLAIN_VIEW(pgd->gps_view), lat_view, lon_view);
@@ -642,7 +644,7 @@ gboolean bar_pane_gps_create_markers_cb(gpointer data)
 		// 2. Apply the offset to this center point
 		// We pass the center coordinates. The function will hash these
 		// coordinates + the persistent salt to determine the offset.
-		add_privacy_offset_shake256(pgd, &lat_center, &lon_center);
+		add_privacy_offset_shake256(&lat_center, &lon_center, REFERENCE_Z);
 
 		// 3. Center the view on the FUZZED location
 		champlain_view_center_on(CHAMPLAIN_VIEW(pgd->gps_view), lat_center, lon_center);
@@ -708,6 +710,7 @@ void bar_pane_gps_set_map_source(PaneGPSData *pgd, const gchar *map_id)
 	ChamplainMapSourceChain *source_chain;
 	ChamplainRenderer *renderer;
 
+	DEBUG_1("GPS: Setting map source to: %s", map_id ? map_id : "NULL");
 	/* 1. Create the Factory and get the network source */
 	map_factory = champlain_map_source_factory_dup_default();
 	network_source = champlain_map_source_factory_create(map_factory, map_id);
@@ -733,6 +736,8 @@ void bar_pane_gps_set_map_source(PaneGPSData *pgd, const gchar *map_id)
 		/* 6. Assign to view - the view takes ownership, DON'T unref the chain */
 		champlain_view_set_map_source(CHAMPLAIN_VIEW(pgd->gps_view),
 		                               CHAMPLAIN_MAP_SOURCE(source_chain));
+	} else {
+		DEBUG_1("GPS: ERROR - Failed to create network source for map_id: %s", map_id);
 	}
 
 	g_object_unref(map_factory);
@@ -871,14 +876,17 @@ void bar_pane_gps_view_state_changed_cb(ChamplainView *view, GParamSpec *, gpoin
 	g_autofree gchar *message = g_strdup_printf(_("Zoom level %i"), zoom);
 
 	g_object_get(G_OBJECT(view), "state", &status, NULL);
+	DEBUG_1("GPS: View state changed - state: %d, zoom: %d", status, zoom);
 	if (status == CHAMPLAIN_STATE_LOADING)
-		{
+	{
 		gtk_label_set_text(GTK_LABEL(pgd->state), _("Loading map"));
-		}
+		DEBUG_1("GPS: Map is loading");
+	}
 	else
-		{
+	{
 		gtk_label_set_text(GTK_LABEL(pgd->state), message);
-		}
+		DEBUG_1("GPS: Map state: %d", status);
+	}
 
 	gtk_widget_set_tooltip_text(pgd->slider, message);
 	gtk_scale_button_set_value(GTK_SCALE_BUTTON(pgd->slider), static_cast<gdouble>(zoom));
@@ -1026,6 +1034,56 @@ void bar_pane_gps_destroy(gpointer data)
 
 } // namespace
 
+struct GpsInitData {
+    PaneGPSData *pgd;
+    gint zoom;
+    gdouble latitude;
+    gdouble longitude;
+};
+
+// Updated callback with debug logging and no unused parameter warning
+static void bar_pane_gps_realize_cb(GtkWidget *, gpointer data)
+{
+    auto init_data = static_cast<GpsInitData *>(data);
+    auto pgd = init_data->pgd;
+
+    DEBUG_1("GPS: bar_pane_gps_realize_cb, widget realized=%d visible=%d mapped=%d",
+	    gtk_widget_get_realized(pgd->widget),
+	    gtk_widget_get_visible(pgd->widget),
+	    gtk_widget_get_mapped(pgd->widget));
+
+    // NOW it's safe to configure the view
+    g_object_set(G_OBJECT(pgd->gps_view),
+                 "kinetic-mode", TRUE,
+                 "zoom-level", init_data->zoom,
+                 "keep-center-on-resize", TRUE,
+                 "deceleration", 1.05,
+                 "zoom-on-double-click", FALSE,
+                 "max-zoom-level", 17,
+                 "min-zoom-level", 1,
+                 NULL);
+
+    DEBUG_1("GPS: view configured - zoom: %d, lat: %f, lon: %f",
+            init_data->zoom, init_data->latitude, init_data->longitude);
+    champlain_view_center_on(CHAMPLAIN_VIEW(pgd->gps_view),
+                            init_data->latitude,
+                            init_data->longitude);
+    DEBUG_1("GPS: view centered");
+
+    // Verify the view state
+    gint actual_zoom;
+    gdouble actual_lat, actual_lon;
+    g_object_get(G_OBJECT(pgd->gps_view),
+                 "zoom-level", &actual_zoom,
+                 "latitude", &actual_lat,
+                 "longitude", &actual_lon,
+                 NULL);
+    DEBUG_1("GPS: actual view state - zoom: %d, lat: %f, lon: %f",
+            actual_zoom, actual_lat, actual_lon);
+
+    g_free(init_data);
+}
+
 GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *map_id,
 			    const gint zoom, const gdouble latitude, const gdouble longitude,
 			    gboolean expanded, gint height)
@@ -1041,6 +1099,7 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	ChamplainView *view;
 	const gchar *slider_list[] = {GQ_ICON_ZOOM_IN, GQ_ICON_ZOOM_OUT, nullptr};
 
+	DEBUG_1("GPS: Creating new GPS pane - id: %s, map_id: %s", id, map_id);
 	pgd = g_new0(PaneGPSData, 1);
 
 	pgd->pane.pane_set_fd = bar_pane_gps_set_fd;
@@ -1053,12 +1112,16 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	pgd->pane.expanded = expanded;
 	pgd->height = height;
 
+	DEBUG_1("GPS: Creating widget hierarchy");
+
 	GtkWidget *frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
 	gpswidget = gtk_champlain_embed_new();
+	DEBUG_1("GPS: Created champlain embed widget...");
 	view = gtk_champlain_embed_get_view(GTK_CHAMPLAIN_EMBED(gpswidget));
+	DEBUG_1("GPS: ... Got champlain view from embed");
 
 	gq_gtk_box_pack_start(GTK_BOX(vbox), gpswidget, TRUE, TRUE, 0);
 	gq_gtk_container_add(frame, vbox);
@@ -1089,6 +1152,8 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	gq_gtk_box_pack_end(GTK_BOX(status), progress, FALSE, FALSE, 0);
 	gq_gtk_box_pack_end(GTK_BOX(vbox), status, FALSE, FALSE, 0);
 
+	DEBUG_1("GPS: Status bar created");
+
 	layer = champlain_marker_layer_new();
 	champlain_view_add_layer(view, CHAMPLAIN_LAYER(layer));
 
@@ -1099,26 +1164,30 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	pgd->slider = slider;
 	pgd->state = state;
 
+	DEBUG_1("GPS: Setting map source: %s", map_id);
 	bar_pane_gps_set_map_source(pgd, map_id);
 	gdouble lat_view = latitude;
 	gdouble lon_view = longitude;
-	add_privacy_offset_shake256(pgd, &lat_view, &lon_view);
-	g_object_set(G_OBJECT(view), "kinetic-mode", TRUE,
-				     "zoom-level", zoom,
-				     "keep-center-on-resize", TRUE,
-				     "deceleration", 1.05,
-				     "zoom-on-double-click", FALSE,
-				     "max-zoom-level", 17,
-				     "min-zoom-level", 1,
-				     NULL);
-	champlain_view_center_on(view, lat_view, lon_view);
+	add_privacy_offset_shake256(&lat_view, &lon_view, zoom);
+	DEBUG_1("GPS: Original coords: lat=%f, lon=%f", latitude, longitude);
+	DEBUG_1("GPS: Offset coords: lat=%f, lon=%f", lat_view, lon_view);
+
+	auto init_data = g_new0(GpsInitData, 1);
+	init_data->pgd = pgd;
+	init_data->zoom = zoom;
+	init_data->latitude = lat_view;
+	init_data->longitude = lon_view;
+
+	DEBUG_1("GPS: Connecting realize signal");
+	g_signal_connect(gpswidget, "realize",
+			 G_CALLBACK(bar_pane_gps_realize_cb), init_data);
 	pgd->centre_map_checked = TRUE;
 
 	g_object_set_data_full(G_OBJECT(pgd->widget), "pane_data", pgd, bar_pane_gps_destroy);
 	gq_gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
-
 	gtk_widget_set_size_request(pgd->widget, -1, height);
 
+	DEBUG_1("GPS: Connecting signals");
 	g_signal_connect(G_OBJECT(gpswidget), "button_press_event", G_CALLBACK(bar_pane_gps_map_keypress_cb), pgd);
 	g_signal_connect(pgd->gps_view, "notify::state", G_CALLBACK(bar_pane_gps_view_state_changed_cb), pgd);
 	g_signal_connect(pgd->gps_view, "notify::zoom-level", G_CALLBACK(bar_pane_gps_view_state_changed_cb), pgd);
@@ -1132,6 +1201,7 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 	pgd->enable_markers_checked = TRUE;
 	pgd->centre_map_checked = TRUE;
 
+	DEBUG_1("GPS: Pane creation complete, returning widget");
 	return pgd->widget;
 }
 
@@ -1157,6 +1227,8 @@ GtkWidget *bar_pane_gps_new_from_config(const gchar **attribute_names, const gch
 		const gchar *option = *attribute_names++;
 		const gchar *value = *attribute_values++;
 
+		DEBUG_1("GPS: bar_pane_gps_new_from_config config attribute: %s = %s", option, value);
+
 		if (READ_CHAR_FULL("title", title))
 			continue;
 		if (READ_CHAR_FULL("map-id", map_id))
@@ -1181,6 +1253,8 @@ GtkWidget *bar_pane_gps_new_from_config(const gchar **attribute_names, const gch
 	latitude = static_cast<gdouble>(int_latitude) / 1000000;
 	longitude = static_cast<gdouble>(int_longitude) / 1000000;
 
+	DEBUG_1("GPS: Creating pane with: id=%s, title=%s, map_id=%s, zoom=%d, lat=%f, lon=%f, expanded=%d, height=%d",
+		id, title, map_id ? map_id : "NULL", zoom, latitude, longitude, expanded, height);
 	return bar_pane_gps_new(id, title, map_id, zoom, latitude, longitude, expanded, height);
 }
 

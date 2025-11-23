@@ -1581,6 +1581,9 @@ static void options_parse_bar(GQParserData *parser_data, const gchar *element_na
 				}
 			parser_data->func_push(options_parse_leaf, nullptr, nullptr);
 			}
+		else {
+			DEBUG_1("Clutter disabled (check $GQ_DISABLE_CLUTTER), pane_gps disabled");
+			}
 		}
 #endif
 	else if (g_ascii_strcasecmp(element_name, "pane_exif") == 0)
