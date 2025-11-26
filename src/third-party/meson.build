@@ -16,8 +16,4 @@ third_party_sources = files('whereami.cc',
 'zonedetect.cc',
 'zonedetect.h')
 
-if get_option('extended_stacktrace').enabled()
-  third_party_sources += files('backward.h')
-endif
-
 project_sources += third_party_sources

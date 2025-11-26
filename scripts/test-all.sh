@@ -42,7 +42,7 @@ export XDG_DATA_HOME
 rm --recursive --force build
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/geeqie.XXXXXXXXXX")
 
-# Check with all options disabled
+# Check with all options disabled except for developer
 meson setup \
 -Darchive=disabled \
 -Dcms=disabled \
@@ -52,7 +52,6 @@ meson setup \
 -Dexecinfo=disabled \
 -Dexiv2=disabled \
 -Dexr=disabled \
--Dextended_stacktrace=disabled \
 -Dfits=disabled \
 -Dgit=disabled \
 -Dgps-map=disabled \
@@ -73,6 +72,7 @@ meson setup \
 -Dvideothumbnailer=disabled \
 -Dwebp=disabled \
 -Dyelp-build=disabled \
+--buildtype=debug \
 build
 
 if ninja test -C build
@@ -86,7 +86,7 @@ cp ./build/meson-logs/meson-log.txt "$tmpdir/testlog-options-disabled.txt"
 cat ./build/meson-logs/testlog.txt >> "$tmpdir/testlog-options-disabled.txt"
 
 rm --recursive --force build
-meson setup -Dunit_tests=enabled build
+meson setup --buildtype=debug -Dunit_tests=enabled build
 if ninja test -C build
 then
 	options_enabled="PASS"

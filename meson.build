@@ -46,7 +46,7 @@ project(
     version : run_command('./version.sh', check : true).stdout().strip(),
     license : ['GPL-2.0-or-later'],
     meson_version : '>=1.3.2',
-    default_options : ['cpp_std=c++17', 'warning_level=3', 'buildtype=debugoptimized', 'cpp_link_args=-rdynamic']
+    default_options : ['cpp_std=c++17', 'warning_level=3', 'buildtype=release', 'cpp_link_args=-rdynamic']
 )
 
 # To inhibit warnings from the generated file icons.h
@@ -159,33 +159,6 @@ else
 endif
 glib_dep = dependency('glib-2.0', version : '>=2.66', required: true)
 
-# Required only when backward-cpp is used
-conf_data.set('HAVE_DEVELOPER', 0)
-libdw_dep = []
-libunwind_dep = []
-option = get_option('extended_stacktrace')
-if not option.disabled()
-    libdw_dep = dependency('libdw', required : false)
-    if libdw_dep.found()
-        libunwind_dep = dependency('libunwind', required : false)
-        if libunwind_dep.found()
-            if cc.has_link_argument('-ldwarf')
-                add_project_link_arguments('-ldwarf', language: 'cpp')
-                conf_data.set('HAVE_DEVELOPER', 1)
-                summary({'developer mode' : ['extended stacktrace:', true]}, section : 'Debugging', bool_yn : true)
-            else
-                summary({'developer mode' : ['link argument -ldwarf not found. extended stacktrace:', false]}, section : 'Debugging', bool_yn : true)
-            endif
-        else
-            summary({'developer mode' : ['libunwind not found. extended stacktrace:', false]}, section : 'Debugging', bool_yn : true)
-        endif
-    else
-        summary({'developer mode' : ['libdw not found. extended stacktrace:', false]}, section : 'Debugging', bool_yn : true)
-    endif
-else
-    summary({'developer mode' : ['extended stacktrace:', false]}, section : 'Debugging', bool_yn : true)
-endif
-
 # Required only for seg. fault stacktrace and backtrace debugging
 conf_data.set('HAVE_EXECINFO_H', 0)
 option = get_option('execinfo')
@@ -203,6 +176,11 @@ if not option.disabled()
 else
     summary({'execinfo' : ['stacktrace supported:', false]}, section : 'Debugging', bool_yn : true)
 endif
+
+# To override the default of 'release', run 'meson setup --buildtype=debug build'
+# That is necessary for stacktrace output
+buildtype = get_option('buildtype')
+summary({'buildtype' : buildtype}, section : 'Debugging')
 
 conf_data.set('ENABLE_UNIT_TESTS', 0)
 option = get_option('unit_tests')

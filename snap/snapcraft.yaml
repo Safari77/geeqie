@@ -84,7 +84,6 @@ parts:
       - --prefix=/usr
       - --wrap-mode=default
       - -Ddoxygen=disabled
-      - -Dextended_stacktrace=disabled
       - -Dgit=disabled
       - -Dhelp_pdf=disabled
       - -Dpandoc=disabled

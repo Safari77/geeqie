@@ -52,10 +52,6 @@
 #  include <libintl.h>
 #endif
 
-#if HAVE_DEVELOPER
-#include "third-party/backward.h"
-#endif
-
 #include "cache-maint.h"
 #include "cache.h"
 #include "collect-io.h"
@@ -207,8 +203,6 @@ GOptionEntry command_line_options_cache_maintenance[] =
 	{ nullptr            ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, nullptr                                             , nullptr },
 };
 
-#if !HAVE_DEVELOPER
-#if defined(SA_SIGINFO)
 void sig_handler_cb(int signo, siginfo_t *info, void *)
 {
 	gchar hex_char[16];
@@ -309,28 +303,10 @@ void sig_handler_cb(int signo, siginfo_t *info, void *)
 	backtrace_symbols_fd(bt, bt_size, STDERR_FILENO);
 #endif
 
-	exit(EXIT_FAILURE);
-}
-#else /* defined(SA_SIGINFO) */
-void sig_handler_cb(int)
-{
-#if HAVE_EXECINFO_H
-	gint bt_size;
-	void *bt[1024];
-#endif
-
-	write(STDERR_FILENO, "Geeqie fatal error\n", 19);
-	write(STDERR_FILENO, "Signal: Segmentation fault\n", 27);
-
-#if HAVE_EXECINFO_H
-	bt_size = backtrace(bt, 1024);
-	backtrace_symbols_fd(bt, bt_size, STDERR_FILENO);
-#endif
+	BACKTRACE(DEBUG);
 
 	exit(EXIT_FAILURE);
 }
-#endif /* defined(SA_SIGINFO) */
-#endif /* !HAVE_DEVELOPER */
 
 gboolean search_command_line_for_option(const gint argc, const gchar* const argv[], const gchar* option_name)
 {
@@ -685,7 +661,6 @@ void sigbus_handler_cb_unused(int, [[maybe_unused]] siginfo_t *info, void *)
 
 #pragma GCC diagnostic pop
 
-#if !HAVE_DEVELOPER
 void setup_sig_handler()
 {
 	struct sigaction sigsegv_action;
@@ -700,7 +675,6 @@ void setup_sig_handler()
 	sigaction(SIGIOT, &sigsegv_action, nullptr);
 	sigaction(SIGSEGV, &sigsegv_action, nullptr);
 }
-#endif
 
 void set_theme_bg_color()
 {
@@ -784,11 +758,7 @@ gint shutdown_cache_maintenance_cb(GtkApplication *, gpointer)
 void startup_common(GtkApplication *, gpointer)
 {
 	/* seg. fault handler */
-#if HAVE_DEVELOPER
-	backward::SignalHandling sh {};
-#else
 	setup_sig_handler();
-#endif
 
 	/* init execution time counter (debug only) */
 	init_exec_time();
