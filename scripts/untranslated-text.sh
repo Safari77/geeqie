@@ -168,6 +168,14 @@ write_char_option
 \"Whether this tag affects the foreground color\",
 \"Width of cell\",
 
+##main.cc
+SIGABRT,
+SIGBUS,
+SIGFPE,
+SIGILL,
+SIGIOT,
+SIGSEGV,
+
 ##pixbuf-renderer.cc
 \"Delay image update\",
 \"Display cache size MiB\",
