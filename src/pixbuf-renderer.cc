@@ -426,8 +426,7 @@ static void pixbuf_renderer_init(PixbufRenderer *pr)
 	pr->scroller_id = 0;
 	pr->scroller_overlay = -1;
 
-	pr->x_mouse = -1;
-	pr->y_mouse = -1;
+	pr->mouse = { -1, -1 };
 
 	pr->source_tiles_enabled = FALSE;
 	pr->source_tiles = nullptr;
@@ -756,12 +755,12 @@ static gboolean pr_scroller_update_cb(gpointer data)
 
 		if (x >= 0)
 			{
-			xinc = CLAMP(xinc, 0, x);
+			xinc = std::clamp(xinc, 0, x);
 			if (x > xinc) xinc = std::min(xinc + (x / PR_SCROLLER_UPDATES_PER_SEC), x);
 			}
 		else
 			{
-			xinc = CLAMP(xinc, x, 0);
+			xinc = std::clamp(xinc, x, 0);
 			if (x < xinc) xinc = std::max(xinc + (x / PR_SCROLLER_UPDATES_PER_SEC), x);
 			}
 		}
@@ -776,12 +775,12 @@ static gboolean pr_scroller_update_cb(gpointer data)
 
 		if (y >= 0)
 			{
-			yinc = CLAMP(yinc, 0, y);
+			yinc = std::clamp(yinc, 0, y);
 			if (y > yinc) yinc = std::min(yinc + (y / PR_SCROLLER_UPDATES_PER_SEC), y);
 			}
 		else
 			{
-			yinc = CLAMP(yinc, y, 0);
+			yinc = std::clamp(yinc, y, 0);
 			if (y < yinc) yinc = std::max(yinc + (y / PR_SCROLLER_UPDATES_PER_SEC), y);
 			}
 		}
@@ -1523,7 +1522,7 @@ static gboolean pr_scroll_clamp(PixbufRenderer *pr)
 		}
 	else
 		{
-		pr->x_scroll = CLAMP(pr->x_scroll, 0, pr->width - pr->vis_width);
+		pr->x_scroll = std::clamp(pr->x_scroll, 0, pr->width - pr->vis_width);
 		}
 
 	if (pr->y_offset > 0)
@@ -1532,7 +1531,7 @@ static gboolean pr_scroll_clamp(PixbufRenderer *pr)
 		}
 	else
 		{
-		pr->y_scroll = CLAMP(pr->y_scroll, 0, pr->height - pr->vis_height);
+		pr->y_scroll = std::clamp(pr->y_scroll, 0, pr->height - pr->vis_height);
 		}
 
 	pixbuf_renderer_sync_scroll_center(pr);
@@ -1584,7 +1583,7 @@ static gboolean pr_zoom_clamp(PixbufRenderer *pr, gdouble zoom,
 	gboolean force = !!(flags & PR_ZOOM_FORCE);
 	gboolean new_z = !!(flags & PR_ZOOM_NEW);
 
-	zoom = CLAMP(zoom, pr->zoom_min, pr->zoom_max);
+	zoom = std::clamp(zoom, pr->zoom_min, pr->zoom_max);
 
 	if (pr->zoom == zoom && !force) return FALSE;
 
@@ -1702,8 +1701,8 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 	old_scale = pr->scale;
 	if (center_point)
 		{
-		px = CLAMP(px, 0, pr->width);
-		py = CLAMP(py, 0, pr->height);
+		px = std::clamp(px, 0, pr->width);
+		py = std::clamp(py, 0, pr->height);
 		old_cx = pr->x_scroll + (px - pr->x_offset);
 		old_cy = pr->y_scroll + (py - pr->y_offset);
 		}
@@ -1916,8 +1915,8 @@ void pixbuf_renderer_scroll_to_point(PixbufRenderer *pr, gint x, gint y,
 	gint ax;
 	gint ay;
 
-	x_align = CLAMP(x_align, 0.0, 1.0);
-	y_align = CLAMP(y_align, 0.0, 1.0);
+	x_align = std::clamp(x_align, 0.0, 1.0);
+	y_align = std::clamp(y_align, 0.0, 1.0);
 
 	ax = static_cast<gdouble>(pr->vis_width) * x_align;
 	ay = static_cast<gdouble>(pr->vis_height) * y_align;
@@ -1938,11 +1937,8 @@ void pixbuf_renderer_get_scroll_center(PixbufRenderer *pr, gdouble *x, gdouble *
 
 void pixbuf_renderer_set_scroll_center(PixbufRenderer *pr, gdouble x, gdouble y)
 {
-	gdouble dst_x;
-	gdouble dst_y;
-
-	dst_x = x * pr->width  - pr->vis_width  / 2.0 - pr->x_scroll + CLAMP(pr->subpixel_x_scroll, -1.0, 1.0);
-	dst_y = y * pr->height - pr->vis_height / 2.0 - pr->y_scroll + CLAMP(pr->subpixel_y_scroll, -1.0, 1.0);
+	const gdouble dst_x = x * pr->width  - pr->vis_width  / 2.0 - pr->x_scroll + std::clamp(pr->subpixel_x_scroll, -1.0, 1.0);
+	const gdouble dst_y = y * pr->height - pr->vis_height / 2.0 - pr->y_scroll + std::clamp(pr->subpixel_y_scroll, -1.0, 1.0);
 
 	pr->subpixel_x_scroll = dst_x - static_cast<gint>(dst_x);
 	pr->subpixel_y_scroll = dst_y - static_cast<gint>(dst_y);
@@ -1983,8 +1979,8 @@ static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpo
 		pr->scroller_ypos = event->y;
 		}
 
-	pr->x_mouse = event->x;
-	pr->y_mouse = event->y;
+	pr->mouse.x = event->x;
+	pr->mouse.y = event->y;
 	pr_update_pixel_signal(pr);
 
 	if (!pr->in_drag || !gq_gdk_pointer_is_grabbed()) return FALSE;
@@ -2031,8 +2027,7 @@ static gboolean pr_leave_notify_cb(GtkWidget *widget, GdkEventCrossing *, gpoint
 	PixbufRenderer *pr;
 
 	pr = PIXBUF_RENDERER(widget);
-	pr->x_mouse = -1;
-	pr->y_mouse = -1;
+	pr->mouse = { -1, -1 };
 
 	pr_update_pixel_signal(pr);
 	return FALSE;
@@ -2339,8 +2334,9 @@ static void pr_create_anaglyph_dubois(GdkPixbuf *pixbuf, GdkPixbuf *right, gint 
 			for (k = 0; k < 3; k++)
 				{
 				const double *m = pr_dubois_matrix[k];
-				res[k] = sp[0] * m[0] + sp[1] * m[1] + sp[2] * m[2] + dp[0] * m[3] + dp[1] * m[4] + dp[2] * m[5];
-				res[k] = CLAMP(res[k], 0.0, 255.0);
+				res[k] = std::clamp(sp[0] * m[0] + sp[1] * m[1] + sp[2] * m[2] +
+				                    dp[0] * m[3] + dp[1] * m[4] + dp[2] * m[5],
+				                    0.0, 255.0);
 				}
 			dp[0] = res[0];
 			dp[1] = res[1];
@@ -2547,8 +2543,7 @@ void pixbuf_renderer_move(PixbufRenderer *pr, PixbufRenderer *source)
 
 	pr->x_scroll = source->x_scroll;
 	pr->y_scroll = source->y_scroll;
-	pr->x_mouse  = source->x_mouse;
-	pr->y_mouse  = source->y_mouse;
+	pr->mouse = source->mouse;
 
 	scroll_reset = pr->scroll_reset;
 	pr->scroll_reset = ScrollReset::NOCHANGE;
@@ -2607,8 +2602,7 @@ void pixbuf_renderer_copy(PixbufRenderer *pr, PixbufRenderer *source)
 
 	pr->x_scroll = source->x_scroll;
 	pr->y_scroll = source->y_scroll;
-	pr->x_mouse  = source->x_mouse;
-	pr->y_mouse  = source->y_mouse;
+	pr->mouse = source->mouse;
 
 	scroll_reset = pr->scroll_reset;
 	pr->scroll_reset = ScrollReset::NOCHANGE;
@@ -2787,9 +2781,9 @@ static void pr_stereo_temp_disable(PixbufRenderer *pr, gboolean disable)
 }
 
 /**
- * @brief x_pixel and y_pixel are the pixel coordinates see #pixbuf_renderer_get_mouse_position
+ * @brief pixel are the pixel coordinates see #pixbuf_renderer_get_mouse_position
  */
-gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, gint x_pixel, gint y_pixel,
+gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GdkPoint pixel,
                                           gint *r_mouse, gint *g_mouse, gint *b_mouse, gint *a_mouse)
 {
 	GdkPixbuf *pb = pr->pixbuf;
@@ -2815,7 +2809,7 @@ gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, gint x_pixel, gint
 	if (!pb) return FALSE;
 
 	GdkRectangle map_rect = pr_tile_region_map_orientation(pr->orientation,
-	                                                       {x_pixel, y_pixel, 1, 1}, /*single pixel */
+	                                                       {pixel.x, pixel.y, 1, 1}, /*single pixel */
 	                                                       pr->image_width, pr->image_height);
 
 	if (map_rect.x < 0 || map_rect.x > gdk_pixbuf_get_width(pr->pixbuf) - 1) return FALSE;
@@ -2843,41 +2837,29 @@ gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, gint x_pixel, gint
 	return TRUE;
 }
 
-gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, gint *x_pixel_return, gint *y_pixel_return)
+gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, GdkPoint &pixel)
 {
-	gint x_pixel;
-	gint y_pixel;
-	gint x_pixel_clamped;
-	gint y_pixel_clamped;
-
 	g_return_val_if_fail(IS_PIXBUF_RENDERER(pr), FALSE);
-	g_return_val_if_fail(x_pixel_return != nullptr && y_pixel_return != nullptr, FALSE);
 
 	if (!pr->pixbuf && !pr->source_tiles_enabled)
 		{
-		*x_pixel_return = -1;
-		*y_pixel_return = -1;
+		pixel = { -1, -1 };
 		return FALSE;
 		}
 
-	x_pixel = floor(static_cast<gdouble>(pr->x_mouse - pr->x_offset + pr->x_scroll) / pr->scale);
-	y_pixel = floor(static_cast<gdouble>(pr->y_mouse - pr->y_offset + pr->y_scroll) / pr->scale / pr->aspect_ratio);
-	x_pixel_clamped = CLAMP(x_pixel, 0, pr->image_width - 1);
-	y_pixel_clamped = CLAMP(y_pixel, 0, pr->image_height - 1);
-
-	if (x_pixel != x_pixel_clamped)
+	pixel.x = floor(static_cast<gdouble>(pr->mouse.x - pr->x_offset + pr->x_scroll) / pr->scale);
+	if (pixel.x != std::clamp(pixel.x, 0, pr->image_width - 1))
 		{
 		/* mouse is not on pr */
-		x_pixel = -1;
-		}
-	if (y_pixel != y_pixel_clamped)
-		{
-		/* mouse is not on pr */
-		y_pixel = -1;
+		pixel.x = -1;
 		}
 
-	*x_pixel_return = x_pixel;
-	*y_pixel_return = y_pixel;
+	pixel.y = floor(static_cast<gdouble>(pr->mouse.y - pr->y_offset + pr->y_scroll) / pr->scale / pr->aspect_ratio);
+	if (pixel.y != std::clamp(pixel.y, 0, pr->image_height - 1))
+		{
+		/* mouse is not on pr */
+		pixel.y = -1;
+		}
 
 	return TRUE;
 }

@@ -146,61 +146,47 @@ static void switch_coords_orientation(ImageWindow *imd, gint x, gint y, gint wid
 {
 	switch (imd->orientation)
 		{
-		case EXIF_ORIENTATION_TOP_LEFT:
-			/* normal -- nothing to do */
+		case EXIF_ORIENTATION_TOP_LEFT: /* normal -- nothing to do */
+		case EXIF_ORIENTATION_LEFT_TOP: /* left mirrored, swap later */
 			rect_x1 = image_start_x;
 			rect_y1 = image_start_y;
 			rect_x2 = x;
 			rect_y2 = y;
 			break;
-		case EXIF_ORIENTATION_TOP_RIGHT:
-			/* mirrored */
+		case EXIF_ORIENTATION_TOP_RIGHT: /* mirrored */
+		case EXIF_ORIENTATION_RIGHT_TOP: /* rotated -90 (270), swap later */
 			rect_x1 = width - x;
 			rect_y1 = image_start_y;
 			rect_x2 = width - image_start_x;
 			rect_y2 = y;
 			break;
-		case EXIF_ORIENTATION_BOTTOM_RIGHT:
-			/* upside down */
+		case EXIF_ORIENTATION_BOTTOM_RIGHT: /* upside down */
+		case EXIF_ORIENTATION_RIGHT_BOTTOM: /* right mirrored, swap later */
 			rect_x1 = width - x;
 			rect_y1 = height - y;
 			rect_x2 = width - image_start_x;
 			rect_y2 = height - image_start_y;
 			break;
-		case EXIF_ORIENTATION_BOTTOM_LEFT:
-			/* flipped */
+		case EXIF_ORIENTATION_BOTTOM_LEFT: /* flipped */
+		case EXIF_ORIENTATION_LEFT_BOTTOM: /* rotated 90, swap later */
 			rect_x1 = image_start_x;
 			rect_y1 = height - y;
 			rect_x2 = x;
 			rect_y2 = height - image_start_y;
 			break;
-		case EXIF_ORIENTATION_LEFT_TOP:
-			/* left mirrored */
-			rect_x1 = image_start_y;
-			rect_y1 = image_start_x;
-			rect_x2 = y;
-			rect_y2 = x;
+		default:
+			/* The other values are out of range */
 			break;
-		case EXIF_ORIENTATION_RIGHT_TOP:
-			/* rotated -90 (270) */
-			rect_x1 = image_start_y;
-			rect_y1 = width - x;
-			rect_x2 = y;
-			rect_y2 = width - image_start_x;
-			break;
-		case EXIF_ORIENTATION_RIGHT_BOTTOM:
-			/* right mirrored */
-			rect_x1 = height - y;
-			rect_y1 = width - x;
-			rect_x2 = height - image_start_y;
-			rect_y2 = width - image_start_x;
-			break;
-		case EXIF_ORIENTATION_LEFT_BOTTOM:
-			/* rotated 90 */
-			rect_x1 = height - y;
-			rect_y1 = image_start_x;
-			rect_x2 = height - image_start_y;
-			rect_y2 = x;
+		}
+
+	switch (imd->orientation)
+		{
+		case EXIF_ORIENTATION_LEFT_TOP: /* left mirrored, swap EXIF_ORIENTATION_TOP_LEFT */
+		case EXIF_ORIENTATION_RIGHT_TOP: /* rotated -90 (270), swap EXIF_ORIENTATION_TOP_RIGHT */
+		case EXIF_ORIENTATION_RIGHT_BOTTOM: /* right mirrored, swap EXIF_ORIENTATION_BOTTOM_RIGHT */
+		case EXIF_ORIENTATION_LEFT_BOTTOM: /* rotated 90, swap EXIF_ORIENTATION_BOTTOM_LEFT */
+			std::swap(rect_x1, rect_y1);
+			std::swap(rect_x2, rect_y2);
 			break;
 		default:
 			/* The other values are out of range */
@@ -212,15 +198,14 @@ static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer d
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	LayoutWindow *lw;
-	gint x_pixel;
-	gint y_pixel;
 
 	if(options->draw_rectangle)
 		{
-		pixbuf_renderer_get_mouse_position(pr, &x_pixel, &y_pixel);
+		GdkPoint pixel;
+		pixbuf_renderer_get_mouse_position(pr, pixel);
 		selection_rectangle = SelectionRectangle(std::max(0, gint(event->x)), std::max(0, gint(event->y)), options->rectangle_draw_aspect_ratio);
-		image_start_x = std::max(0, x_pixel);
-		image_start_y = std::max(0, y_pixel);
+		image_start_x = std::max(0, pixel.x);
+		image_start_y = std::max(0, pixel.y);
 		}
 	if (rect_id)
 		{
@@ -260,35 +245,18 @@ static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer da
 	gint width;
 	gint height;
 	GdkPixbuf *rect_pixbuf;
-	gint x_pixel;
-	gint y_pixel;
-	gint image_x_pixel;
-	gint image_y_pixel;
 
 	selection_rectangle.set_cursor(event->x, event->y);
 
 	if (options->draw_rectangle)
 		{
 		pixbuf_renderer_get_image_size(pr, &width, &height);
-		pixbuf_renderer_get_mouse_position(pr, &x_pixel, &y_pixel);
 
-		if (x_pixel == -1)
-			{
-			image_x_pixel = width;
-			}
-		else
-			{
-			image_x_pixel = x_pixel;
-			}
+		GdkPoint pixel;
+		pixbuf_renderer_get_mouse_position(pr, pixel);
 
-		if (y_pixel == -1)
-			{
-			image_y_pixel = height;
-			}
-		else
-			{
-			image_y_pixel = y_pixel;
-			}
+		gint image_x_pixel = (pixel.x != -1) ? pixel.x : width;
+		gint image_y_pixel = (pixel.y != -1) ? pixel.y : height;
 
 		if (options->rectangle_draw_aspect_ratio != RECTANGLE_DRAW_ASPECT_RATIO_NONE)
 			{
@@ -2164,12 +2132,9 @@ ImageWindow *image_new(gboolean frame)
 	return imd;
 }
 
-void image_get_rectangle(gint &x1, gint &y1, gint &x2, gint &y2)
+std::tuple<int, int, int, int> image_get_rectangle()
 {
-	x1 = rect_x1;
-	y1 = rect_y1;
-	x2 = rect_x2;
-	y2 = rect_y2;
+	return { rect_x1, rect_y1, rect_x2, rect_y2 };
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

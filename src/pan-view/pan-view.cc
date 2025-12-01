@@ -326,7 +326,7 @@ static gboolean pan_queue_step(PanWindow *pw)
 		}
 	else if (pi->type == PAN_ITEM_THUMB)
 		{
-		pw->tl = thumb_loader_new(PAN_THUMB_SIZE, PAN_THUMB_SIZE);
+		pw->tl = thumb_loader_new(pw->thumb_size, pw->thumb_size);
 
 		if (!pw->tl->standard_loader)
 			{
@@ -794,7 +794,7 @@ static void pan_grid_build(PanWindow *pw, gint width, gint height, gint grid_siz
 	if (l < 1) return;
 
 	col = static_cast<gint>((sqrt(static_cast<gdouble>(l) / grid_size) * width / height) + 0.999);
-	col = CLAMP(col, 1, (l / grid_size) + 1);
+	col = std::clamp(col, 1, (l / grid_size) + 1);
 	row = static_cast<gint>(static_cast<gdouble>(l) / grid_size / col);
 	row = std::max(row, 1);
 

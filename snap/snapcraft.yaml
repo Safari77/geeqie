@@ -7,6 +7,9 @@ summary: Lightweight, fast GTK image viewer
 description: |
   Geeqie is a fast GTK image viewer for browsing large image collections.
 
+# lzo compression results in a larger file size but much faster
+# cold-start time
+compression: lzo
 grade: devel
 confinement: strict
 

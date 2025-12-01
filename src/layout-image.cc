@@ -507,18 +507,12 @@ static void li_pop_menu_zoom_out_cb(GtkWidget *, gpointer data)
 	layout_image_zoom_adjust(lw, -get_zoom_increment(), FALSE);
 }
 
-static void li_pop_menu_zoom_1_1_cb(GtkWidget *, gpointer data)
+template<int value>
+static void li_pop_menu_zoom_set_cb(GtkWidget *, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 
-	layout_image_zoom_set(lw, 1.0, FALSE);
-}
-
-static void li_pop_menu_zoom_fit_cb(GtkWidget *, gpointer data)
-{
-	auto lw = static_cast<LayoutWindow *>(data);
-
-	layout_image_zoom_set(lw, 0.0, FALSE);
+	layout_image_zoom_set(lw, value, FALSE);
 }
 
 static void li_pop_menu_edit_cb(GtkWidget *widget, gpointer data)
@@ -767,8 +761,8 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw)
 
 	menu_item_add_icon(menu, _("Zoom _in"), GQ_ICON_ZOOM_IN, G_CALLBACK(li_pop_menu_zoom_in_cb), lw);
 	menu_item_add_icon(menu, _("Zoom _out"), GQ_ICON_ZOOM_OUT, G_CALLBACK(li_pop_menu_zoom_out_cb), lw);
-	menu_item_add_icon(menu, _("Zoom _1:1"), GQ_ICON_ZOOM_100, G_CALLBACK(li_pop_menu_zoom_1_1_cb), lw);
-	menu_item_add_icon(menu, _("Zoom to fit"), GQ_ICON_ZOOM_FIT, G_CALLBACK(li_pop_menu_zoom_fit_cb), lw);
+	menu_item_add_icon(menu, _("Zoom _1:1"), GQ_ICON_ZOOM_100, G_CALLBACK(li_pop_menu_zoom_set_cb<1>), lw);
+	menu_item_add_icon(menu, _("Zoom to fit"), GQ_ICON_ZOOM_FIT, G_CALLBACK(li_pop_menu_zoom_set_cb<0>), lw);
 	menu_item_add_divider(menu);
 
 	GList *editmenu_fd_list = layout_image_get_fd_list(lw);
@@ -1961,8 +1955,6 @@ static gint num_length(gint num)
 static void layout_status_update_pixel_cb(PixbufRenderer *pr, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
-	gint x_pixel;
-	gint y_pixel;
 	gint width;
 	gint height;
 	PangoAttrList *attrs;
@@ -1973,32 +1965,32 @@ static void layout_status_update_pixel_cb(PixbufRenderer *pr, gpointer data)
 	pixbuf_renderer_get_image_size(pr, &width, &height);
 	if (width < 1 || height < 1) return;
 
-	pixbuf_renderer_get_mouse_position(pr, &x_pixel, &y_pixel);
+	GdkPoint pixel;
+	pixbuf_renderer_get_mouse_position(pr, pixel);
 
 	g_autofree gchar *text = nullptr;
-	if(x_pixel >= 0 && y_pixel >= 0)
+	if(pixel.x >= 0 && pixel.y >= 0)
 		{
 		gint r_mouse;
 		gint g_mouse;
 		gint b_mouse;
 		gint a_mouse;
 
-		pixbuf_renderer_get_pixel_colors(pr, x_pixel, y_pixel,
-						 &r_mouse, &g_mouse, &b_mouse, &a_mouse);
+		pixbuf_renderer_get_pixel_colors(pr, pixel, &r_mouse, &g_mouse, &b_mouse, &a_mouse);
 
 		if (gdk_pixbuf_get_has_alpha(pr->pixbuf))
 			{
 			text = g_strdup_printf(_("[%*d,%*d]: RGBA(%3d,%3d,%3d,%3d)"),
-					 num_length(width - 1), x_pixel,
-					 num_length(height - 1), y_pixel,
-					 r_mouse, g_mouse, b_mouse, a_mouse);
+			                       num_length(width - 1), pixel.x,
+			                       num_length(height - 1), pixel.y,
+			                       r_mouse, g_mouse, b_mouse, a_mouse);
 			}
 		else
 			{
 			text = g_strdup_printf(_("[%*d,%*d]: RGB(%3d,%3d,%3d)"),
-					 num_length(width - 1), x_pixel,
-					 num_length(height - 1), y_pixel,
-					 r_mouse, g_mouse, b_mouse);
+			                       num_length(width - 1), pixel.x,
+			                       num_length(height - 1), pixel.y,
+			                       r_mouse, g_mouse, b_mouse);
 			}
 		}
 	else
@@ -2007,10 +1999,10 @@ static void layout_status_update_pixel_cb(PixbufRenderer *pr, gpointer data)
 					 num_length(width - 1), " ",
 					 num_length(height - 1), " ");
 		}
+	gtk_label_set_text(GTK_LABEL(lw->info_pixel), text);
 
 	attrs = pango_attr_list_new();
 	pango_attr_list_insert(attrs, pango_attr_family_new("Monospace"));
-	gtk_label_set_text(GTK_LABEL(lw->info_pixel), text);
 	gtk_label_set_attributes(GTK_LABEL(lw->info_pixel), attrs);
 	pango_attr_list_unref(attrs);
 }
