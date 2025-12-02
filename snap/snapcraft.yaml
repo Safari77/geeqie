@@ -182,6 +182,7 @@ parts:
       - bc
       - exiftool
       - exiftran
+      - exiv2
       - gphoto2
       - zenity
       - yad

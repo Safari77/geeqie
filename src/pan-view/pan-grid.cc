@@ -21,6 +21,7 @@
 
 #include "pan-grid.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "pan-item.h"
@@ -71,7 +72,7 @@ void pan_grid_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &height
 			pi = pan_item_image_new(pw, fd, x, y, 10, 10);
 
 			x += pi->width + pw->thumb_gap;
-			if (y + pi->height + pw->thumb_gap > next_y) next_y = y + pi->height + pw->thumb_gap;
+			next_y = std::max(y + pi->height + pw->thumb_gap, next_y);
 			if (x > grid_size)
 				{
 				x = pw->thumb_gap;

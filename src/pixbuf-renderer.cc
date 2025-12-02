@@ -1937,8 +1937,8 @@ void pixbuf_renderer_get_scroll_center(PixbufRenderer *pr, gdouble *x, gdouble *
 
 void pixbuf_renderer_set_scroll_center(PixbufRenderer *pr, gdouble x, gdouble y)
 {
-	const gdouble dst_x = x * pr->width  - pr->vis_width  / 2.0 - pr->x_scroll + std::clamp(pr->subpixel_x_scroll, -1.0, 1.0);
-	const gdouble dst_y = y * pr->height - pr->vis_height / 2.0 - pr->y_scroll + std::clamp(pr->subpixel_y_scroll, -1.0, 1.0);
+	const gdouble dst_x = (x * pr->width)  - (pr->vis_width  / 2.0) - pr->x_scroll + std::clamp(pr->subpixel_x_scroll, -1.0, 1.0);
+	const gdouble dst_y = (y * pr->height) - (pr->vis_height / 2.0) - pr->y_scroll + std::clamp(pr->subpixel_y_scroll, -1.0, 1.0);
 
 	pr->subpixel_x_scroll = dst_x - static_cast<gint>(dst_x);
 	pr->subpixel_y_scroll = dst_y - static_cast<gint>(dst_y);
@@ -2334,8 +2334,8 @@ static void pr_create_anaglyph_dubois(GdkPixbuf *pixbuf, GdkPixbuf *right, gint 
 			for (k = 0; k < 3; k++)
 				{
 				const double *m = pr_dubois_matrix[k];
-				res[k] = std::clamp(sp[0] * m[0] + sp[1] * m[1] + sp[2] * m[2] +
-				                    dp[0] * m[3] + dp[1] * m[4] + dp[2] * m[5],
+				res[k] = std::clamp((sp[0] * m[0]) + (sp[1] * m[1]) + (sp[2] * m[2]) +
+				                    (dp[0] * m[3]) + (dp[1] * m[4]) + (dp[2] * m[5]),
 				                    0.0, 255.0);
 				}
 			dp[0] = res[0];
