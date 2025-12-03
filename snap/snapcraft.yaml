@@ -27,6 +27,7 @@ apps:
       - bin/fix-platform-order.sh
       - bin/auto-backend.sh
       - bin/env-imagemagick.sh
+      - bin/set-xdg-vars.sh
     command: usr/bin/geeqie
     extensions: [ gnome ]
     environment:
@@ -37,7 +38,16 @@ apps:
       MAGICK_HOME: "$SNAP/usr"
       PATH: "$SNAP/usr/bin:$SNAP/bin:$PATH"
       GDK_PIXBUF_MODULE_FILE: "$SNAP_USER_COMMON/.cache/gdk-pixbuf-loaders.cache"
-    plugs: [ home, removable-media, gsettings, wayland, x11, opengl, network ]
+    plugs:
+      - home
+      - removable-media
+      - gsettings
+      - wayland
+      - x11
+      - opengl
+      - network
+      - desktop
+      - desktop-legacy
 
   wayland:
     command-chain:
@@ -54,7 +64,16 @@ apps:
       MAGICK_CODER_MODULE_PATH: "$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6/modules-Q16/coders:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6.9.12/modules-Q16/coders"
       MAGICK_HOME: "$SNAP/usr"
       PATH: "$SNAP/usr/bin:$SNAP/bin:$PATH"
-    plugs: [ home, removable-media, gsettings, wayland, x11, opengl, network ]
+    plugs:
+      - home
+      - removable-media
+      - gsettings
+      - wayland
+      - x11
+      - opengl
+      - network
+      - desktop
+      - desktop-legacy
 
   x11:
     command-chain:
@@ -71,7 +90,16 @@ apps:
       MAGICK_CODER_MODULE_PATH: "$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6/modules-Q16/coders:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6.9.12/modules-Q16/coders"
       MAGICK_HOME: "$SNAP/usr"
       PATH: "$SNAP/usr/bin:$SNAP/bin:$PATH"
-    plugs: [ home, removable-media, gsettings, wayland, x11, opengl, network ]
+    plugs:
+      - home
+      - removable-media
+      - gsettings
+      - wayland
+      - x11
+      - opengl
+      - network
+      - desktop
+      - desktop-legacy
 
 slots:
   geeqie-dbus:
@@ -239,3 +267,4 @@ parts:
       install -Dm755 snap/local/auto-backend.sh    "$CRAFT_PART_INSTALL/bin/auto-backend.sh"
       install -Dm755 snap/local/force-wayland.sh   "$CRAFT_PART_INSTALL/bin/force-wayland.sh"
       install -Dm755 snap/local/force-x11.sh       "$CRAFT_PART_INSTALL/bin/force-x11.sh"
+      install -Dm755 snap/local/set-xdg-vars.sh "$CRAFT_PART_INSTALL/bin/set-xdg-vars.sh"

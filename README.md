@@ -161,6 +161,30 @@ cd ./squashfs-root
 ./AppRun
 ```
 
+### Snaps
+
+Snaps run in a sandboxed environment which prohibits access to, amongst other areas, hidden folders in the `$HOME` folder.
+
+If you have already run Geeqie with some other installation type and now want to migrate to a Snap, some significant data will not be available. That data is in:
+
+```sh
+$HOME/.config/geeqie (Configuration files)
+$HOME/.local/share/geeqie (Collections and local Metadata)
+```
+
+You may copy this data to the sandboxed area used by Geeqie by running these commands:
+
+```sh
+cp -avr "$HOME/.config/geeqie/." "$HOME/snap/geeqie/common/.config/geeqie/"
+cp -avr "$HOME/.local/share/geeqie/." "$HOME/snap/geeqie/common/.local/share/geeqie/"
+```
+
+Thumbnails and similarity data will also not be available. You must regenerate them or copy them manually from whichever folder they are stored in to a folder under:
+
+```sh
+$HOME/snap/geeqie/common/.cache
+```
+
 ### Installation scripts
 
 Geeqie is stable and you may compile the latest version from sources.
