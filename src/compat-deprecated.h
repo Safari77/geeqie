@@ -75,7 +75,6 @@ const auto gq_gtk_ui_manager_set_add_tearoffs = gtk_ui_manager_set_add_tearoffs;
 // Hide other Gdk/Gtk deprecation warnings
 const auto gq_gdk_cairo_create = gdk_cairo_create;
 const auto gq_gdk_flush = gdk_flush;
-const auto gq_gdk_keyboard_grab = gdk_keyboard_grab;
 const auto gq_gdk_keyboard_ungrab = gdk_keyboard_ungrab;
 const auto gq_gdk_pixbuf_animation_get_iter = gdk_pixbuf_animation_get_iter;
 const auto gq_gdk_pixbuf_animation_iter_advance = gdk_pixbuf_animation_iter_advance;

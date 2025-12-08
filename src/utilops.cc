@@ -749,7 +749,7 @@ static void file_util_progress_window_new(UtilityData *ud)
 	gtk_widget_show(ud->progress_spinner);
 
 	/* Set default window size */
-	gtk_window_resize(GTK_WINDOW(ud->progress_gd->dialog), PROGRESS_WINDOW_WIDTH, PROGRESS_WINDOW_HEIGHT);
+	gq_gtk_window_resize(GTK_WINDOW(ud->progress_gd->dialog), PROGRESS_WINDOW_WIDTH, PROGRESS_WINDOW_HEIGHT);
 
 	gtk_widget_show(ud->progress_gd->dialog);
 }
@@ -2021,7 +2021,7 @@ void file_util_dialog_run(UtilityData *ud)
 					GdkRectangle rect;
 					if (!options->save_dialog_window_positions || !generic_dialog_find_window("Rename", "dlg_confirm", rect))
 						{
-						gtk_window_resize(GTK_WINDOW(ud->gd->dialog), RENAME_WINDOW_WIDTH, RENAME_WINDOW_HEIGHT);
+						gq_gtk_window_resize(GTK_WINDOW(ud->gd->dialog), RENAME_WINDOW_WIDTH, RENAME_WINDOW_HEIGHT);
 						}
 					ud->phase = UtilityPhase::ENTERING;
 					break;

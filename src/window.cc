@@ -94,8 +94,25 @@ gboolean window_maximized(GtkWidget *window)
 static void help_browser_run(const gchar *path)
 {
 	g_autoptr(GError) error = nullptr;
+	g_autofree char *uri = nullptr;
 
-	g_app_info_launch_default_for_uri(path, nullptr, &error);
+	if (g_uri_is_valid(path, G_URI_FLAGS_NONE, nullptr))
+		{
+		uri = g_strdup(path);
+		}
+	else
+		{
+		uri = g_filename_to_uri(path, nullptr, &error);
+		}
+
+	if (uri == nullptr)
+		{
+		log_printf("Error converting '%s' to URI: %s\n", path, error ? error->message : "unknown error");
+
+		return;
+		}
+
+	g_app_info_launch_default_for_uri(uri, nullptr, &error);
 
 	if (error)
 		{

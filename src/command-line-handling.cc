@@ -315,11 +315,11 @@ void gq_config_load(GtkApplication *, GApplicationCommandLine *app_command_line,
 #ifdef DEBUG
 /**
  * @brief Convert debug input string to integer and set level
- * @param GtkApplication 
- * @param GApplicationCommandLine 
- * @param command_line_options_dict 
- * @param GList 
- * 
+ * @param GtkApplication
+ * @param GApplicationCommandLine
+ * @param command_line_options_dict
+ * @param GList
+ *
  * The debug string should be between 0 and 4. If an illegal text string is
  * input, the conversion will default to integer 0.
  */
@@ -517,7 +517,7 @@ void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 		g_auto(GStrv) geometry = g_strsplit_set(text, "+x", 4);
 		if (geometry[0] != nullptr && geometry[1] != nullptr)
 			{
-			gtk_window_resize(GTK_WINDOW(lw_id->window), atoi(geometry[0]), atoi(geometry[1]));
+			gq_gtk_window_resize(GTK_WINDOW(lw_id->window), atoi(geometry[0]), atoi(geometry[1]));
 			}
 		if (geometry[2] != nullptr && geometry[3] != nullptr)
 			{
