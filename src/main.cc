@@ -665,11 +665,22 @@ void set_theme_bg_color()
 	view_window_colors_update();
 }
 
-gboolean theme_change_cb(GObject *, GParamSpec *, gpointer)
+void theme_change_cb(GSettings *iface, gchar, gpointer)
 {
 	set_theme_bg_color();
 
-	return FALSE;
+	g_autofree gchar *scheme = g_settings_get_string(iface, "color-scheme");
+
+	GtkSettings *settings = gtk_settings_get_default();
+
+	if (g_strcmp0(scheme, "prefer-dark") == 0)
+		{
+		g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
+		}
+	else
+		{
+		g_object_set(settings, "gtk-application-prefer-dark-theme", FALSE, nullptr);
+		}
 }
 
 /**
@@ -823,8 +834,6 @@ void activate_cb(GtkApplication *, gpointer)
 
 void startup_cb(GtkApplication *app, gpointer)
 {
-	GtkSettings *default_settings;
-
 	startup_common(app, nullptr);
 
 	const gchar *gq_disable_clutter = g_getenv("GQ_DISABLE_CLUTTER");
@@ -889,9 +898,9 @@ void startup_cb(GtkApplication *app, gpointer)
 
 	marks_load();
 
-	default_settings = gtk_settings_get_default();
+	GSettings *iface = g_settings_new("org.gnome.desktop.interface");
+	g_signal_connect(iface, "changed::color-scheme", G_CALLBACK(theme_change_cb), nullptr);
 
-	g_signal_connect(default_settings, "notify::gtk-theme-name", G_CALLBACK(theme_change_cb), nullptr);
 	set_theme_bg_color();
 
 	/* Show a notification if the server has a newer AppImage version */
