@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="32px" height="32px" viewBox="0 0 24 24"
+     xmlns="http://www.w3.org/2000/svg">
+
+  <style>
+    .cls-1 {
+      fill: none;
+      stroke: #000000;
+      stroke-miterlimit: 10;
+      stroke-width: 1.91px;
+    }
+    .cls-2 {
+      fill: #000000;
+    }
+  </style>
+
+  <!-- Mask to make only the inside of the circle white -->
+  <mask id="circle-bg-mask">
+    <!-- black = masked (transparent), white = visible -->
+    <rect x="0" y="0" width="24" height="24" fill="black"/>
+    <circle cx="12" cy="12" r="7.64" fill="white"/>
+  </mask>
+
+  <!-- White fill restricted to the circle region -->
+  <rect x="0" y="0" width="24" height="24"
+        fill="white" mask="url(#circle-bg-mask)"/>
+
+  <!-- Inner geometry -->
+  <circle class="cls-1" cx="12" cy="12" r="7.64"/>
+  <polygon class="cls-2" points="13.43 9.14 10.57 9.14 12 6.27 13.43 9.14"/>
+  <polygon class="cls-2" points="10.57 14.86 13.43 14.86 12 17.73 10.57 14.86"/>
+  <polygon class="cls-2" points="14.86 13.43 14.86 10.57 17.73 12 14.86 13.43"/>
+  <polygon class="cls-2" points="9.14 10.57 9.14 13.43 6.27 12 9.14 10.57"/>
+  <circle class="cls-1" cx="12" cy="12" r="0.95"/>
+
+</svg>

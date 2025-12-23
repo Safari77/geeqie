@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 # Prefer Wayland if available & supported; otherwise fall back to X11.
 unset DISABLE_WAYLAND
 if [ -n "$WAYLAND_DISPLAY" ]

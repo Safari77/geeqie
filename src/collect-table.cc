@@ -1499,12 +1499,9 @@ static gboolean collection_table_auto_scroll_idle_cb(gpointer data)
 
 	if (ct->drop_idle_id)
 		{
-		GdkWindow *window = gtk_widget_get_window(ct->listview);
-
-		GdkPoint pos;
-		if (window_get_pointer_position(window, pos))
+		if (ct->pointer_valid)
 			{
-			collection_table_motion_update(ct, pos.x, pos.y, TRUE);
+			collection_table_motion_update(ct, ct->last_x, ct->last_y, TRUE);
 			}
 
 		ct->drop_idle_id = 0;
@@ -2475,6 +2472,29 @@ static void collection_table_sized(GtkWidget *, GtkAllocation *allocation, gpoin
 	collection_table_populate_at_new_size(ct, allocation->width, allocation->height, FALSE);
 }
 
+#if HAVE_GTK4
+static void listview_motion_cb(GtkEventControllerMotion *motion, gdouble x, gdouble y, gpointer data)
+{
+	auto *ct = static_cast<CollectTable *>(data);
+
+	ct->last_x = static_cast<gint>(x);
+	ct->last_y = static_cast<gint>(y);
+	ct->pointer_valid = TRUE;
+}
+
+#else
+static gboolean listview_motion_cb(GtkWidget *, GdkEventMotion *event, gpointer data)
+{
+	auto *ct = static_cast<CollectTable*>(data);
+
+	ct->last_x = event->x;
+	ct->last_y = event->y;
+	ct->pointer_valid = TRUE;
+
+	return FALSE;
+}
+#endif
+
 CollectTable *collection_table_new(CollectionData *cd)
 {
 	CollectTable *ct;
@@ -2536,6 +2556,14 @@ CollectTable *collection_table_new(CollectionData *cd)
 	g_signal_connect(G_OBJECT(ct->listview), "leave_notify_event",
 			 G_CALLBACK(collection_table_leave_cb), ct);
 
+#if HAVE_GTK4
+	GtkEventController *motion = gtk_event_controller_motion_new();
+	g_signal_connect(motion, "motion", G_CALLBACK(listview_motion_cb), ct);
+	gtk_widget_add_controller(ct->listview, motion);
+#else
+	gtk_widget_add_events(ct->listview, GDK_POINTER_MOTION_MASK);
+	g_signal_connect(ct->listview, "motion-notify-event", G_CALLBACK(listview_motion_cb), ct);
+#endif
 	return ct;
 }
 

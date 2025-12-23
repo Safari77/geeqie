@@ -550,18 +550,66 @@ void cell_renderer_height_override(GtkCellRenderer *renderer)
  *        Value -1 means using the cursor of its parent window.
  * @todo Use std::optional for icon since C++17 instead of special -1 value
  */
+#if HAVE_GTK4
+static const gchar *cursor_name_from_legacy_icon(gint icon)
+{
+	switch (icon)
+		{
+		case GDK_ARROW:
+			return "default";
+		case GDK_HAND2:
+			return "pointer";
+		case GDK_CROSS:
+			return "crosshair";
+		case GDK_WATCH:
+			return "wait";
+		case GDK_XTERM:
+			return "text";
+		case GDK_FLEUR:
+			return "move";
+		default:
+			return nullptr;
+		}
+}
+#endif
+
 void widget_set_cursor(GtkWidget *widget, gint icon)
 {
-	GdkWindow *window = gtk_widget_get_window(widget);
-	if (!window) return;
+	if (!widget)
+		{
+		return;
+		}
+
+#if HAVE_GTK4
+	if (icon == -1)
+		{
+		gtk_widget_set_cursor(widget, nullptr);
+		}
+	else
+		{
+		auto *name = cursor_name_from_legacy_icon(icon);
+		if (name)
+			{
+			gtk_widget_set_cursor_from_name(widget, name);
+			}
+		}
+
+#else
+	auto *window = gtk_widget_get_window(widget);
+
+	if (!window)
+		{
+		return;
+		}
 
 	GdkCursor *cursor = nullptr;
 
 	if (icon != -1)
 		{
-		GdkDisplay *display = gdk_display_get_default();
+		auto *display = gdk_window_get_display(window);
 		cursor = gdk_cursor_new_for_display(display, static_cast<GdkCursorType>(icon));
 		}
+#endif
 
 	gdk_window_set_cursor(window, cursor);
 

@@ -1,15 +1,4 @@
-# This file is a part of Geeqie project (https://www.geeqie.org/).
-# Copyright (C) 2008 - 2022 The Geeqie Team
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 add_project_arguments('-DGETTEXT_PACKAGE="geeqie"', language:'c')
 
@@ -57,11 +46,16 @@ po_sources = files([
   'zh_TW.po'
 ])
 
-translators_sh = join_paths(scriptsdir, 'translators.sh')
+translators_sh = join_paths(buildauxdir, 'translators.sh')
 
 translator_resources = custom_target('translator_resources',
                 input : 'locales.txt',
                 output : 'translators',
-                command : [translators_sh, meson.current_build_dir(), meson.current_source_dir(), '@INPUT@', po_sources])
+                command : [
+                  translators_sh,
+                  meson.current_build_dir(),
+                  meson.current_source_dir(),
+                  '@INPUT@',
+                ] + po_sources)
 
 project_sources += gnome.compile_resources('translators', 'translators.gresource.xml', dependencies : translator_resources)

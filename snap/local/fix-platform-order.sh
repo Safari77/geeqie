@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 # Reorder LD_LIBRARY_PATH so that any gnome-platform directories come first.
 
 old_IFS=$IFS

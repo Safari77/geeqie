@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ SPDX-License-Identifier: GPL-2.0-or-later
+-->
+
+<gresources>
+  <gresource prefix="/org/geeqie/icc">
+    <file>ClayRGB1998.icc</file>
+  </gresource>
+</gresources>

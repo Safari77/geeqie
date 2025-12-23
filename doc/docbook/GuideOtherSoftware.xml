@@ -56,7 +56,7 @@
   <section id="DecodeSim">
     <title>Decoder for .sim files</title>
     <para>
-      This program is unlikely to be of interest to most users. It shows a summary of the contents of a .sim file. (Requires perl to be installed): <ulink url="https://raw.githubusercontent.com/BestImageViewer/geeqie/master/scripts/decode_sim">decode_sim</ulink>
+      This program is unlikely to be of interest to most users. It shows a summary of the contents of a .sim file. (Requires perl to be installed): <ulink url="https://raw.githubusercontent.com/BestImageViewer/geeqie/master/tools/decode-sim">decode_sim</ulink>
     </para>
   </section>
 </chapter>

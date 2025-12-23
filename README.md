@@ -125,7 +125,7 @@ The minimal version can display jpegs, pngs and some other formats, but does not
 This script file will download to `$HOME/bin` the latest Continuous Build AppImages for you:
 
 ```sh
-wget https://raw.githubusercontent.com/BestImageViewer/geeqie/master/scripts/geeqie-download-appimage.sh
+wget https://raw.githubusercontent.com/BestImageViewer/geeqie/master/tools/geeqie-download-appimage.sh
 chmod +x geeqie-download-appimage.sh
 ```
 
@@ -287,7 +287,7 @@ chmod +x geeqie-install-debian.sh
 
 ### Translators
 
-Please see file `./po/README.md`.
+Please see file `./TRANSLATORS.md`.
 
 ### Code hackers
 

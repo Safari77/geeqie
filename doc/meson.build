@@ -1,17 +1,4 @@
-# This file is a part of Geeqie project (https://www.geeqie.org/).
-# Copyright (C) 2008 - 2022 The Geeqie Team
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#
-
-subdir('html')
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 guideindex_xml = files('docbook/GuideIndex.xml')
 destdir = join_paths(meson.current_build_dir(), 'html')
@@ -27,13 +14,16 @@ if not option.disabled()
             input: guideindex_xml,
             output: 'help-html.stamp',  # Dummy stamp to track build
             command: [
-                gnome_doc_tool, 'html', '@INPUT@',
-                '-o', destdir,
-                '-p', graphicsdir,
-                '&&', 'ln', '-sf', 'GuideIndex.html', guideindex_ln,
-                '&&', 'touch', '@OUTPUT@'
+                'sh', '-c',
+                'mkdir -p "$2" && ' +
+                gnome_doc_tool.full_path() + ' html "$1" -o "$2" -p "$3" && ln -sf GuideIndex.html "$4" && touch "$5"',
+                '_',
+                '@INPUT@',
+                 destdir,
+                 graphicsdir,
+                 guideindex_ln,
+                '@OUTPUT@'
                 ],
-            build_by_default: true,
             install: false
             )
         summary({'help': ['Help files created:', true]}, section: 'Documentation', bool_yn: true)
@@ -51,7 +41,7 @@ if running_from_git
         if doxygen.found()
             srcdir = join_paths(meson.project_source_root())
             destdir = join_paths(meson.project_build_root(), 'doc', 'html', 'lua-api')
-            run_command(find_program('create-doxygen-lua-api.sh'), srcdir, destdir, check : false)
+            run_command(find_program('../build-aux/create-doxygen-lua-api.sh'), srcdir, destdir, check : false)
             summary({'lua-api' : ['lua-api help file created:', true]}, section : 'Documentation', bool_yn : true)
         else
             summary({'lua-api' : ['doxygen not found - lua-api help file created:', false]}, section : 'Documentation', bool_yn : true)
@@ -99,9 +89,10 @@ if not option.disabled()
             )
 
         # Convert the text ToC to the format needed by pdfoutline
+        toc_awk = join_paths(buildauxdir, 'toc.awk')
         toc_as_text = custom_target(
             'create toc layout as text file',
-            input : ['toc.awk', pdf_as_text],
+            input : [toc_awk, pdf_as_text],
             output : 'toc.txt',
             command : [awk_exe, '-v', 'output_file=@OUTPUT@', '-f', '@INPUT0@', '@INPUT1@'],
             )

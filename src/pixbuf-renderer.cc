@@ -817,7 +817,7 @@ static void pr_scroller_start(PixbufRenderer *pr, gint x, gint y)
 		gint h;
 
 #ifdef GQ_BUILD
-		pixbuf = gdk_pixbuf_new_from_resource(GQ_RESOURCE_PATH_ICONS "/" PIXBUF_INLINE_SCROLLER ".png", nullptr);
+		pixbuf = gdk_pixbuf_new_from_resource(GQ_RESOURCE_PATH_ICONS "/" PIXBUF_INLINE_SCROLLER ".svg", nullptr);
 #else
 		pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, 32, 32);
 		gdk_pixbuf_fill(pixbuf, 0x000000ff);

@@ -83,14 +83,14 @@ meson setup -C build -D unit_test=enabled
 This tests that Geeqie can successfully open and provide metadata info about a
 library of images of different types.
 
-See `scripts/image-test.py` for more details.
+See `build-aux/image-test.py` for more details.
 
 ### Lua tests
 
 Verifies that Geeqie can successfully run lua scripts by opening a stock test
 image and running a variety of lua operations on it.
 
-See `scripts/lua-test.sh` for more details.
+See `build-aux/lua-test.sh` for more details.
 
 ## Static Analysis
 
@@ -107,33 +107,33 @@ for more details.
 
 Checks for single-value enums.
 
-See `scripts/enum-check.sh` for more details.
+See `build-aux/enum-check.sh` for more details.
 
 ### Debug statement checks
 
 Checks for `DEBUG_0`, `DEBUG_BT`, or `DEBUG_FD` statements in the source tree.
 
-See `scripts/debug-check.sh` for more details.
+See `build-aux/debug-check.sh` for more details.
 
 ### Temporary comment checks
 
 Checks for comments starting with `//~` in the source tree.
 
-See `scripts/temporary-comments-check.sh` for more details.
+See `build-aux/temporary-comments-check.sh` for more details.
 
 ### GTK4 migration regression checks
 
 Checks that gtk functions for which there is a Geeqie GTK4 compatibility
 function have a `gq_` prefix.
 
-See `scripts/gtk4-migration-regression-check.sh` for more details.
+See `build-aux/gtk4-migration-regression-check.sh` for more details.
 
 ### Untranslated text checks
 
 Checks for strings that haven't been marked for translation (starting with `_(`)
 in the source tree.
 
-See `scripts/untranslated-text.sh` for more details.
+See `build-aux/untranslated-text.sh` for more details.
 
 ### Ancillary files checks
 
@@ -145,4 +145,4 @@ are covered in the functional test configuration.
 
 These checks also require `xvfb` for the GTK UI builder validator to run.
 
-See `scripts/test-ancillary-files.sh` for more details.
+See `build-aux/test-ancillary-files.sh` for more details.

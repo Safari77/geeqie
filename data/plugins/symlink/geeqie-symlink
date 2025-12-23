@@ -1,0 +1,26 @@
+#!/bin/sh
+
+## @file
+## @brief Symlink grouped files
+##
+## It uses geeqie remote connection to get details about grouped files
+##
+
+# iterate over files on commandline
+
+for file in "$@"
+do
+	# we got only one file for each group, typically the main one
+	# get the sidecars:
+	geeqie --get-sidecars="$file" | while read -r sidecar
+	do
+		# the main file is included in the sidecar file list, no special handling is required
+		# get destination path for each sidecar file:
+		destination=$(geeqie --get-destination "$sidecar")
+
+		if [ -n "$destination" ]
+		then
+			ln -s "$sidecar" "$destination"
+		fi
+	done
+done

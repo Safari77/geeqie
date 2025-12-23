@@ -1,15 +1,4 @@
-# This file is a part of Geeqie project (https://www.geeqie.org/).
-# Copyright (C) 2008 - 2022 The Geeqie Team
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 # Meson default directories used in this project:
 # prefix - /usr/local
@@ -29,7 +18,7 @@
 # [gq_]appdir   /usr/local/share/geeqie/            *   org,geeqie.template.desktop
 # desktopdir    /usr/local/share/geeqie/applications    plugin desktop files
 # appdatadir    /usr/local/share/metainfo               org.geeqie.Geeqie.appdata.xml
-# icondir       /usr/local/share/pixmaps                geeqie.png icon
+# icondir       /usr/local/share/icons/hicolor/scalable/apps  geeqie.svg icon
 # [gq_]helpdir  /usr/local/share/doc/geeqie         *   readme files etc.
 # [gq_]htmldir  /usr/local/share/doc/geeqie/html    *   help files
 # gq_localedir  /usr/locale/share/locale
@@ -43,7 +32,7 @@ project(
     'geeqie',
     'c',
     'cpp',
-    version : run_command('./version.sh', check : true).stdout().strip(),
+    version : run_command('./build-aux/version.sh', check : true).stdout().strip(),
     license : ['GPL-2.0-or-later'],
     meson_version : '>=1.3.2',
     default_options : ['cpp_std=c++17', 'warning_level=3', 'buildtype=release', 'cpp_link_args=-rdynamic']
@@ -125,11 +114,14 @@ appdatadir = join_paths(datadir, 'metainfo')
 desktopdir = join_paths(datadir, meson.project_name(), 'applications')
 helpdir = join_paths(prefix, gq_helpdir)
 htmldir = join_paths(prefix, gq_htmldir)
-icondir = join_paths(datadir, 'pixmaps')
+icondir = join_paths(datadir, 'icons/hicolor/scalable/apps/')
 mandir1 = join_paths(datadir, 'man', 'man1')
 completionsdir = join_paths(datadir, 'bash-completion', 'completions')
+
 podir = join_paths(meson.project_source_root(), 'po')
-scriptsdir = join_paths(meson.project_source_root(), 'scripts')
+buildauxdir = join_paths(meson.project_source_root(), 'build-aux')
+packagingdir = join_paths(meson.project_source_root(), 'packaging')
+testsdir = join_paths(meson.project_source_root(), 'teste')
 
 summary({'gq_appdir': gq_appdir,
         'gq_bindir': gq_helpdir,
@@ -633,12 +625,8 @@ configure_file(input : 'config.h.in',
                encoding : 'UTF-8',
                configuration : conf_data)
 
-# For gtk builder checks on .ui files
-ui_sources = []
-
 # Process subdirs before the sources
 subdir('po')
-subdir('plugins')
 
 conditional_unit_test_deps = []
 if conf_data.get('ENABLE_UNIT_TESTS', 0) == 1
@@ -655,37 +643,26 @@ if conf_data.get('ENABLE_UNIT_TESTS', 0) == 1
     endif
 endif
 
+# Generate css, icons and ui files
+subdir('data')
+
+if conf_data.get('ENABLE_UNIT_TESTS', 0) == 1
+    subdir('tests')
+endif
+
 # Generate the executable
 subdir('src')
+
+subdir('build-aux')
 
 # Generate the help files
 subdir('doc')
 
-# Generate the command line auto-complete file
-subdir('auto-complete')
-
-# Install other project files
-if running_from_git
-    cmd = [find_program('gen_changelog.sh'), meson.current_source_dir(), meson.current_build_dir()]
-    custom_target(
-        'ChangeLog',
-        input: 'ChangeLog.gqview',
-        output: ['ChangeLog', 'ChangeLog.html'],
-        command: cmd,
-        install: true,
-        install_dir: helpdir)
-    meson.add_dist_script(cmd)
-    summary({'ChangeLog' : ['ChangeLog, ChangeLog.html created:', true]}, section : 'Documentation', bool_yn : true)
-elif fs.exists('ChangeLog.html')
-    install_data('ChangeLog', 'ChangeLog.html', install_dir: helpdir)
-    summary({'ChangeLog' : ['ChangeLog, ChangeLog.html installed from dist:', true]}, section : 'Documentation', bool_yn : true)
-endif
-
-install_data('geeqie.png', install_dir : icondir)
-install_data('geeqie.1', install_dir : mandir1)
+geeqie_icon = join_paths(meson.project_source_root(), 'data', 'icons', 'geeqie.svg')
+install_data(geeqie_icon, install_dir : icondir)
 
 i18n.merge_file(
-    input : 'org.geeqie.Geeqie.desktop.in',
+    input : 'data/org.geeqie.Geeqie.desktop.in',
     output : 'org.geeqie.Geeqie.desktop',
     type : 'desktop',
     po_dir : podir,
@@ -693,16 +670,17 @@ i18n.merge_file(
     install_dir : join_paths(datadir, 'applications'))
 
 i18n.merge_file(
-    input : 'org.geeqie.Geeqie.appdata.xml.in',
-    output : 'org.geeqie.Geeqie.appdata.xml',
+    input : 'data/org.geeqie.Geeqie.metainfo.xml.in',
+    output : 'org.geeqie.Geeqie.metainfo.xml',
     type : 'xml',
     po_dir : podir,
     install : true,
     install_dir : appdatadir)
 
-configure_file(input: 'geeqie.spec.in', output: 'geeqie.spec', configuration: conf_data)
+geeqie_spec_in = join_paths(packagingdir, 'rpm', 'geeqie.spec.in')
+configure_file(input: geeqie_spec_in, output: 'geeqie.spec', configuration: conf_data)
 
-isolate_test_sh = find_program('isolate-test.sh', dirs : scriptsdir, required : true)
+isolate_test_sh = find_program('isolate-test.sh', dirs : buildauxdir, required : true)
 
 # Basic test of the executable
 xvfb = find_program('xvfb-run', required : false)
@@ -722,8 +700,8 @@ endif
 option = get_option('unit_tests')
 if option.enabled()
     if xvfb.found()
-        get_test_images_sh = find_program('get-test-images.sh', dirs : scriptsdir, required : true)
-        image_test_py = find_program('image-test.py', dirs : scriptsdir, required : true)
+        get_test_images_sh = find_program('get-test-images.sh', dirs : buildauxdir, required : true)
+        image_test_py = find_program('image-test.py', dirs : buildauxdir, required : true)
 
         images_dir = join_paths(meson.current_build_dir(), 'test-images.p')
 
@@ -773,7 +751,7 @@ else
 endif
 
 # Single value enum checks
-enum_check_sh = find_program('enum-check.sh', dirs : scriptsdir, required : true)
+enum_check_sh = find_program('enum-check.sh', dirs : buildauxdir, required : true)
 if enum_check_sh.found()
     foreach source_file : code_sources
         source_file_name = fs.name(source_file)
@@ -786,7 +764,7 @@ else
 endif
 
 # Debug statement checks
-debug_check_sh = find_program('debug-check.sh', dirs : scriptsdir, required : true)
+debug_check_sh = find_program('debug-check.sh', dirs : buildauxdir, required : true)
 if debug_check_sh.found()
     foreach source_file : code_sources
         source_file_name = fs.name(source_file)
@@ -801,7 +779,7 @@ else
 endif
 
 # Temporary comments checks
-tmp_comments_check_sh = find_program('temporary-comments-check.sh', dirs : scriptsdir, required : true)
+tmp_comments_check_sh = find_program('temporary-comments-check.sh', dirs : buildauxdir, required : true)
 if tmp_comments_check_sh.found()
     foreach source_file : code_sources
         source_file_name = fs.name(source_file)
@@ -816,7 +794,7 @@ else
 endif
 
 # GTK4 migration regression checks
-gtk4_migration_check_sh = find_program('gtk4-migration-regression-check.sh', dirs : scriptsdir, required : true)
+gtk4_migration_check_sh = find_program('gtk4-migration-regression-check.sh', dirs : buildauxdir, required : true)
 if gtk4_migration_check_sh.found()
     compat_cc = join_paths(meson.project_source_root(), 'src', 'compat.cc')
     compat_h = join_paths(meson.project_source_root(), 'src', 'compat.h')
@@ -833,7 +811,7 @@ else
 endif
 
 # Untranslated text checks
-untranslated_text_sh = find_program('untranslated-text.sh', dirs : scriptsdir, required : true)
+untranslated_text_sh = find_program('untranslated-text.sh', dirs : buildauxdir, required : true)
 if untranslated_text_sh.found()
      foreach source_file : code_sources
         if fs.name(source_file).endswith('.cc')
@@ -852,7 +830,7 @@ option = get_option('lua')
 if not option.disabled()
     if lua_dep.found()
         if xvfb.found()
-            lua_test_sh = find_program('lua-test.sh', dirs : scriptsdir, required : true)
+            lua_test_sh = find_program('lua-test.sh', dirs : buildauxdir, required : true)
             test('Lua test', isolate_test_sh, args: [lua_test_sh.full_path(), geeqie_exe.full_path()], timeout: 100, suite : 'analysis')
 
             summary({'lua' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
@@ -867,7 +845,7 @@ else
 endif
 
 # Ancillary files test
-test_ancillary_files_sh = find_program('test-ancillary-files.sh', dirs : scriptsdir, required : true)
+test_ancillary_files_sh = find_program('test-ancillary-files.sh', dirs : buildauxdir, required : true)
 test('Ancillary files', test_ancillary_files_sh, args: [meson.current_source_dir()], timeout: 100, suite : 'analysis')
 
 summary({'Ancillary files' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)

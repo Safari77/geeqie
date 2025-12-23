@@ -1,5 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
 # shellcheck disable=SC2154  # SNAP is set by snapd
+
 case "$SNAP_ARCH" in
   amd64)  MA=x86_64-linux-gnu ;;
   arm64)  MA=aarch64-linux-gnu ;;

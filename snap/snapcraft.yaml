@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 name: geeqie
 title: Geeqie
 base: core24
@@ -23,7 +25,6 @@ package-repositories:
 apps:
   geeqie:  # auto-detect (Wayland if available, else X11)
     command-chain:
-      - bin/ensure-gdkpixbuf-cache.sh
       - bin/fix-platform-order.sh
       - bin/auto-backend.sh
       - bin/env-imagemagick.sh
@@ -37,7 +38,6 @@ apps:
       MAGICK_CODER_MODULE_PATH: "$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6/modules-Q16/coders:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/ImageMagick-6.9.12/modules-Q16/coders"
       MAGICK_HOME: "$SNAP/usr"
       PATH: "$SNAP/usr/bin:$SNAP/bin:$PATH"
-      GDK_PIXBUF_MODULE_FILE: "$SNAP_USER_COMMON/.cache/gdk-pixbuf-loaders.cache"
     plugs:
       - home
       - removable-media
@@ -51,7 +51,6 @@ apps:
 
   wayland:
     command-chain:
-      - bin/ensure-gdkpixbuf-cache.sh
       - bin/fix-platform-order.sh
       - bin/force-wayland.sh
       - bin/env-imagemagick.sh
@@ -77,7 +76,6 @@ apps:
 
   x11:
     command-chain:
-      - bin/ensure-gdkpixbuf-cache.sh
       - bin/fix-platform-order.sh
       - bin/force-x11.sh
       - bin/env-imagemagick.sh
@@ -215,12 +213,6 @@ parts:
       - zenity
       - yad
 
-      # SVG support (pixbuf loader comes from librsvg2-common)
-      - librsvg2-common
-      - librsvg2-2
-      # Needed to run gdk-pixbuf-query-loaders at launch
-      - libgdk-pixbuf2.0-bin
-
     override-prime: |
       set -eux
       craftctl default
@@ -261,7 +253,6 @@ parts:
     plugin: nil
     source: .
     override-build: |
-      install -Dm755 snap/local/ensure-gdkpixbuf-cache.sh "$CRAFT_PART_INSTALL/bin/ensure-gdkpixbuf-cache.sh"
       install -Dm755 snap/local/fix-platform-order.sh "$CRAFT_PART_INSTALL/bin/fix-platform-order.sh"
       install -Dm755 snap/local/env-imagemagick.sh "$CRAFT_PART_INSTALL/bin/env-imagemagick.sh"
       install -Dm755 snap/local/auto-backend.sh    "$CRAFT_PART_INSTALL/bin/auto-backend.sh"

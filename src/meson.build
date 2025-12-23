@@ -1,15 +1,4 @@
-# This file is a part of Geeqie project (https://www.geeqie.org/).
-# Copyright (C) 2008 - 2022 The Geeqie Team
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 main_sources = files('advanced-exif.cc',
 'advanced-exif.h',
@@ -327,24 +316,14 @@ endif
 
 code_sources += main_sources
 
-subdir('authors')
 subdir('filedata')
-subdir('icons')
 subdir('pan-view')
 subdir('third-party')
-subdir('ui')
 subdir('view-file')
 
-if conf_data.get('ENABLE_UNIT_TESTS', 0) == 1
-    subdir('tests')
-endif
-
+## @FIXME code_sources is modified in ./tests/meson.build
 # We assume that code_sources is only set above.
 project_sources += code_sources
-
-if conf_data.get('HAVE_LCMS', 0) == 1
-    project_sources += gnome.compile_resources('icc', 'icc.gresource.xml')
-endif
 
 geeqie_exe = executable('geeqie', project_sources,
 dependencies : [

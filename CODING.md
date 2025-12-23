@@ -65,35 +65,13 @@ This feature may be used to open an editor at a file location in the text string
 
 ---
 
-## GPL header
+## SPDX license
 
-Include a header in every file, like this:  
+In all new files include a header, like this:
 
 ```c
-/*
- * Copyright (C) <year> The Geeqie Team
- *
- * Author: Author1  
- * Author: Author2  
- *  
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- *
- *
- * Optional description of purpose of file.
- *
-*/  
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
 ```
 
 ---
@@ -221,6 +199,20 @@ Variables declarations should be followed by a blank line and should always be a
 Use glib types when possible (ie. gint and gchar instead of int and char).  
 Use glib functions when possible (i.e. `g_ascii_isspace()` instead of `isspace()`).  
 Check if used functions are not deprecated.  
+
+### C++ style
+
+In the case that both the following lines are syntactically correct, in order to emphasise the use of a pointer use:
+
+```c
+auto *var = function();
+```
+
+and not:
+
+```c
+auto var = function();
+```
 
 ---
 
@@ -415,6 +407,9 @@ Script files such as .sh, .pl, and .awk should have the file relevant file exten
 Doxygen comments should start each line with `##`, and each file should contain:
 
 ```sh
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 ## @file
 ## @brief <one line description>
 ## <contents description>

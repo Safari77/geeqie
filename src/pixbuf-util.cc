@@ -77,6 +77,7 @@ constexpr PixbufInline inline_pixbuf_data[] = {
 	{ PIXBUF_INLINE_ICON_MOVE,              "gq-icon-move" },
 	{ PIXBUF_INLINE_ICON_ORIGINAL,          "gq-icon-original" },
 	{ PIXBUF_INLINE_ICON_PANORAMA,          "gq-icon-panorama" },
+	{ PIXBUF_INLINE_ICON_PLACEHOLDER,       "gq-icon-placeholder" },
 	{ PIXBUF_INLINE_ICON_PDF,               "gq-icon-pdf" },
 	{ PIXBUF_INLINE_ICON_PROPERTIES,        "gq-icon-properties" },
 	{ PIXBUF_INLINE_ICON_RENAME,            "gq-icon-rename" },
@@ -198,7 +199,7 @@ GdkPixbuf *pixbuf_inline(const gchar *key)
 
 	const auto get_input_stream = [](const gchar *data, gboolean dark, GError **error) -> GInputStream *
 	{
-		g_autofree gchar *file_name = g_strconcat(data, dark ? "-dark" : "", ".png", nullptr);
+		g_autofree gchar *file_name = g_strconcat(data, dark ? "-dark" : "", ".svg", nullptr);
 		g_autofree gchar *path = g_build_filename(GQ_RESOURCE_PATH_ICONS, file_name, nullptr);
 		return g_resources_open_stream(path, G_RESOURCE_LOOKUP_FLAGS_NONE, error);
 	};

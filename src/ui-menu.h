@@ -35,7 +35,7 @@
  *
  * Used for two purposes:\n
  * to display the shortcuts keys in popup menus\n
- * used by ./doc/create-shortcuts-xml.sh to generate shortcut documentation in the Help files
+ * used by ./build-aux/create-shortcuts-xml.sh to generate shortcut documentation in the Help files
  *
  */
 struct HardcodedWindowKey
