@@ -416,6 +416,15 @@ void image_update_title(ImageWindow *imd)
  */
 static gboolean image_get_x11_screen_profile(ImageWindow *imd, guchar **screen_profile, gint *screen_profile_len)
 {
+#if HAVE_GTK4
+	/* GTK4: direct X11 root-window ICC profile access is not supported.
+	* Color management must be done via GdkColorProfile / colord.
+	*/
+	*screen_profile = nullptr;
+	*screen_profile_len = 0;
+
+	return FALSE;
+#else
 	GdkScreen *screen = gtk_widget_get_screen(imd->widget);;
 	GdkAtom    type   = GDK_NONE;
 	gint       format = 0;
@@ -425,6 +434,7 @@ static gboolean image_get_x11_screen_profile(ImageWindow *imd, guchar **screen_p
 				 GDK_NONE,
 				 0, 64 * 1024 * 1024, FALSE,
 				 &type, &format, screen_profile_len, screen_profile) && *screen_profile_len > 0);
+#endif
 }
 
 static gboolean image_post_process_color(ImageWindow *imd, gboolean run_in_bg)
