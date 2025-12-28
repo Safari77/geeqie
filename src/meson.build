@@ -349,6 +349,7 @@ libraw_dep,
 libwebp_dep,
 lua_dep,
 poppler_glib_dep,
+shumate_dep,
 thread_dep,
 tiff_dep
 ] + conditional_unit_test_deps,
