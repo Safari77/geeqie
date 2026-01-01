@@ -425,7 +425,7 @@ For a newline use two spaces (a backslash is not interpreted correctly by Doxyge
 For further documentation about Doxygen see the [Doxygen Manual](https://www.doxygen.nl/index.html).  
 For the possible commands you may use, see [Doxygen Special Commands](https://www.doxygen.nl/manual/commands.html).
 
-The file `./scripts/doxygen-help.sh` may be used to integrate access to the Doxygen files into a code editor.
+The file `./tools/doxygen-help.sh` may be used to integrate access to the Doxygen files into a code editor.
 
 The following environment variables may be set to personalize the Doxygen output:
 

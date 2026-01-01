@@ -42,6 +42,7 @@
 #include "exif.h"
 #include "filedata.h"
 #include "fullscreen.h"
+#include "geometry.h"
 #include "image-load.h"
 #include "image.h"
 #include "img-view.h"
@@ -1459,7 +1460,7 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 				PAN_POPUP_BORDER, PAN_POPUP_COLOR, PAN_POPUP_BORDER_COLOR);
 	pan_item_set_key(pbox, "info");
 
-	GdkPoint c1{pi->x + pi->width - 8, pi->y + 8};
+	GqPoint c1{pi->x + pi->width - 8, pi->y + 8};
 	if (pi->type == PAN_ITEM_THUMB && pi->pixbuf)
 		{
 		gint w = gdk_pixbuf_get_width(pi->pixbuf);
@@ -1469,8 +1470,8 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 		c1.y += (pi->height - h) / 2;
 		}
 
-	GdkPoint c2{pbox->x + 1, pbox->y + 36};
-	GdkPoint c3{pbox->x + 1, pbox->y + 12};
+	GqPoint c2{pbox->x + 1, pbox->y + 36};
+	GqPoint c3{pbox->x + 1, pbox->y + 12};
 
 	p = pan_item_tri_new(pw,
 	                     c1, c2, c3,

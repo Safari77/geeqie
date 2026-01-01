@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include "compat-deprecated.h"
+#include "geometry.h"
 #include "main-defines.h"
 #include "misc.h"
 #include "options.h"
@@ -2783,7 +2784,7 @@ static void pr_stereo_temp_disable(PixbufRenderer *pr, gboolean disable)
 /**
  * @brief pixel are the pixel coordinates see #pixbuf_renderer_get_mouse_position
  */
-gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GdkPoint pixel,
+gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GqPoint pixel,
                                           gint *r_mouse, gint *g_mouse, gint *b_mouse, gint *a_mouse)
 {
 	GdkPixbuf *pb = pr->pixbuf;
@@ -2837,7 +2838,7 @@ gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GdkPoint pixel,
 	return TRUE;
 }
 
-gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, GdkPoint &pixel)
+gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, GqPoint &pixel)
 {
 	g_return_val_if_fail(IS_PIXBUF_RENDERER(pr), FALSE);
 

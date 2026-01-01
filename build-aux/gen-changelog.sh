@@ -9,22 +9,12 @@
 ## ChangeLog.html is also created
 ##
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
-
-project_root="$PWD"
-
+project_root="$1"
 builddir="$2"
 
-cd "$1" || exit
-
-[ ! -e "./build-aux/ChangeLog.gqview" ] && exit 1
 [ ! -x "$(command -v git)" ] && exit 1
-[ ! -d ".git" ] && exit 1
 
-LC_ALL=C git log --no-merges --no-notes --encoding=UTF-8 --no-follow --use-mailmap 1b58572cf58e9d2d4a0305108395dab5c66d3a09..HEAD > "$builddir/ChangeLog.$$.new" && \
+LC_ALL=C git -C "$project_root" log --no-merges --no-notes --encoding=UTF-8 --no-follow --use-mailmap 1b58572cf58e9d2d4a0305108395dab5c66d3a09..HEAD > "$builddir/ChangeLog.$$.new" && \
 cat "$project_root/build-aux/ChangeLog.gqview" >> "$builddir/ChangeLog.$$.new" && \
 mv -f "$builddir/ChangeLog.$$.new" "$builddir/ChangeLog"
 
@@ -34,7 +24,7 @@ echo "</textarea>" >>"$builddir/ChangeLog.$$.old.html" && \
 echo "<html>" > "$builddir/ChangeLog.$$.new.html" && \
 echo "<body>" >> "$builddir/ChangeLog.$$.new.html" && \
 echo "<ul>" >> "$builddir/ChangeLog.$$.new.html" && \
-LC_ALL=C git log --no-merges --no-notes --encoding=UTF-8 --date=format:'%Y-%m-%d' --no-follow --use-mailmap --pretty=format:"<li><a href=\"http://geeqie.org/cgi-bin/gitweb.cgi?p=geeqie.git;a=commit;h=%H\">view commit </a></li><p>Author: %aN<br>Date: %ad<br><textarea rows=4 cols=100>%s %n%n%b</textarea><br><br></p>" 1b58572cf58e9d2d4a0305108395dab5c66d3a09..HEAD >> "$builddir/ChangeLog.$$.new.html" && \
+LC_ALL=C git -C "$project_root" log --no-merges --no-notes --encoding=UTF-8 --date=format:'%Y-%m-%d' --no-follow --use-mailmap --pretty=format:"<li><a href=\"http://geeqie.org/cgi-bin/gitweb.cgi?p=geeqie.git;a=commit;h=%H\">view commit </a></li><p>Author: %aN<br>Date: %ad<br><textarea rows=4 cols=100>%s %n%n%b</textarea><br><br></p>" 1b58572cf58e9d2d4a0305108395dab5c66d3a09..HEAD >> "$builddir/ChangeLog.$$.new.html" && \
 echo "" >> "$builddir/ChangeLog.$$.new.html" && \
 cat "$builddir/ChangeLog.$$.old.html" >> "$builddir/ChangeLog.$$.new.html" && \
 echo "</ul>" >> "$builddir/ChangeLog.$$.new.html" && \

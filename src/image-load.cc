@@ -29,7 +29,7 @@
 
 #include "exif.h"
 #include "filedata.h"
-#include "gq-size.h"
+#include "geometry.h"
 #include "image-load-collection.h"
 #include "image-load-dds.h"
 #if HAVE_DJVU

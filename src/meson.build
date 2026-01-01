@@ -63,8 +63,8 @@ main_sources = files('advanced-exif.cc',
 'filefilter.h',
 'fullscreen.cc',
 'fullscreen.h',
-'gq-size.cc',
-'gq-size.h',
+'geometry.cc',
+'geometry.h',
 'histogram.cc',
 'histogram.h',
 'history-list.cc',
@@ -272,7 +272,7 @@ if conf_data.get('HAVE_JPEGXL', 0) == 1
     )
 endif
 
-if conf_data.get('HAVE_LIBCHAMPLAIN', 0) == 1 and conf_data.get('HAVE_LIBCHAMPLAIN_GTK', 0) == 1
+if (conf_data.get('HAVE_LIBCHAMPLAIN', 0) == 1 and conf_data.get('HAVE_LIBCHAMPLAIN_GTK', 0) == 1) or conf_data.get('HAVE_LIBSHUMATE', 0) == 1
     main_sources += files(
         'bar-gps.cc',
         'bar-gps.h',
@@ -351,6 +351,7 @@ libraw_dep,
 libwebp_dep,
 lua_dep,
 poppler_glib_dep,
+shumate_dep,
 thread_dep,
 tiff_dep
 ] + conditional_unit_test_deps,

@@ -34,6 +34,7 @@
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
+#include "geometry.h"
 #include "glua.h"
 #include "image.h"
 #include "img-view.h"
@@ -923,7 +924,7 @@ void gq_pixel_info(GtkApplication *, GApplicationCommandLine *app_command_line, 
 	pixbuf_renderer_get_image_size(pr, &width, &height);
 	if (width < 1 || height < 1) return;
 
-	GdkPoint pixel;
+	GqPoint pixel;
 	pixbuf_renderer_get_mouse_position(pr, pixel);
 	if (pixel.x < 0 || pixel.y < 0) return;
 

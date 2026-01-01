@@ -43,6 +43,7 @@
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
+#include "geometry.h"
 #include "main-defines.h"
 #include "ui-fileops.h"
 
@@ -976,7 +977,7 @@ void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
  * @param[in] c3 Coordinates of the third corner of the triangle.
  * @return The computed bounding box.
  */
-GdkRectangle util_triangle_bounding_box(GdkPoint c1, GdkPoint c2, GdkPoint c3)
+GdkRectangle util_triangle_bounding_box(GqPoint c1, GqPoint c2, GqPoint c3)
 {
 	GdkRectangle bounding_box;
 
@@ -1002,7 +1003,7 @@ GdkRectangle util_triangle_bounding_box(GdkPoint c1, GdkPoint c2, GdkPoint c3)
  * @param r,g,b,a Color and alpha.
  */
 void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
-                          GdkPoint c1, GdkPoint c2, GdkPoint c3,
+                          GqPoint c1, GqPoint c2, GqPoint c3,
                           guint8 r, guint8 g, guint8 b, guint8 a)
 {
 	gboolean has_alpha;
@@ -1036,10 +1037,10 @@ void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
 	p_step = (has_alpha) ? 4 : 3;
 
 	// Ensure that points are ordered by increasing y coordinate.
-	std::vector<GdkPoint> v{c1, c2, c3};
-	std::sort(v.begin(), v.end(), [](const GdkPoint &l, const GdkPoint &r){ return l.y < r.y; });
+	std::vector<GqPoint> v{c1, c2, c3};
+	std::sort(v.begin(), v.end(), [](const GqPoint &l, const GqPoint &r){ return l.y < r.y; });
 
-	const auto get_slope = [](GdkPoint start, GdkPoint end)
+	const auto get_slope = [](GqPoint start, GqPoint end)
 	{
 		gdouble slope = end.y - start.y;
 		if (slope) slope = static_cast<gdouble>(end.x - start.x) / slope;
@@ -1047,9 +1048,9 @@ void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
 	};
 
 	gdouble slope1 = get_slope(v[0], v[1]);
-	GdkPoint slope1_start = v[0];
+	GqPoint slope1_start = v[0];
 	const gdouble slope2 = get_slope(v[0], v[2]);
-	const GdkPoint &slope2_start = v[0];
+	const GqPoint &slope2_start = v[0];
 
 	for (gint y = f.y; y < fy2; y++)
 		{

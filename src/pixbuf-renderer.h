@@ -30,6 +30,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "geometry.h"
+
 struct PixbufRenderer;
 
 #define TYPE_PIXBUF_RENDERER		(pixbuf_renderer_get_type())
@@ -168,7 +170,7 @@ struct PixbufRenderer
 	gint x_offset;		/**< offset of image start (non-zero when viewport < window) */
 	gint y_offset;
 
-	GdkPoint mouse; /**< coordinates of the mouse taken from GtkEvent */
+	GqPoint mouse; /**< coordinates of the mouse taken from GtkEvent */
 
 	gint vis_width;		/**< dimensions of visible part of image */
 	gint vis_height;
@@ -351,9 +353,9 @@ void pixbuf_renderer_overlay_set(PixbufRenderer *pr, gint id, GdkPixbuf *pixbuf,
 gboolean pixbuf_renderer_overlay_get(PixbufRenderer *pr, gint id, GdkPixbuf **pixbuf, gint *x, gint *y);
 void pixbuf_renderer_overlay_remove(PixbufRenderer *pr, gint id);
 
-gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, GdkPoint &pixel);
+gboolean pixbuf_renderer_get_mouse_position(PixbufRenderer *pr, GqPoint &pixel);
 
-gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GdkPoint pixel,
+gboolean pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GqPoint pixel,
 	 				gint *r_mouse, gint *g_mouse, gint *b_mouse, gint *a_mouse);
 
 void pixbuf_renderer_set_size_early(PixbufRenderer *pr, gint width, gint height);

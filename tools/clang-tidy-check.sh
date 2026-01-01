@@ -36,10 +36,11 @@ process_file()
 	printf 'Remaining: %dm:%ds\n' $((estimated_time % 3600 / 60)) $((estimated_time % 60))
 }
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
+if [ ! -d ".git" ] || [ ! -d "src" ]
+then
+	printf '%s\n' "This is not a Geeqie project folder"
+	exit 1
+fi
 
 # if variable fix is defined in this way, clang-tidy gives errors.
 # fix=""

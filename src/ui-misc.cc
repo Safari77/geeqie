@@ -35,6 +35,7 @@
 
 #include "compat-deprecated.h"
 #include "compat.h"
+#include "geometry.h"
 #include "history-list.h"
 #include "layout.h"
 #include "main-defines.h"
@@ -872,14 +873,6 @@ static void button_size_allocate_cb(GtkWidget *button, GtkAllocation *allocation
 		}
 }
 
-static void spin_increase(GtkWidget *spin, gint value)
-{
-	GtkRequisition req;
-
-	gq_gtk_widget_size_request(spin, &req);
-	gtk_widget_set_size_request(spin, req.width + value, -1);
-}
-
 static void date_selection_destroy_cb(GtkWidget *, gpointer data)
 {
 	auto ds = static_cast<DateSelection *>(data);
@@ -931,8 +924,6 @@ GtkWidget *date_selection_new()
 		ds->spin_d = pref_spin_new(ds->box, nullptr, nullptr, 1, 31, 1, 0, 1, nullptr, nullptr);
 		ds->spin_y = pref_spin_new(ds->box, nullptr, nullptr, 1900, 9999, 1, 0, 1900, nullptr, nullptr);
 		}
-
-	spin_increase(ds->spin_y, 5);
 
 	ds->button = gtk_toggle_button_new();
 	g_signal_connect(G_OBJECT(ds->button), "size_allocate",
@@ -1356,7 +1347,7 @@ GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gcha
 	return gdk_pixbuf_copy(icon);
 }
 
-gboolean window_get_pointer_position(GdkWindow *window, GdkPoint &pos)
+gboolean window_get_pointer_position(GdkWindow *window, GqPoint &pos)
 {
 	GdkSeat *seat = gdk_display_get_default_seat(gdk_window_get_display(window));
 	GdkDevice *device = gdk_seat_get_pointer(seat);
@@ -1391,7 +1382,7 @@ GdkRectangle window_get_root_origin_geometry(GdkWindow *window)
 	return rect;
 }
 
-gboolean window_received_event(GdkWindow *window, GdkPoint event)
+gboolean window_received_event(GdkWindow *window, GqPoint event)
 {
 	gint x;
 	gint y;

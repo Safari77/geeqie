@@ -29,6 +29,7 @@
 #include <pango/pango.h>
 
 #include "filedata.h"
+#include "geometry.h"
 #include "image.h"
 #include "pan-types.h"
 #include "pan-view.h"
@@ -241,7 +242,7 @@ gboolean pan_item_box_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
  */
 
 PanItem *pan_item_tri_new(PanWindow *pw,
-                          GdkPoint c1, GdkPoint c2, GdkPoint c3,
+                          GqPoint c1, GqPoint c2, GqPoint c3,
                           PanColor color,
                           gint borders, PanColor border_color)
 {
@@ -255,7 +256,7 @@ PanItem *pan_item_tri_new(PanWindow *pw,
 	pi->height = tri_rect.height;
 	pi->color = color;
 
-	auto *coord = g_new0(GdkPoint, 3);
+	auto *coord = g_new0(GqPoint, 3);
 	coord[0] = c1;
 	coord[1] = c2;
 	coord[2] = c3;
@@ -279,7 +280,7 @@ gboolean pan_item_tri_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
 
 	if (pi->data && gdk_rectangle_intersect(&request_rect, &pi_rect, &r))
 		{
-		auto coord = static_cast<GdkPoint *>(pi->data);
+		auto coord = static_cast<GqPoint *>(pi->data);
 		r.x -= x;
 		r.y -= y;
 		pixbuf_draw_triangle(pixbuf, r,
@@ -288,7 +289,7 @@ gboolean pan_item_tri_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
 		                     {coord[2].x - x, coord[2].y - y},
 		                     pi->color.r, pi->color.g, pi->color.b, pi->color.a);
 
-		const auto draw_line = [pixbuf, &r, x, y, &color = pi->color2](GdkPoint start, GdkPoint end)
+		const auto draw_line = [pixbuf, &r, x, y, &color = pi->color2](GqPoint start, GqPoint end)
 		{
 			pixbuf_draw_line(pixbuf, r,
 			                 start.x - x, start.y - y,

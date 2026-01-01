@@ -37,6 +37,7 @@
 #include "dupe.h"
 #include "editors.h"
 #include "filedata.h"
+#include "geometry.h"
 #include "intl.h"
 #include "layout-image.h"
 #include "layout-util.h"
@@ -974,7 +975,7 @@ static gboolean vd_auto_scroll_idle_cb(gpointer data)
 		{
 		GdkWindow *window = gtk_widget_get_window(vd->view);
 
-		GdkPoint pos;
+		GqPoint pos;
 		if (window_get_pointer_position(window, pos))
 			{
 			vd_dnd_drop_update(vd, pos.x, pos.y);
@@ -1004,7 +1005,7 @@ static gboolean vd_dnd_drop_motion(GtkWidget *, GdkDragContext *context, gint x,
 
 	if (vd->drop_fd)
 		{
-		const auto vd_auto_scroll_notify_cb = [vd](GtkWidget *, GdkPoint)
+		const auto vd_auto_scroll_notify_cb = [vd](GtkWidget *, GqPoint)
 		{
 			if (!vd->drop_fd || vd->drop_list) return false;
 

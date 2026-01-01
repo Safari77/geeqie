@@ -28,6 +28,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "geometry.h"
+
 struct TreeEditData
 {
 	GtkWidget *window;
@@ -54,7 +56,7 @@ void tree_view_row_make_visible(GtkTreeView *widget, GtkTreeIter *iter, gboolean
 gboolean tree_view_move_cursor_away(GtkTreeView *widget, GtkTreeIter *iter, gboolean only_selected);
 
 
-using AutoScrollNotifyFunc = std::function<bool(GtkWidget *widget, GdkPoint pos)>;
+using AutoScrollNotifyFunc = std::function<bool(GtkWidget *widget, GqPoint pos)>;
 
 void widget_auto_scroll_start(GtkWidget *widget, gint scroll_speed, gint region_size,
                               const AutoScrollNotifyFunc &notify_func);

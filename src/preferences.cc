@@ -54,7 +54,7 @@
 #include "filedata.h"
 #include "filefilter.h"
 #include "fullscreen.h"
-#include "gq-size.h"
+#include "geometry.h"
 #include "image.h"
 #include "img-view.h"
 #include "intl.h"
@@ -1462,7 +1462,7 @@ static void image_overlay_set_font_cb(GtkWidget *widget, gpointer data)
 	GtkWidget *dialog;
 	gint i = GPOINTER_TO_INT(data);
 
-	dialog = gtk_font_chooser_dialog_new(_("Image Overlay Font"), GTK_WINDOW(gtk_widget_get_toplevel(widget)));
+	dialog = gtk_font_chooser_dialog_new(_("Image Overlay Font"), GTK_WINDOW(widget_get_toplevel(widget)));
 	gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
 	gtk_font_chooser_set_font(GTK_FONT_CHOOSER(dialog), options->image_overlay_n.font[i]);
 
@@ -1512,7 +1512,7 @@ static void image_overlay_set_text_color_cb(GtkWidget *widget, gpointer data)
 	GdkRGBA color;
 	gint i = GPOINTER_TO_INT(data);
 
-	dialog = gtk_color_chooser_dialog_new(_("Image Overlay Text Color"), GTK_WINDOW(gtk_widget_get_toplevel(widget)));
+	dialog = gtk_color_chooser_dialog_new(_("Image Overlay Text Color"), GTK_WINDOW(widget_get_toplevel(widget)));
 	color.red = static_cast<double>(options->image_overlay_n.text_red[i]) / 255;
 	color.green = static_cast<double>(options->image_overlay_n.text_green[i]) / 255;
 	color.blue = static_cast<double>(options->image_overlay_n.text_blue[i]) / 255;
@@ -1565,7 +1565,7 @@ static void image_overlay_set_background_color_cb(GtkWidget *widget, gpointer da
 	GdkRGBA color;
 	gint i = GPOINTER_TO_INT(data);
 
-	dialog = gtk_color_chooser_dialog_new(_("Image Overlay Background Color"), GTK_WINDOW(gtk_widget_get_toplevel(widget)));
+	dialog = gtk_color_chooser_dialog_new(_("Image Overlay Background Color"), GTK_WINDOW(widget_get_toplevel(widget)));
 	color.red = static_cast<double>(options->image_overlay_n.background_red[i]) / 255;
 	color.green = static_cast<double>(options->image_overlay_n.background_green[i]) / 255;
 	color.blue = static_cast<double>(options->image_overlay_n.background_blue[i]) / 255;

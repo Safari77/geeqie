@@ -5,10 +5,11 @@
 ## @brief Install additional files for Geeqie development purposes
 ##
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
+if [ ! -d ".git" ] || [ ! -d "src" ]
+then
+	printf '%s\n' "This is not a Geeqie project folder"
+	exit 1
+fi
 
 if ! zenity --title="Install files for Geeqie development" --question --no-wrap --text "This script will install:\n
 <tt>

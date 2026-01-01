@@ -31,6 +31,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "geometry.h"
+
 /* these values are per GNOME HIG */
 
 /* HIG 2.0 chapter 8 defines: */
@@ -211,10 +213,10 @@ std::vector<ActionItem> get_action_items();
 // Copy pixbuf returned by gtk_icon_theme_load_icon() to avoid GTK+ keeping the old icon theme loaded
 GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gchar *icon_name, gint size, GtkIconLookupFlags flags);
 
-gboolean window_get_pointer_position(GdkWindow *window, GdkPoint &pos);
+gboolean window_get_pointer_position(GdkWindow *window, GqPoint &pos);
 GdkRectangle window_get_position_geometry(GdkWindow *window);
 GdkRectangle window_get_root_origin_geometry(GdkWindow *window);
-gboolean window_received_event(GdkWindow *window, GdkPoint event);
+gboolean window_received_event(GdkWindow *window, GqPoint event);
 
 void widget_remove_from_parent(GtkWidget *widget);
 void widget_remove_from_parent_cb(GtkWidget *, gpointer data);

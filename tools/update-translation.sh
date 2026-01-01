@@ -10,10 +10,11 @@
 ## Merge updates into the required language file
 ##
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
+if [ ! -d ".git" ] || [ ! -d "src" ]
+then
+	printf '%s\n' "This is not a Geeqie project folder"
+	exit 1
+fi
 
 cd "./po" || exit 1
 
@@ -31,7 +32,7 @@ fi
 
 if [ ! -f "./$1" ]; then
     echo "'$1' is not a file in the current directory."
-    echo "Call by: ./update-translation.sh xx.po"
+    echo "Call by: ./tools/update-translation.sh xx.po"
     exit 1
 fi
 

@@ -35,7 +35,7 @@
 #include "exif.h"
 #include "filecache.h"
 #include "filedata.h"
-#include "gq-size.h"
+#include "geometry.h"
 #include "history-list.h"
 #include "image-load.h"
 #include "intl.h"
@@ -201,7 +201,7 @@ static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer d
 
 	if(options->draw_rectangle)
 		{
-		GdkPoint pixel;
+		GqPoint pixel;
 		pixbuf_renderer_get_mouse_position(pr, pixel);
 		selection_rectangle = SelectionRectangle(std::max(0, gint(event->x)), std::max(0, gint(event->y)), options->rectangle_draw_aspect_ratio);
 		image_start_x = std::max(0, pixel.x);
@@ -252,7 +252,7 @@ static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer da
 		{
 		pixbuf_renderer_get_image_size(pr, &width, &height);
 
-		GdkPoint pixel;
+		GqPoint pixel;
 		pixbuf_renderer_get_mouse_position(pr, pixel);
 
 		gint image_x_pixel = (pixel.x != -1) ? pixel.x : width;
@@ -414,27 +414,48 @@ void image_update_title(ImageWindow *imd)
  * rotation, flip, etc.
  *-------------------------------------------------------------------
  */
-static gboolean image_get_x11_screen_profile(ImageWindow *imd, guchar **screen_profile, gint *screen_profile_len)
+static bool image_get_x11_screen_profile(const ImageWindow *imd, ColorManMemData &screen_data)
 {
-	GdkScreen *screen = gtk_widget_get_screen(imd->widget);;
+	screen_data.ptr.reset();
+	screen_data.len = 0;
+
+#if HAVE_GTK4
+	/* GTK4: direct X11 root-window ICC profile access is not supported.
+	* Color management must be done via GdkColorProfile / colord.
+	*/
+	return false;
+#else
+	GdkScreen *screen = gtk_widget_get_screen(imd->widget);
 	GdkAtom    type   = GDK_NONE;
 	gint       format = 0;
 
-	return (gdk_property_get(gdk_screen_get_root_window(screen),
-				 gdk_atom_intern ("_ICC_PROFILE", FALSE),
-				 GDK_NONE,
-				 0, 64 * 1024 * 1024, FALSE,
-				 &type, &format, screen_profile_len, screen_profile) && *screen_profile_len > 0);
+	g_autofree guchar *screen_profile = nullptr;
+	gint screen_profile_len;
+
+	if (!gdk_property_get(gdk_screen_get_root_window(screen),
+	                      gdk_atom_intern("_ICC_PROFILE", FALSE),
+	                      GDK_NONE,
+	                      0, 64 * 1024 * 1024, FALSE,
+	                      &type, &format, &screen_profile_len, &screen_profile) ||
+	    screen_profile_len <= 0)
+		{
+		return false;
+		}
+
+	screen_data.ptr.reset(g_steal_pointer(&screen_profile));
+	screen_data.len = screen_profile_len;
+
+	return true;
+#endif
 }
 
-static gboolean image_post_process_color(ImageWindow *imd, gint start_row, gboolean run_in_bg)
+static gboolean image_post_process_color(ImageWindow *imd, gboolean run_in_bg)
 {
 	ColorMan *cm;
 	ColorManProfileType input_type;
 	ColorManProfileType screen_type;
 	const gchar *input_file = nullptr;
 	const gchar *screen_file = nullptr;
-	gint screen_profile_len;
 
 	if (imd->cm) return FALSE;
 
@@ -459,12 +480,12 @@ static gboolean image_post_process_color(ImageWindow *imd, gint start_row, gbool
 		return FALSE;
 		}
 
-	g_autofree guchar *screen_profile = nullptr;
+	ColorManMemData screen_profile;
 	if (options->color_profile.use_x11_screen_profile &&
-	    image_get_x11_screen_profile(imd, &screen_profile, &screen_profile_len))
+	    image_get_x11_screen_profile(imd, screen_profile))
 		{
 		screen_type = COLOR_PROFILE_MEM;
-		DEBUG_1("Using X11 screen profile, length: %d", screen_profile_len);
+		DEBUG_1("Using X11 screen profile, length: %u", screen_profile.len);
 		}
 	else if (options->color_profile.screen_file &&
 	    is_readable_file(options->color_profile.screen_file))
@@ -479,46 +500,37 @@ static gboolean image_post_process_color(ImageWindow *imd, gint start_row, gbool
 		}
 
 
-	imd->color_profile_from_image = COLOR_PROFILE_NONE;
+	ColorManProfileType color_profile_from_image = COLOR_PROFILE_NONE;
+	ColorManMemData profile = exif_get_color_profile(imd->image_fd, color_profile_from_image);
 
-	guint profile_len;
-	g_autofree guchar *profile = exif_get_color_profile(imd->image_fd, profile_len, imd->color_profile_from_image);
-
-	if (profile)
+	if (profile.ptr)
 		{
 		if (!imd->color_profile_use_image)
 			{
-			g_free(profile);
-			profile = nullptr;
+			profile.ptr.reset();
 			}
 		}
-	else if (imd->color_profile_use_image && imd->color_profile_from_image != COLOR_PROFILE_NONE)
+	else if (imd->color_profile_use_image && color_profile_from_image != COLOR_PROFILE_NONE)
 		{
-		input_type = imd->color_profile_from_image;
+		input_type = color_profile_from_image;
 		input_file = nullptr;
 		}
 
-	if (profile)
+	const GdkPixbuf *pixbuf = run_in_bg ? image_get_pixbuf(imd) : nullptr;
+
+	if (profile.ptr)
 		{
-		cm = color_man_new_embedded(run_in_bg ? imd : nullptr, nullptr,
-					    profile, profile_len,
-					    screen_type, screen_file, screen_profile, screen_profile_len);
+		cm = color_man_new_embedded(pixbuf, profile,
+		                            screen_type, screen_file, screen_profile);
 		}
 	else
 		{
-		cm = color_man_new(run_in_bg ? imd : nullptr, nullptr,
-				   input_type, input_file,
-				   screen_type, screen_file, screen_profile, screen_profile_len);
+		cm = color_man_new(pixbuf, input_type, input_file,
+		                   screen_type, screen_file, screen_profile);
 		}
 
 	if (cm)
 		{
-		if (start_row > 0)
-			{
-			cm->row = start_row;
-			cm->incremental_sync = TRUE;
-			}
-
 		imd->cm = cm;
 		}
 
@@ -629,7 +641,7 @@ static void image_set_pixbuf_renderer_post_process_func(ImageWindow *imd)
 		{
 		const auto image_post_process_tile_color_cb = [imd](PixbufRenderer *, GdkPixbuf **pixbuf, gint x, gint y, gint w, gint h)
 		{
-			if (imd->cm) color_man_correct_region(static_cast<ColorMan *>(imd->cm), *pixbuf, x, y, w, h);
+			if (imd->cm) imd->cm->correct_region(*pixbuf, {x, y, w, h});
 			if (imd->desaturate) pixbuf_desaturate_rect(*pixbuf, x, y, w, h);
 			if (imd->overunderexposed) pixbuf_highlight_overunderexposed(*pixbuf, x, y, w, h);
 		};
@@ -1008,8 +1020,7 @@ static void image_reset(ImageWindow *imd)
 	image_loader_free(imd->il);
 	imd->il = nullptr;
 
-	color_man_free(static_cast<ColorMan *>(imd->cm));
-	imd->cm = nullptr;
+	g_clear_pointer(&imd->cm, color_man_free);
 
 	image_state_set(imd, IMAGE_STATE_NONE);
 }
@@ -1346,8 +1357,7 @@ void image_change_pixbuf(ImageWindow *imd, GdkPixbuf *pixbuf, gdouble zoom, gboo
 	pixbuf_renderer_set_post_process_func(PIXBUF_RENDERER(imd->pr), nullptr, FALSE);
 	if (imd->cm)
 		{
-		color_man_free(static_cast<ColorMan *>(imd->cm));
-		imd->cm = nullptr;
+		g_clear_pointer(&imd->cm, color_man_free);
 		}
 
 	if (lazy)
@@ -1367,7 +1377,7 @@ void image_change_pixbuf(ImageWindow *imd, GdkPixbuf *pixbuf, gdouble zoom, gboo
 	lw = layout_find_by_image(imd);
 	if (imd->color_profile_enable && lw && !lw->animation)
 		{
-		image_post_process_color(imd, 0, FALSE); /** @todo error handling */
+		image_post_process_color(imd, FALSE); /** @todo error handling */
 		}
 
 	image_set_pixbuf_renderer_post_process_func(imd);
@@ -1460,18 +1470,11 @@ void image_move_from_image(ImageWindow *imd, ImageWindow *source)
 	imd->color_profile_enable = source->color_profile_enable;
 	imd->color_profile_input = source->color_profile_input;
 	imd->color_profile_use_image = source->color_profile_use_image;
-	color_man_free(static_cast<ColorMan *>(imd->cm));
-	imd->cm = nullptr;
+
+	g_clear_pointer(&imd->cm, color_man_free);
 	if (source->cm)
 		{
-		ColorMan *cm;
-
-		imd->cm = source->cm;
-		source->cm = nullptr;
-
-		cm = static_cast<ColorMan *>(imd->cm);
-		cm->imd = imd;
-		cm->func_done_data = imd;
+		std::swap(imd->cm, source->cm);
 		}
 
 	file_data_unref(imd->read_ahead_fd);
@@ -1508,18 +1511,11 @@ void image_copy_from_image(ImageWindow *imd, ImageWindow *source)
 	imd->color_profile_enable = source->color_profile_enable;
 	imd->color_profile_input = source->color_profile_input;
 	imd->color_profile_use_image = source->color_profile_use_image;
-	color_man_free(static_cast<ColorMan *>(imd->cm));
-	imd->cm = nullptr;
+
+	g_clear_pointer(&imd->cm, color_man_free);
 	if (source->cm)
 		{
-		ColorMan *cm;
-
-		imd->cm = source->cm;
-		source->cm = nullptr;
-
-		cm = static_cast<ColorMan *>(imd->cm);
-		cm->imd = imd;
-		cm->func_done_data = imd;
+		std::swap(imd->cm, source->cm);
 		}
 
 	image_loader_free(imd->read_ahead_il);
@@ -1856,15 +1852,11 @@ gboolean image_color_profile_get_use(ImageWindow *imd)
 	return imd->color_profile_enable;
 }
 
-gboolean image_color_profile_get_status(ImageWindow *imd, gchar **image_profile, gchar **screen_profile)
+std::optional<ColorManStatus> image_color_profile_get_status(const ImageWindow *imd)
 {
-	ColorMan *cm;
-	if (!imd) return FALSE;
+	if (!imd || !imd->cm) return {};
 
-	cm = static_cast<ColorMan *>(imd->cm);
-	if (!cm) return FALSE;
-	return color_man_get_status(cm, image_profile, screen_profile);
-
+	return imd->cm->get_status();
 }
 
 /**
@@ -2088,7 +2080,6 @@ ImageWindow *image_new(gboolean frame)
 	imd->unknown = TRUE;
 	imd->has_frame = -1; /* not initialized; for image_set_frame */
 	imd->state = IMAGE_STATE_NONE;
-	imd->color_profile_from_image = COLOR_PROFILE_NONE;
 	imd->orientation = 1;
 
 	imd->pr = GTK_WIDGET(pixbuf_renderer_new());

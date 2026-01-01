@@ -14,7 +14,7 @@ You should first create a blank language file by executing, for example, `./po/t
 
 ## Updating a translation file or populating a new translation file
 
-To update (or to populate from new) a language file from the current sources, execute for example `./build-aux/update-translation.sh gv.po`.
+To update (or to populate from new) a language file from the current sources, execute for example `./tools/update-translation.sh gv.po`.
 
 Then edit the language file using a suitable tool.
 

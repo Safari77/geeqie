@@ -34,12 +34,14 @@
 
 #include "archives.h"
 #include "collect.h"
+#include "color-man.h"
 #include "compat-deprecated.h"
 #include "dnd.h"
 #include "editors.h"
 #include "exif.h"
 #include "filedata.h"
 #include "fullscreen.h"
+#include "geometry.h"
 #include "history-list.h"
 #include "image-overlay.h"
 #include "image.h"
@@ -549,7 +551,7 @@ static GtkWidget *li_pop_menu_click_parent(GtkWidget *widget, LayoutWindow *lw)
 	GtkWidget *menu;
 	GtkWidget *parent;
 
-	menu = gtk_widget_get_toplevel(widget);
+	menu = widget_get_toplevel(widget);
 	if (!menu) return nullptr;
 
 	parent = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(menu), "click_parent"));
@@ -1472,11 +1474,11 @@ gboolean layout_image_color_profile_get_use(LayoutWindow *lw)
 	return image_color_profile_get_use(lw->image);
 }
 
-gboolean layout_image_color_profile_get_status(LayoutWindow *lw, gchar **image_profile, gchar **screen_profile)
+std::optional<ColorManStatus> layout_image_color_profile_get_status(LayoutWindow *lw)
 {
-	if (!layout_valid(&lw)) return FALSE;
+	if (!layout_valid(&lw)) return {};
 
-	return image_color_profile_get_status(lw->image, image_profile, screen_profile);
+	return image_color_profile_get_status(lw->image);
 }
 
 /*
@@ -1965,7 +1967,7 @@ static void layout_status_update_pixel_cb(PixbufRenderer *pr, gpointer data)
 	pixbuf_renderer_get_image_size(pr, &width, &height);
 	if (width < 1 || height < 1) return;
 
-	GdkPoint pixel;
+	GqPoint pixel;
 	pixbuf_renderer_get_mouse_position(pr, pixel);
 
 	g_autofree gchar *text = nullptr;

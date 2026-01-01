@@ -28,6 +28,7 @@
 
 #include "compat-deprecated.h"
 #include "compat.h"
+#include "geometry.h"
 #include "layout.h"
 #include "misc.h"
 #include "ui-misc.h"
@@ -407,7 +408,7 @@ static gboolean widget_auto_scroll_cb(gpointer data)
 
 	GdkWindow *window = gtk_widget_get_window(sd->widget);
 
-	GdkPoint pos;
+	GqPoint pos;
 	if (!window_get_pointer_position(window, pos))
 		{
 		sd->timer_id = 0;

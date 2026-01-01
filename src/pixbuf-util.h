@@ -27,6 +27,8 @@
 #include <glib.h>
 #include <pango/pango.h>
 
+#include "geometry.h"
+
 class FileData;
 
 gboolean pixbuf_to_file_as_png (GdkPixbuf *pixbuf, const gchar *filename);
@@ -104,7 +106,7 @@ void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
                         guint8 r, guint8 g, guint8 b, guint8 a);
 
 void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
-                          GdkPoint c1, GdkPoint c2, GdkPoint c3,
+                          GqPoint c1, GqPoint c2, GqPoint c3,
                           guint8 r, guint8 g, guint8 b, guint8 a);
 
 void pixbuf_draw_line(GdkPixbuf *pb, GdkRectangle clip,
@@ -126,7 +128,7 @@ void pixbuf_ignore_alpha_rect(GdkPixbuf *pb,
 
 /* clipping utils */
 
-GdkRectangle util_triangle_bounding_box(GdkPoint c1, GdkPoint c2, GdkPoint c3);
+GdkRectangle util_triangle_bounding_box(GqPoint c1, GqPoint c2, GqPoint c3);
 
 
 #endif

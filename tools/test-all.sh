@@ -8,10 +8,11 @@
 ## and then with -Ddevel=enabled and other
 ## options as auto
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
+if [ ! -d "src" ]
+then
+	printf '%s\n' "This is not a Geeqie project folder"
+	exit 1
+fi
 
 XDG_CONFIG_HOME=$(mktemp -d "${TMPDIR:-/tmp}/geeqie.XXXXXXXXXX")
 XDG_CACHE_HOME=$(mktemp -d "${TMPDIR:-/tmp}/geeqie.XXXXXXXXXX")
@@ -29,7 +30,6 @@ meson setup \
 -Dcms=disabled \
 -Ddoxygen=disabled \
 -Ddjvu=disabled \
--Devince=disabled \
 -Dexecinfo=disabled \
 -Dexiv2=disabled \
 -Dexr=disabled \

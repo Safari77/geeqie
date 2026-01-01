@@ -36,6 +36,7 @@
 #include "compat.h"
 #include "intl.h"
 #include "main-defines.h"
+#include "misc.h"
 #include "options.h"
 #include "rcfile.h"
 #include "ui-misc.h"
@@ -389,7 +390,7 @@ static void generic_dialog_setup(GenericDialog *gd,
 			{
 			GtkWidget *top;
 
-			top = gtk_widget_get_toplevel(parent);
+			top = widget_get_toplevel(parent);
 			if (GTK_IS_WINDOW(top) && gtk_widget_is_toplevel(top)) window = GTK_WINDOW(top);
 			}
 

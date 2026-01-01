@@ -36,6 +36,7 @@
 #include "image-load.h"
 #include "intl.h"
 #include "main-defines.h"
+#include "misc.h"
 #include "options.h"
 #include "osd.h"
 #include "pixbuf-util.h"
@@ -163,7 +164,7 @@ void print_set_font_cb(GtkWidget *widget, gpointer data)
 		option = options->printer.page_font;
 		}
 
-	dialog = gtk_font_chooser_dialog_new(static_cast<const gchar *>(data), GTK_WINDOW(gtk_widget_get_toplevel(widget)));
+	dialog = gtk_font_chooser_dialog_new(static_cast<const gchar *>(data), GTK_WINDOW(widget_get_toplevel(widget)));
 	gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
 	gtk_font_chooser_set_font(GTK_FONT_CHOOSER(dialog), static_cast<const gchar *>(option));
 

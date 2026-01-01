@@ -329,7 +329,7 @@ static void tip_show(ViewFile *vf)
 	if (!VFICON(vf)->tip_fd) return;
 
 	VFICON(vf)->tip_window = gtk_window_new(GTK_WINDOW_POPUP);
-	gtk_window_set_transient_for(GTK_WINDOW(VFICON(vf)->tip_window), GTK_WINDOW(gtk_widget_get_toplevel(vf->listview)));
+	gtk_window_set_transient_for(GTK_WINDOW(VFICON(vf)->tip_window), GTK_WINDOW(widget_get_toplevel(vf->listview)));
 	gtk_window_set_resizable(GTK_WINDOW(VFICON(vf)->tip_window), FALSE);
 	gtk_container_set_border_width(GTK_CONTAINER(VFICON(vf)->tip_window), 2);
 
@@ -361,13 +361,22 @@ static gboolean tip_schedule_cb(gpointer data)
 
 	if (VFICON(vf)->tip_delay_id)
 		{
-		GtkWidget *window = gtk_widget_get_toplevel(vf->listview);
+		auto *window = widget_get_toplevel(vf->listview);
 
-		if (gtk_widget_get_sensitive(window) &&
-		    gtk_window_has_toplevel_focus(GTK_WINDOW(window)))
+#if HAVE_GTK4
+		if (GTK_IS_WINDOW(window))
+			{
+			if (gtk_widget_get_sensitive(GTK_WIDGET(window)) && gtk_window_is_active(window))
+				{
+				tip_show(vf);
+				}
+			}
+#else
+		if (gtk_widget_get_sensitive(window) && gtk_window_has_toplevel_focus(GTK_WINDOW(window)))
 			{
 			tip_show(vf);
 			}
+#endif
 
 		VFICON(vf)->tip_delay_id = 0;
 		}

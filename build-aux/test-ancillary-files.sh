@@ -19,11 +19,6 @@ then
 	cd "$1" || exit 1
 fi
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
-
 exit_status=0
 
 # All script files must be POSIX

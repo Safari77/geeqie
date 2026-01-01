@@ -215,6 +215,7 @@ struct ScreenData {
 	GdkRectangle geometry;
 };
 
+#if !HAVE_GTK4
 GdkRectangle get_screen_default_geometry(GdkScreen *screen)
 {
 	GdkRectangle geometry;
@@ -226,6 +227,7 @@ GdkRectangle get_screen_default_geometry(GdkScreen *screen)
 
 	return geometry;
 }
+#endif
 
 std::vector<ScreenData> fullscreen_prefs_list()
 {
@@ -243,6 +245,40 @@ std::vector<ScreenData> fullscreen_prefs_list()
 		GdkRectangle rect;
 		g_autofree gchar *subname = nullptr;
 
+#if HAVE_GTK4
+		if (j < 0)
+			{
+			/* GTK4: compute full size by union of all monitors */
+			gboolean first = TRUE;
+
+			for (gint i = 0; i < monitors; i++)
+				{
+				GdkMonitor *monitor = gdk_display_get_monitor(display, i);
+				GdkRectangle mrect;
+				gdk_monitor_get_geometry(monitor, &mrect);
+
+				if (first)
+					{
+					rect = mrect;
+					first = FALSE;
+					}
+				else
+					{
+					gint x1 = MIN(rect.x, mrect.x);
+					gint y1 = MIN(rect.y, mrect.y);
+					gint x2 = MAX(rect.x + rect.width,  mrect.x + mrect.width);
+					gint y2 = MAX(rect.y + rect.height, mrect.y + mrect.height);
+
+					rect.x = x1;
+					rect.y = y1;
+					rect.width  = x2 - x1;
+					rect.height = y2 - y1;
+					}
+				}
+
+			subname = g_strdup(_("Full size"));
+			}
+#else
 		if (j < 0)
 			{
 			GdkScreen *screen = gdk_display_get_default_screen(display);
@@ -259,7 +295,7 @@ std::vector<ScreenData> fullscreen_prefs_list()
 				subname = g_strdup_printf("%s %d", _("Monitor"), j + 1);
 				}
 			}
-
+#endif
 		ScreenData sd;
 		sd.number = 100 + j + 1;
 		sd.description = std::string(_("Screen")) + " " + name + ", " + subname;
@@ -285,6 +321,64 @@ std::vector<ScreenData> fullscreen_prefs_list()
  * dest_screen: screen to place widget [use gtk_window_set_screen()]
  * same_region: the returned region will overlap the current location of widget.
  */
+
+#if HAVE_GTK4
+GdkRectangle fullscreen_prefs_get_geometry( int screen_num, GtkWidget *widget, gboolean &same_region)
+{
+	GdkDisplay *display = widget ? gtk_widget_get_display(widget)  : gdk_display_get_default();
+
+	if (screen_num >= 100)
+		{
+		std::vector<ScreenData> list = fullscreen_prefs_list();
+		auto it = std::find_if( list.cbegin(), list.cend(), [screen_num](const ScreenData &sd)
+			{
+			return sd.number == screen_num;
+			});
+
+		if (it != list.cend())
+			{
+			dest_monitor = gdk_display_get_primary_monitor(display);
+
+			GdkSurface *surface = nullptr;
+			if (widget && gtk_widget_get_native(widget))
+				{
+				surface = gtk_native_get_surface( gtk_widget_get_native(widget));
+				}
+
+			same_region = (!surface || (dest_monitor == gdk_display_get_monitor_at_surface(display, surface)));
+
+			return it->geometry;
+			}
+		}
+	else if (screen_num < 0)
+		{
+		screen_num = 1;
+		}
+
+	GdkRectangle geometry{};
+
+	GdkSurface *surface = nullptr;
+	if (widget && gtk_widget_get_native(widget))
+		{
+		surface = gtk_native_get_surface( gtk_widget_get_native(widget));
+		}
+
+	if (screen_num != 1 || !surface)
+		{
+		dest_monitor = gdk_display_get_primary_monitor(display);
+		gdk_monitor_get_geometry(dest_monitor, &geometry);
+		}
+	else
+		{
+		dest_monitor = gdk_display_get_monitor_at_surface(display, surface);
+
+		gdk_monitor_get_geometry(dest_monitor, &geometry);
+		}
+
+	same_region = TRUE;
+	return geometry;
+}
+#else
 GdkRectangle fullscreen_prefs_get_geometry(gint screen_num, GtkWidget *widget, GdkScreen *&dest_screen, gboolean &same_region)
 {
 	if (screen_num >= 100)
@@ -336,6 +430,7 @@ GdkRectangle fullscreen_prefs_get_geometry(gint screen_num, GtkWidget *widget, G
 	same_region = TRUE;
 	return geometry;
 }
+#endif
 
 enum {
 	FS_MENU_COLUMN_NAME = 0,
@@ -405,18 +500,34 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 	fs->stop_func = stop_func;
 
 	DEBUG_1("full screen requests screen %d", options->fullscreen.screen);
-	GdkRectangle rect = fullscreen_prefs_get_geometry(options->fullscreen.screen, window, screen, fs->same_region);
+
+	GdkRectangle rect{};
+	gboolean same_region = FALSE;
+
+#if HAVE_GTK4
+	rect = fullscreen_prefs_get_geometry(options->fullscreen.screen, window, same_region);
+#else
+	screen = gtk_widget_get_screen(window);
+	rect = fullscreen_prefs_get_geometry(options->fullscreen.screen, window, screen, same_region);
+#endif
+
+	fs->same_region = same_region;
 
 	fs->window = window_new("fullscreen", nullptr, _("Full screen"));
 	DEBUG_NAME(fs->window);
 
-	g_signal_connect(G_OBJECT(fs->window), "delete_event",
-			 G_CALLBACK(fullscreen_delete_cb), fs);
+#if !HAVE_GTK4
+	g_signal_connect(fs->window, "delete-event",
+	                 G_CALLBACK(fullscreen_delete_cb), fs);
+#endif
 
-	/* few cosmetic details */
 	gtk_window_set_decorated(GTK_WINDOW(fs->window), FALSE);
-	gtk_container_set_border_width(GTK_CONTAINER(fs->window), 0);
 
+#if !HAVE_GTK4
+	gtk_container_set_border_width(GTK_CONTAINER(fs->window), 0);
+#endif
+
+#if !HAVE_GTK4
 	/* set default size and position, so the window appears where it was before */
 	gtk_window_set_default_size(GTK_WINDOW(fs->window), rect.width, rect.height);
 	gq_gtk_window_move(GTK_WINDOW(fs->window), rect.x, rect.y);
@@ -445,7 +556,9 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 		if (gdkwin != nullptr)
 			gdk_window_set_fullscreen_mode(gdkwin, GDK_FULLSCREEN_ON_ALL_MONITORS);
 		}
+#endif
 
+	/* Monitor selection */
 	auto monitor_number = options->fullscreen.screen;
 
 	if (monitor_number < 0)
@@ -454,17 +567,30 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 		}
 	else if (monitor_number == 1)
 		{
+#if !HAVE_GTK4
 		display = gtk_widget_get_display(window);
 		monitor = gdk_display_get_monitor_at_window(display, gtk_widget_get_window(window));
 
 		monitor_number = get_monitor_index(display, monitor);
+#endif
 		}
 	else if (monitor_number >= 100)
 		{
 		monitor_number = (monitor_number % 100) - 1;
 		}
 
+#if HAVE_GTK4
+	if (monitor_number >= 0)
+		{
+		gq_gtk_window_fullscreen_on_monitor(GTK_WINDOW(fs->window), monitor_number);
+		}
+	else
+		{
+		gtk_window_fullscreen(GTK_WINDOW(fs->window));
+		}
+#else
 	gq_gtk_window_fullscreen_on_monitor(GTK_WINDOW(fs->window), screen, monitor_number);
+#endif
 
 	fs->imd = image_new(FALSE);
 

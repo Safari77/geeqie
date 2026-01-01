@@ -79,6 +79,9 @@
 /* Define to enable use of maps */
 #mesondefine HAVE_LIBCHAMPLAIN_GTK
 
+/* Define to enable use of maps */
+#mesondefine HAVE_LIBSHUMATE
+
 /* Define to 1 if LIRC must be used */
 #mesondefine HAVE_LIRC
 

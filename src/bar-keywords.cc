@@ -21,6 +21,9 @@
 
 #include "bar-keywords.h"
 
+#if HAVE_GTK4
+#else
+
 #include <array>
 #include <cstdio>
 #include <string>
@@ -1664,7 +1667,7 @@ gboolean autocomplete_keywords_list_save(const gchar *path)
 }
 
 } // namespace
-
+#endif
 /*
  *-------------------------------------------------------------------
  * init
@@ -1673,6 +1676,10 @@ gboolean autocomplete_keywords_list_save(const gchar *path)
 
 GtkWidget *bar_pane_keywords_new_from_config(const gchar **attribute_names, const gchar **attribute_values)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return nullptr;
+#else
 	g_autofree gchar *id = g_strdup("keywords");
 	g_autofree gchar *title = nullptr;
 	g_autofree gchar *key = g_strdup(COMMENT_KEY);
@@ -1696,10 +1703,15 @@ GtkWidget *bar_pane_keywords_new_from_config(const gchar **attribute_names, cons
 	options->info_keywords.height = height;
 	bar_pane_translate_title(PANE_KEYWORDS, id, &title);
 	return bar_pane_keywords_new(id, title, key, expanded, height);
+#endif
 }
 
 void bar_pane_keywords_update_from_config(GtkWidget *pane, const gchar **attribute_names, const gchar **attribute_values)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return;
+#else
 	PaneKeywordsData *pkd;
 
 	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
@@ -1728,11 +1740,16 @@ void bar_pane_keywords_update_from_config(GtkWidget *pane, const gchar **attribu
 
 	bar_update_expander(pane);
 	bar_pane_keywords_update(pkd);
+#endif
 }
 
 
 void bar_pane_keywords_entry_add_from_config(GtkWidget *pane, const gchar **attribute_names, const gchar **attribute_values)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return;
+#else
 	PaneKeywordsData *pkd;
 	gchar *path = nullptr;
 	GtkTreePath *tree_path;
@@ -1756,6 +1773,7 @@ void bar_pane_keywords_entry_add_from_config(GtkWidget *pane, const gchar **attr
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}
+#endif
 }
 
 /*
@@ -1766,13 +1784,22 @@ void bar_pane_keywords_entry_add_from_config(GtkWidget *pane, const gchar **attr
 
 GList *keyword_list_pull(GtkWidget *text_widget)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return nullptr;
+#else
 	g_autofree gchar *text = text_widget_text_pull(text_widget);
 
 	return string_to_keywords_list(text);
+#endif
 }
 
 GList *keyword_list_get()
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return nullptr;
+#else
 	GList *ret_list = nullptr;
 	gchar *string;
 	GtkTreeIter iter;
@@ -1791,10 +1818,15 @@ GList *keyword_list_get()
 		}
 
 	return ret_list;
+#endif
 }
 
 void keyword_list_set(GList *keyword_list)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return;
+#else
 	GtkTreeIter  iter;
 
 	if (!keyword_list) return;
@@ -1815,10 +1847,15 @@ void keyword_list_set(GList *keyword_list)
 
 		keyword_list = keyword_list->next;
 		}
+#endif
 }
 
 gboolean bar_keywords_autocomplete_focus(LayoutWindow *lw)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return FALSE;
+#else
 	GtkWidget *pane = bar_find_pane_by_id(lw->bar, PANE_KEYWORDS, "keywords");
 	if (!pane)
 		{
@@ -1845,5 +1882,6 @@ gboolean bar_keywords_autocomplete_focus(LayoutWindow *lw)
 		}
 
 	return is_focused;
+#endif
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

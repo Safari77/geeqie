@@ -30,6 +30,7 @@
 #include <gdk/gdk.h>
 
 #include "filedata.h"
+#include "geometry.h"
 #include "misc.h"
 #include "pan-item.h"
 #include "pan-types.h"
@@ -172,9 +173,9 @@ void pan_calendar_update(PanWindow *pw, PanItem *pi_day)
 			}
 		}
 
-	GdkPoint c1{pi_day->x + pi_day->width - 8, pi_day->y + 8};
-	GdkPoint c2{pbox->x + 1, pbox->y + std::min(42, pbox->height)};
-	GdkPoint c3{pbox->x + 1, std::max(pbox->y, c2.y - 30)};
+	GqPoint c1{pi_day->x + pi_day->width - 8, pi_day->y + 8};
+	GqPoint c2{pbox->x + 1, pbox->y + std::min(42, pbox->height)};
+	GqPoint c3{pbox->x + 1, std::max(pbox->y, c2.y - 30)};
 
 	pi = pan_item_tri_new(pw,
 	                      c1, c2, c3,

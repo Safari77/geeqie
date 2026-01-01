@@ -28,6 +28,7 @@
 #include <gdk/gdk.h>
 #include <glib.h>
 
+#include "geometry.h"
 #include "pan-types.h"
 
 class FileData;
@@ -61,7 +62,7 @@ gboolean pan_item_box_draw(PanWindow *pw, PanItem *pi, GdkPixbuf *pixbuf, Pixbuf
 
 // Item triangle type
 PanItem *pan_item_tri_new(PanWindow *pw,
-                          GdkPoint c1, GdkPoint c2, GdkPoint c3,
+                          GqPoint c1, GqPoint c2, GqPoint c3,
                           PanColor color,
                           gint borders, PanColor border_color);
 gboolean pan_item_tri_draw(PanWindow *pw, PanItem *pi, GdkPixbuf *pixbuf, PixbufRenderer *pr,

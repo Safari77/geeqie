@@ -27,6 +27,7 @@
 #include <gdk/gdk.h>
 
 #include "filedata.h"
+#include "geometry.h"
 #include "pan-item.h"
 #include "pan-types.h"
 #include "pan-util.h"
@@ -77,7 +78,7 @@ static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 
 		if (pi->type == PAN_ITEM_TRIANGLE && pi->data)
 			{
-			auto *coord = static_cast<GdkPoint *>(pi->data);
+			auto *coord = static_cast<GqPoint *>(pi->data);
 
 			for (gint i = 0; i < 3; ++i)
 				{
@@ -177,8 +178,8 @@ static void pan_flower_build(PanWindow *pw, FlowerGroup *group, FlowerGroup *par
 
 	if (parent)
 		{
-		GdkPoint cp{parent->x + (parent->width / 2), parent->y + (parent->height / 2)};
-		GdkPoint cg{group->x + (group->width / 2), group->y + (group->height / 2)};
+		GqPoint cp{parent->x + (parent->width / 2), parent->y + (parent->height / 2)};
+		GqPoint cg{group->x + (group->width / 2), group->y + (group->height / 2)};
 
 		pan_item_tri_new(pw,
 		                 cp, cg, {cg.x + 5, cg.y + 5},

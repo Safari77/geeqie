@@ -370,37 +370,31 @@ void thumb_loader_std_calibrate_pixbuf(FileData *fd, GdkPixbuf *pixbuf)
 	if (!options->thumbnails.use_color_management) return;
 
 	ColorManProfileType color_profile_from_image = COLOR_PROFILE_NONE;
-	guint profile_len;
-	g_autofree guchar *profile = exif_get_color_profile(fd, profile_len, color_profile_from_image);
+	ColorManMemData profile = exif_get_color_profile(fd, color_profile_from_image);
 
 	if (color_profile_from_image == COLOR_PROFILE_NONE) return;
 
 	// transform image, we always use sRGB as target for thumbnails
 	constexpr ColorManProfileType screen_type = COLOR_PROFILE_SRGB;
 
-	const gint sw = gdk_pixbuf_get_width(pixbuf);
-	const gint sh = gdk_pixbuf_get_height(pixbuf);
-
-	g_autofree ColorMan *cm = nullptr;
-	if (profile)
+	std::unique_ptr<ColorMan> cm = nullptr;
+	if (profile.ptr)
 		{
-		cm = color_man_new_embedded(nullptr, pixbuf,
-		                            profile, profile_len,
-		                            screen_type, nullptr, nullptr, 0);
+		cm.reset(color_man_new_embedded(pixbuf, profile,
+		                                screen_type, nullptr, {}));
 		}
 	else
 		{
-		constexpr ColorManProfileType input_type = COLOR_PROFILE_MEM;
-		const gchar *input_file = nullptr;
-
-		cm = color_man_new(nullptr, pixbuf,
-		                   input_type, input_file,
-		                   screen_type, nullptr, nullptr, 0);
+		cm.reset(color_man_new(pixbuf, COLOR_PROFILE_MEM, nullptr,
+		                       screen_type, nullptr, {}));
 		}
 
 	if(cm)
 		{
-		color_man_correct_region(cm, cm->pixbuf, 0, 0, sw, sh);
+		const gint sw = gdk_pixbuf_get_width(pixbuf);
+		const gint sh = gdk_pixbuf_get_height(pixbuf);
+
+		cm->correct_region(pixbuf, {0, 0, sw, sh});
 		}
 }
 

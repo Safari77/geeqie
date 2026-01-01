@@ -37,6 +37,7 @@
 #include "dnd.h"
 #include "dupe.h"
 #include "filedata.h"
+#include "geometry.h"
 #include "img-view.h"
 #include "intl.h"
 #include "layout-image.h"
@@ -917,7 +918,7 @@ static void collection_table_popup_print_cb(GtkWidget *, gpointer data)
 {
 	auto ct = static_cast<CollectTable *>(data);
 
-	print_window_new(collection_table_selection_get_list(ct), gtk_widget_get_toplevel(ct->listview));
+	print_window_new(collection_table_selection_get_list(ct), widget_get_toplevel(ct->listview));
 }
 
 static void collection_table_popup_show_names_cb(GtkWidget *, gpointer data)
@@ -1519,7 +1520,7 @@ static void collection_table_scroll(CollectTable *ct, gboolean scroll)
 		}
 	else
 		{
-		const auto collection_table_auto_scroll_notify_cb = [ct](GtkWidget *, GdkPoint)
+		const auto collection_table_auto_scroll_notify_cb = [ct](GtkWidget *, GqPoint)
 		{
 			if (!ct->drop_idle_id)
 				{

@@ -98,7 +98,6 @@ const auto gq_gtk_style_context_get_background_color = gtk_style_context_get_bac
 const auto gq_gtk_widget_get_requisition = gtk_widget_get_requisition;
 const auto gq_gtk_widget_get_style = gtk_widget_get_style;
 const auto gq_gtk_widget_set_double_buffered = gtk_widget_set_double_buffered;
-const auto gq_gtk_widget_size_request = gtk_widget_size_request;
 G_GNUC_END_IGNORE_DEPRECATIONS
 
 #endif /* COMPAT_DEPRECATED_H */

@@ -29,11 +29,6 @@
 ## 4. Rename the unique dir name to the form geeqie-<n.m>
 ## 5. Create the source tar
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
-
 version=
 start=
 patch=

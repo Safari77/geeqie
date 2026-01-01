@@ -10,10 +10,11 @@
 ## $1 Destination directory. If blank, default is ../doxygen
 ##
 
-SCRIPT_DIR="$(dirname "$0")"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../build-aux/goto-project-root.sh"
-find_project_root || exit 1
+if [ ! -d ".git" ] || [ ! -d "src" ]
+then
+	printf '%s\n' "This is not a Geeqie project folder"
+	exit 1
+fi
 
 if [ -n "$1" ]
 then

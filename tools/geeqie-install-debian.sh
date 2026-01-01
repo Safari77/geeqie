@@ -42,8 +42,6 @@ optional_array="LCMS (for color management)
 liblcms2-dev
 exiv2 (for exif handling)
 libgexiv2-dev
-evince (for print preview)
-evince
 lua (for lua commands)
 liblua5.3-dev
 libffmpegthumbnailer (for mpeg thumbnails)
@@ -379,7 +377,7 @@ then
 fi
 
 # If it looks like a Geeqie download folder, assume an update
-if [ -d ".git" ] && [ -d "src" ] && [ -f "geeqie.1" ]
+if [ -d ".git" ] && [ -d "src" ]
 then
 	mode="update"
 else

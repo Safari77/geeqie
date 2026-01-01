@@ -3192,7 +3192,7 @@ void file_util_create_dir(const gchar *path, GtkWidget *parent, const FileUtilDo
 {
 	if (!GTK_IS_WINDOW(parent))
 		{
-		parent = gtk_widget_get_toplevel(parent);
+		parent = widget_get_toplevel(parent);
 		}
 
 	auto cfd = g_new0(CreateFolderdData, 1);

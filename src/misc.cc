@@ -616,4 +616,21 @@ void widget_set_cursor(GtkWidget *widget, gint icon)
 	if (cursor) g_object_unref(cursor);
 }
 
+GtkWidget *widget_get_toplevel(GtkWidget *widget)
+{
+#if HAVE_GTK4
+	auto *root = gtk_widget_get_root(vf->listview);
+
+	if (GTK_IS_WINDOW(root))
+		{
+		return GTK_WINDOW(root);
+		}
+	else
+		{
+		return nullptr;
+		}
+#else
+	return gtk_widget_get_toplevel(widget);
+#endif
+}
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

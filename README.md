@@ -31,10 +31,13 @@ The project website is <https://www.geeqie.org/> and you will find the latest so
 * [Features](#features)
 * [Downloading](#downloading)
 * [AppImages](#appimages)
+* [Snaps](#snaps)
 * [Installation Scripts](#installation-scripts)
 * [Compiling and Installing](#compiling-and-installing)
 * [Notes and changes for the latest release](#notes-and-changes-for-the-latest-release)
 * [Required libraries](#required-libraries)
+* [Translators](#translators)
+* [Windows](#windows)
 
 ### Features
 
