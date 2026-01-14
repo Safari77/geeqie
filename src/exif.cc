@@ -599,7 +599,7 @@ gchar *exif_item_get_data(ExifItem *item, guint *data_len)
 #endif
 }
 
-guint exif_item_get_format_id(ExifItem *item)
+static guint exif_item_get_format_id(ExifItem *item)
 {
 	if (!item) return EXIF_FORMAT_UNKNOWN;
 	return item->format;
@@ -1470,7 +1470,7 @@ gint exif_item_get_integer(ExifItem *item, gint *value)
 }
 
 
-ExifRational *exif_item_get_rational(ExifItem *item, gint *sign, guint n)
+ExifRational *exif_item_get_rational(ExifItem *item, guint n, bool *sign)
 {
 	if (!item) return nullptr;
 	if (n >= item->elements) return nullptr;
@@ -1521,7 +1521,7 @@ static void exif_write_item(FILE *f, ExifItem *item, ExifData *exif)
 /**
  * @brief Usually for debugging to stdout
  */
-void exif_write_data_list(ExifData *exif, FILE *f, gint human_readable_list)
+void exif_write_data_list(ExifData *exif, FILE *f, bool human_readable_list)
 {
 	if (!f || !exif) return;
 
@@ -1530,20 +1530,13 @@ void exif_write_data_list(ExifData *exif, FILE *f, gint human_readable_list)
 
 	if (human_readable_list)
 		{
-		gint i;
-
-		i = 0;
-		while (ExifFormattedList[i].key)
-			{
-			gchar *text;
-
-			text = exif_get_formatted_by_key(exif, ExifFormattedList[i].key, nullptr);
-			if (text)
-				{
-				g_fprintf(f, "     %9s %30s %s\n", "string", ExifFormattedList[i].key, text);
-				}
-			i++;
-			}
+		static const auto print_formatted = [](gpointer key, gpointer value, gpointer data)
+		{
+			g_fprintf(static_cast<FILE *>(data), "     %9s %30s %s\n",
+			          "string", static_cast<gchar *>(key), static_cast<gchar *>(value));
+		};
+		g_autoptr(GHashTable) formatted = exif_get_formatted(exif);
+		g_hash_table_foreach(formatted, print_formatted, f);
 		}
 	else
 		{
@@ -1593,10 +1586,8 @@ GList *exif_get_metadata(ExifData *exif, const gchar *key, MetadataFormat format
 
 	if (format == METADATA_FORMATTED)
 		{
-		gchar *text;
-		gint key_valid;
-		text = exif_get_formatted_by_key(exif, key, &key_valid);
-		if (key_valid) return g_list_append(nullptr, text);
+		auto text = exif_get_formatted_by_key(exif, key);
+		if (text) return g_list_append(nullptr, text.value());
 		}
 
 	item = exif_get_item(exif, key);

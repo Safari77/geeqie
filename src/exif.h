@@ -22,6 +22,8 @@
 #ifndef __EXIF_H
 #define __EXIF_H
 
+#include <optional>
+
 #include <glib.h>
 
 enum ColorManProfileType : int;
@@ -31,33 +33,6 @@ struct ColorManMemData;
 struct ExifData;
 struct ExifItem;
 class FileData;
-
-#define EXIF_FORMATTED() "formatted."
-#define EXIF_FORMATTED_LEN (sizeof(EXIF_FORMATTED()) - 1)
-
-/*
- *-----------------------------------------------------------------------------
- * Tag formats
- *-----------------------------------------------------------------------------
- */
-
-#define EXIF_FORMAT_COUNT 13
-
-enum ExifFormatType {
-	EXIF_FORMAT_UNKNOWN		= 0,
-	EXIF_FORMAT_BYTE_UNSIGNED	= 1,
-	EXIF_FORMAT_STRING		= 2,
-	EXIF_FORMAT_SHORT_UNSIGNED	= 3,
-	EXIF_FORMAT_LONG_UNSIGNED	= 4,
-	EXIF_FORMAT_RATIONAL_UNSIGNED	= 5,
-	EXIF_FORMAT_BYTE		= 6,
-	EXIF_FORMAT_UNDEFINED		= 7,
-	EXIF_FORMAT_SHORT		= 8,
-	EXIF_FORMAT_LONG		= 9,
-	EXIF_FORMAT_RATIONAL		= 10,
-	EXIF_FORMAT_FLOAT		= 11,
-	EXIF_FORMAT_DOUBLE		= 12
-};
 
 
 /*
@@ -87,21 +62,6 @@ enum ExifOrientationType {
 	EXIF_ORIENTATION_LEFT_BOTTOM	= 8
 };
 
-struct ExifFormattedText
-{
-	const gchar *key;
-	const gchar *description;
-	gchar *(*build_func)(ExifData *exif);
-};
-
-/*
- *-----------------------------------------------------------------------------
- * Data
- *-----------------------------------------------------------------------------
- */
-
-extern ExifFormattedText ExifFormattedList[]; /**< the list of specially formatted keys, for human readable output */
-
 /*
  *-----------------------------------------------------------------------------
  * functions
@@ -125,7 +85,7 @@ void exif_free(ExifData *exif);
 
 gchar *exif_get_data_as_text(ExifData *exif, const gchar *key);
 gint exif_get_integer(ExifData *exif, const gchar *key, gint *value);
-ExifRational *exif_get_rational(ExifData *exif, const gchar *key, gint *sign);
+ExifRational *exif_get_rational(ExifData *exif, const gchar *key, bool *sign = nullptr);
 
 ExifItem *exif_get_item(ExifData *exif, const gchar *key);
 ExifItem *exif_get_first_item(ExifData *exif);
@@ -137,18 +97,18 @@ guint exif_item_get_tag_id(ExifItem *item);
 guint exif_item_get_elements(ExifItem *item);
 gchar *exif_item_get_data(ExifItem *item, guint *data_len);
 gchar *exif_item_get_description(ExifItem *item);
-guint exif_item_get_format_id(ExifItem *item);
 const gchar *exif_item_get_format_name(ExifItem *item, gboolean brief);
 gchar *exif_item_get_data_as_text(ExifItem *item, ExifData *exif);
 gint exif_item_get_integer(ExifItem *item, gint *value);
-ExifRational *exif_item_get_rational(ExifItem *item, gint *sign, guint n);
+ExifRational *exif_item_get_rational(ExifItem *item, guint n, bool *sign = nullptr);
 
 gchar *exif_item_get_string(ExifItem *item, gint idx);
 
 gchar *exif_get_description_by_key(const gchar *key);
 gchar *exif_get_tag_description_by_key(const gchar *key);
 
-gchar *exif_get_formatted_by_key(ExifData *exif, const gchar *key, gboolean *key_valid);
+GHashTable *exif_get_formatted(ExifData *exif);
+std::optional<gchar *> exif_get_formatted_by_key(ExifData *exif, const gchar *key);
 
 gint exif_update_metadata(ExifData *exif, const gchar *key, const GList *values);
 GList *exif_get_metadata(ExifData *exif, const gchar *key, MetadataFormat format);
@@ -161,7 +121,7 @@ ColorManMemData exif_get_color_profile(FileData *fd, ColorManProfileType &color_
 void exif_add_jpeg_color_profile(ExifData *exif, guchar *cp_data, guint cp_length);
 
 
-gboolean exif_jpeg_parse_color(ExifData *exif, guchar *data, guint size);
+bool exif_jpeg_parse_color(ExifData *exif, guchar *data, guint size);
 
 /* support for so called "jpeg comment" */
 gchar* exif_get_image_comment(FileData* fd);

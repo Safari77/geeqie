@@ -151,6 +151,7 @@ static GList *editor_mime_types_to_extensions(gchar **mime_types)
 		{"image/x-MS-bmp",	".bmp"},
 		{"image/x-nef",		".nef"},
 		{"image/x-nikon-nef",	".nef"},
+		{"image/x-nikon-nrw",	".nrw"},
 		{"image/x-panasonic-raw",	".raw"},
 		{"image/x-panasonic-rw2",	".rw2"},
 		{"image/x-pentax-pef",	".pef"},

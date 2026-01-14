@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <numeric>
 
 #include <glib.h>
 
@@ -51,13 +52,17 @@
 #include "third-party/zonedetect.h"
 #include "ui-fileops.h"
 
-struct ExifData;
-struct ExifItem;
-struct FileCacheData;
-struct ZoneDetect;
+namespace
+{
 
+struct ExifFormattedText
+{
+	const gchar *key;
+	const gchar *description;
+	gchar *(*build_func)(ExifData *exif);
+};
 
-static gdouble exif_rational_to_double(ExifRational *r, gint sign)
+gdouble exif_rational_to_double(const ExifRational *r, bool sign)
 {
 	if (!r || r->den == 0.0) return 0.0;
 
@@ -65,14 +70,15 @@ static gdouble exif_rational_to_double(ExifRational *r, gint sign)
 	return static_cast<gdouble>(r->num) / r->den;
 }
 
-static gdouble exif_get_rational_as_double(ExifData *exif, const gchar *key)
+gdouble exif_get_rational_as_double(ExifData *exif, const gchar *key)
 {
-	ExifRational *r;
-	gint sign;
+	bool sign;
+	ExifRational *r = exif_get_rational(exif, key, &sign);
 
-	r = exif_get_rational(exif, key, &sign);
 	return exif_rational_to_double(r, sign);
 }
+
+} // namespace
 
 static gchar *remove_common_prefix(gchar *s, gchar *t)
 {
@@ -252,17 +258,18 @@ static gchar *exif_build_formatted_ShutterSpeed(ExifData *exif)
 {
 	ExifRational *r;
 
-	r = exif_get_rational(exif, "Exif.Photo.ExposureTime", nullptr);
+	r = exif_get_rational(exif, "Exif.Photo.ExposureTime");
 	if (r && r->num && r->den)
 		{
 		gdouble n = static_cast<gdouble>(r->den) / static_cast<gdouble>(r->num);
 		return g_strdup_printf("%s%.0fs", n > 1.0 ? "1/" : "",
 						  n > 1.0 ? n : 1.0 / n);
 		}
-	r = exif_get_rational(exif, "Exif.Photo.ShutterSpeedValue", nullptr);
+
+	r = exif_get_rational(exif, "Exif.Photo.ShutterSpeedValue");
 	if (r && r->num  && r->den)
 		{
-		gdouble n = pow(2.0, exif_rational_to_double(r, TRUE));
+		gdouble n = pow(2.0, exif_rational_to_double(r, true));
 
 		/* Correct exposure time to avoid values like 1/91s (seen on Minolta DImage 7) */
 		if (n > 1.0 && static_cast<gint>(n) - (static_cast<gint>(n/10))*10 == 1) n--;
@@ -286,14 +293,11 @@ static gchar *exif_build_formatted_Aperture(ExifData *exif)
 
 static gchar *exif_build_formatted_ExposureBias(ExifData *exif)
 {
-	ExifRational *r;
-	gint sign;
-	gdouble n;
-
-	r = exif_get_rational(exif, "Exif.Photo.ExposureBiasValue", &sign);
+	bool sign;
+	ExifRational *r = exif_get_rational(exif, "Exif.Photo.ExposureBiasValue", &sign);
 	if (!r) return nullptr;
 
-	n = exif_rational_to_double(r, sign);
+	gdouble n = exif_rational_to_double(r, sign);
 	return g_strdup_printf("%+.1f", n);
 }
 
@@ -340,18 +344,16 @@ static gchar *exif_build_formatted_ISOSpeedRating(ExifData *exif)
 
 static gchar *exif_build_formatted_SubjectDistance(ExifData *exif)
 {
-	ExifRational *r;
-	gint sign;
-	gdouble n;
-
-	r = exif_get_rational(exif, "Exif.Photo.SubjectDistance", &sign);
+	bool sign;
+	ExifRational *r = exif_get_rational(exif, "Exif.Photo.SubjectDistance", &sign);
 	if (!r) return nullptr;
 
 	if (static_cast<glong>(r->num) == static_cast<glong>(0xffffffff)) return g_strdup(_("infinity"));
 	if (static_cast<glong>(r->num) == 0) return g_strdup(_("unknown"));
 
-	n = exif_rational_to_double(r, sign);
+	gdouble n = exif_rational_to_double(r, sign);
 	if (n == 0.0) return _("unknown");
+
 	return g_strdup_printf("%.3f m", n);
 }
 
@@ -406,11 +408,8 @@ static gchar *exif_build_formatted_Flash(ExifData *exif)
 
 static gchar *exif_build_formatted_Resolution(ExifData *exif)
 {
-	ExifRational *rx;
-	ExifRational *ry;
-
-	rx = exif_get_rational(exif, "Exif.Image.XResolution", nullptr);
-	ry = exif_get_rational(exif, "Exif.Image.YResolution", nullptr);
+	ExifRational *rx = exif_get_rational(exif, "Exif.Image.XResolution");
+	ExifRational *ry = exif_get_rational(exif, "Exif.Image.YResolution");
 	if (!rx || !ry) return nullptr;
 
 	g_autofree gchar *units = exif_get_data_as_text(exif, "Exif.Image.ResolutionUnit");
@@ -475,7 +474,7 @@ static gchar *exif_build_formatted_GPSPosition(ExifData *exif)
 		gdouble p = 0;
 		for (guint i = 0, elements = exif_item_get_elements(item); i < elements; i++)
 			{
-			ExifRational *value = exif_item_get_rational(item, nullptr, i);
+			ExifRational *value = exif_item_get_rational(item, i);
 			if (value && value->num && value->den)
 				p += static_cast<gdouble>(value->num) / static_cast<gdouble>(value->den) / pow(60.0, static_cast<gdouble>(i));
 			}
@@ -498,17 +497,15 @@ static gchar *exif_build_formatted_GPSPosition(ExifData *exif)
 
 static gchar *exif_build_formatted_GPSAltitude(ExifData *exif)
 {
-	ExifRational *r;
-	ExifItem *item;
-	gdouble alt;
+	ExifItem *item = exif_get_item(exif, "Exif.GPSInfo.GPSAltitudeRef");
+	if (!item) return nullptr;
+
+	ExifRational *r = exif_get_rational(exif, "Exif.GPSInfo.GPSAltitude");
+	if (!r) return nullptr;
+
+	gdouble alt = exif_rational_to_double(r, false);
+
 	gint ref;
-
-	item = exif_get_item(exif, "Exif.GPSInfo.GPSAltitudeRef");
-	r = exif_get_rational(exif, "Exif.GPSInfo.GPSAltitude", nullptr);
-
-	if (!r || !item) return nullptr;
-
-	alt = exif_rational_to_double(r, 0);
 	exif_item_get_integer(item, &ref);
 
 	return g_strdup_printf("%0.f m %s", alt, (ref==0)?_("Above Sea Level"):_("Below Sea Level"));
@@ -786,9 +783,12 @@ static gchar *exif_build_formatted_star_rating(ExifData *exif)
 }
 
 /* List of custom formatted pseudo-exif tags */
+#define EXIF_FORMATTED() "formatted."
+#define EXIF_FORMATTED_LEN (sizeof(EXIF_FORMATTED()) - 1)
 #define EXIF_FORMATTED_TAG(name, label) { EXIF_FORMATTED()#name, label, exif_build_formatted##_##name }
 
-ExifFormattedText ExifFormattedList[] = {
+/**< the list of specially formatted keys, for human readable output */
+static const ExifFormattedText ExifFormattedList[] = {
 	EXIF_FORMATTED_TAG(Camera,		N_("Camera")),
 	EXIF_FORMATTED_TAG(DateTime,		N_("Date")),
 	EXIF_FORMATTED_TAG(DateTimeDigitized,	N_("DateDigitized")),
@@ -819,25 +819,35 @@ ExifFormattedText ExifFormattedList[] = {
 	{"file.class",				N_("File class"), 	nullptr},
 	{"file.page_no",			N_("Page no."), 	nullptr},
 	{"lua.lensID",				N_("Lens"), 		nullptr},
-	{ nullptr, nullptr, nullptr }
 };
 
-gchar *exif_get_formatted_by_key(ExifData *exif, const gchar *key, gboolean *key_valid)
+GHashTable *exif_get_formatted(ExifData *exif)
 {
-	if (strncmp(key, EXIF_FORMATTED(), EXIF_FORMATTED_LEN) == 0)
+	GHashTable *formatted = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
+
+	for (const auto &eft : ExifFormattedList)
 		{
-		gint i;
-
-		if (key_valid) *key_valid = TRUE;
-
-		key += EXIF_FORMATTED_LEN;
-		for (i = 0; ExifFormattedList[i].key; i++)
-			if (ExifFormattedList[i].build_func && strcmp(key, ExifFormattedList[i].key + EXIF_FORMATTED_LEN) == 0)
-				return ExifFormattedList[i].build_func(exif);
+		auto text = exif_get_formatted_by_key(exif, eft.key);
+		if (text && text.value())
+			{
+			g_hash_table_insert(formatted, const_cast<gchar *>(eft.key), text.value());
+			}
 		}
 
-	if (key_valid) *key_valid = FALSE;
-	return nullptr;
+	return formatted;
+}
+
+std::optional<gchar *> exif_get_formatted_by_key(ExifData *exif, const gchar *key)
+{
+	if (strncmp(key, EXIF_FORMATTED(), EXIF_FORMATTED_LEN) != 0) return {};
+
+	key += EXIF_FORMATTED_LEN;
+
+	for (const auto &eft : ExifFormattedList)
+		if (eft.build_func && strcmp(key, eft.key + EXIF_FORMATTED_LEN) == 0)
+			return eft.build_func(exif);
+
+	return {};
 }
 
 gchar *exif_get_description_by_key(const gchar *key)
@@ -846,11 +856,9 @@ gchar *exif_get_description_by_key(const gchar *key)
 
 	if (strncmp(key, EXIF_FORMATTED(), EXIF_FORMATTED_LEN) == 0 || strncmp(key, "file.", 5) == 0 || strncmp(key, "lua.", 4) == 0)
 		{
-		gint i;
-
-		for (i = 0; ExifFormattedList[i].key; i++)
-			if (strcmp(key, ExifFormattedList[i].key) == 0)
-				return g_strdup(_(ExifFormattedList[i].description));
+		for (const auto &eft : ExifFormattedList)
+			if (strcmp(key, eft.key) == 0)
+				return g_strdup(_(eft.description));
 		}
 
 	return exif_get_tag_description_by_key(key);
@@ -864,26 +872,21 @@ gint exif_get_integer(ExifData *exif, const gchar *key, gint *value)
 	return exif_item_get_integer(item, value);
 }
 
-ExifRational *exif_get_rational(ExifData *exif, const gchar *key, gint *sign)
+ExifRational *exif_get_rational(ExifData *exif, const gchar *key, bool *sign)
 {
 	ExifItem *item;
 
 	item = exif_get_item(exif, key);
-	return exif_item_get_rational(item, sign, 0);
+	return exif_item_get_rational(item, 0, sign);
 }
 
 gchar *exif_get_data_as_text(ExifData *exif, const gchar *key)
 {
-	ExifItem *item;
-	gchar *text;
-	gboolean key_valid;
-
 	if (!key) return nullptr;
 
-	text = exif_get_formatted_by_key(exif, key, &key_valid);
-	if (key_valid) return text;
+	if (auto text = exif_get_formatted_by_key(exif, key); text.has_value()) return text.value();
 
-	item = exif_get_item(exif, key);
+	ExifItem *item = exif_get_item(exif, key);
 	if (item) return exif_item_get_data_as_text(item, exif);
 
 	return nullptr;
@@ -997,13 +1000,16 @@ ColorManMemData exif_get_color_profile(FileData *fd, ColorManProfileType &color_
 
 /* embedded icc in jpeg */
 
-gboolean exif_jpeg_parse_color(ExifData *exif, guchar *data, guint size)
+bool exif_jpeg_parse_color(ExifData *exif, guchar *data, guint size)
 {
-	guint seg_offset = 0;
-	guint seg_length = 0;
-	guint chunk_offset[255];
-	guint chunk_length[255];
-	guint chunk_count = 0;
+	struct Chunk
+	{
+		guint offset = 0;
+		guint length = 0;
+	};
+
+	std::vector<Chunk> chunks;
+	chunks.reserve(255);
 
 	/* For jpeg/jfif, ICC color profile data can be in more than one segment.
 	   the data is in APP2 data segments that start with "ICC_PROFILE\x00\xNN\xTT"
@@ -1011,64 +1017,54 @@ gboolean exif_jpeg_parse_color(ExifData *exif, guchar *data, guint size)
 	   TT = total number of ICC segments (TT in each ICC segment should match)
 	 */
 
+	guint seg_offset = 0;
+	guint seg_length = 0;
 	while (jpeg_segment_find(data + seg_offset + seg_length,
 	                         size - seg_offset - seg_length,
 	                         JPEG_MARKER_APP2,
 	                         "ICC_PROFILE\x00", 12,
 	                         seg_offset, seg_length))
 		{
-		guchar chunk_num;
-		guchar chunk_tot;
+		if (seg_length < 14) return false;
 
-		if (seg_length < 14) return FALSE;
+		const guchar chunk_num = data[seg_offset + 12];
+		const guchar chunk_tot = data[seg_offset + 13];
 
-		chunk_num = data[seg_offset + 12];
-		chunk_tot = data[seg_offset + 13];
+		if (chunk_num == 0 || chunk_tot == 0) return false;
 
-		if (chunk_num == 0 || chunk_tot == 0) return FALSE;
-
-		if (chunk_count == 0)
+		if (chunks.empty())
 			{
-			guint i;
-
-			chunk_count = static_cast<guint>(chunk_tot);
-			for (i = 0; i < chunk_count; i++) chunk_offset[i] = 0;
-			for (i = 0; i < chunk_count; i++) chunk_length[i] = 0;
+			chunks.resize(chunk_tot);
 			}
 
-		if (chunk_tot != chunk_count ||
-		    chunk_num > chunk_count) return FALSE;
+		if (chunk_tot != chunks.size() ||
+		    chunk_num > chunks.size()) return false;
 
-		chunk_num--;
-		chunk_offset[chunk_num] = seg_offset + 14;
-		chunk_length[chunk_num] = seg_length - 14;
+		chunks[chunk_num - 1] = { seg_offset + 14, seg_length - 14 };
 		}
 
-	if (chunk_count > 0)
+	if (chunks.empty()) return false;
+
+	const guint cp_length = std::accumulate(chunks.cbegin(), chunks.cend(), 0,
+	                                        [](guint len, const Chunk &chunk){ return len + chunk.length; });
+	g_autofree auto *cp_data = static_cast<guchar *>(g_malloc(cp_length));
+
+	for (const Chunk &chunk : chunks)
 		{
-		guint cp_length = 0;
-		guint i;
-
-		for (i = 0; i < chunk_count; i++) cp_length += chunk_length[i];
-
-		g_autofree auto *cp_data = static_cast<guchar *>(g_malloc(cp_length));
-
-		for (i = 0; i < chunk_count; i++)
+		if (chunk.offset == 0)
 			{
-			if (chunk_offset[i] == 0)
-				{
-				/* error, we never saw this chunk */
-				return FALSE;
-				}
-			memcpy(cp_data, data + chunk_offset[i], chunk_length[i]);
+			/* error, we never saw this chunk */
+			return false;
 			}
-		DEBUG_1("Found embedded icc profile in jpeg");
-		exif_add_jpeg_color_profile(exif, g_steal_pointer(&cp_data), cp_length);
 
-		return TRUE;
+		// @fixme Each chunk overwrites cp_data from start. Is it intended?
+		memcpy(cp_data, data + chunk.offset, chunk.length);
 		}
 
-	return FALSE;
+	DEBUG_1("Found embedded icc profile in jpeg");
+	exif_add_jpeg_color_profile(exif, g_steal_pointer(&cp_data), cp_length);
+
+	return true;
 }
 
 /*
