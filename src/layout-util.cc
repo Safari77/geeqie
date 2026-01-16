@@ -112,6 +112,33 @@ struct LayoutEditors
 	GList *desktop_files = nullptr;
 } layout_editors;
 
+/**
+ * @brief Checks if event key is mapped to Help
+ * @param event
+ * @returns
+ *
+ * Used to check if the user has re-mapped the Help key
+ * in Preferences/Keyboard
+ *
+ * Note: help_key.accel_mods and state
+ * differ in the higher bits
+ */
+gboolean is_help_key_impl(guint keyval, GdkModifierType state)
+{
+	GtkAccelKey help_key;
+	guint mask = GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK;
+
+	if (gtk_accel_map_lookup_entry("<Actions>/MenuActions/HelpContents", &help_key))
+		{
+		if (help_key.accel_key == keyval && (help_key.accel_mods & mask) == (state & mask))
+			{
+			return TRUE;
+			}
+		}
+
+	return FALSE;
+}
+
 } // namespace
 
 static gboolean layout_bar_enabled(LayoutWindow *lw);
@@ -3623,34 +3650,16 @@ void layout_util_sync(LayoutWindow *lw)
 	layout_util_sync_thumb(lw);
 }
 
-/**
- * @brief Checks if event key is mapped to Help
- * @param event
- * @returns
- *
- * Used to check if the user has re-mapped the Help key
- * in Preferences/Keyboard
- *
- * Note: help_key.accel_mods and event->state
- * differ in the higher bits
- */
+gboolean is_help_key(guint keyval, GdkModifierType state)
+{
+	return is_help_key_impl(keyval, state);
+}
+#if !HAVE_GTK4
 gboolean is_help_key(GdkEventKey *event)
 {
-	GtkAccelKey help_key;
-	gboolean ret = FALSE;
-	guint mask = GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK;
-
-	if (gtk_accel_map_lookup_entry("<Actions>/MenuActions/HelpContents", &help_key))
-		{
-		if (help_key.accel_key == event->keyval &&
-					(help_key.accel_mods & mask) == (event->state & mask))
-			{
-			ret = TRUE;
-			}
-		}
-
-	return ret;
+	return is_help_key_impl(event->keyval, (GdkModifierType)event->state);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------

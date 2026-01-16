@@ -78,7 +78,11 @@ void layout_bars_close(LayoutWindow *lw);
 
 void layout_exif_window_new(LayoutWindow *lw);
 
+gboolean is_help_key(guint keyval, GdkModifierType state);
+#if !HAVE_GTK4
 gboolean is_help_key(GdkEventKey *event);
+#endif
+
 void layout_menu_close_cb(GtkAction *action, gpointer data);
 GtkWidget *layout_actions_menu_tool_bar(LayoutWindow *lw);
 

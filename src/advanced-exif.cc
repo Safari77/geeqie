@@ -331,24 +331,26 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 }
 #endif
 
-static gboolean advanced_exif_keypress(GtkWidget *, GdkEventKey *event, gpointer data)
+static gboolean advanced_exif_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
 {
 	auto ew = static_cast<ExifWin *>(data);
 	gboolean stop_signal = FALSE;
 
-	if (event->state & GDK_CONTROL_MASK)
+	if (state & GDK_CONTROL_MASK)
 		{
-		switch (event->keyval)
+		switch (keyval)
 			{
-			case 'W': case 'w':
+			case GDK_KEY_w:
+			case GDK_KEY_W:
 				advanced_exif_close(ew);
 				stop_signal = TRUE;
 				break;
 			default:
 				break;
 			}
-		} // if (event->state & GDK_CONTROL...
-	if (!stop_signal && is_help_key(event))
+		}
+
+	if (!stop_signal && is_help_key(keyval, state))
 		{
 		help_window_show("GuideOtherWindowsExif.html");
 		stop_signal = TRUE;
@@ -394,6 +396,7 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	GtkWidget *box;
 	GtkWidget *button_box;
 	GtkWidget *hbox;
+	GtkEventController *controller;
 
 	ew = g_new0(ExifWin, 1);
 
@@ -474,8 +477,14 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	g_signal_connect(G_OBJECT(ew->listview), "drag_begin",
 			 G_CALLBACK(advanced_exif_dnd_begin), ew);
 
-	g_signal_connect(G_OBJECT(ew->window), "key_press_event",
-			 G_CALLBACK(advanced_exif_keypress), ew);
+#if HAVE_GTK4
+	controller = gtk_event_controller_key_new();
+	gtk_widget_add_controller(ew->window, controller);
+	g_object_unref(controller);
+#else
+	controller = gtk_event_controller_key_new(ew->window);
+#endif
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(advanced_exif_keypress), ew);
 
 	g_signal_connect(G_OBJECT(ew->listview), "button_release_event",
 			G_CALLBACK(advanced_exif_mouseclick), ew);
