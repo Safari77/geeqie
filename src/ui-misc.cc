@@ -1360,6 +1360,23 @@ gboolean window_get_pointer_position(GdkWindow *window, GqPoint &pos)
 	       0 <= pos.y && pos.y < height;
 }
 
+#if HAVE_GTK4
+GdkRectangle window_get_position_geometry(GdkSurface *surface)
+{
+	GdkRectangle rect = {0};
+
+	if (!surface)
+		{
+		return rect;
+		}
+
+	gdk_surface_get_position(surface, &rect.x, &rect.y);
+	rect.width  = gdk_surface_get_width(surface);
+	rect.height = gdk_surface_get_height(surface);
+
+	return rect;
+}
+#else
 GdkRectangle window_get_position_geometry(GdkWindow *window)
 {
 	GdkRectangle rect;
@@ -1370,6 +1387,7 @@ GdkRectangle window_get_position_geometry(GdkWindow *window)
 
 	return rect;
 }
+#endif
 
 GdkRectangle window_get_root_origin_geometry(GdkWindow *window)
 {

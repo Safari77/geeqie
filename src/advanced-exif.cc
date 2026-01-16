@@ -245,13 +245,25 @@ static void advanced_exif_add_column(GtkWidget *listview, const gchar *title, gi
 
 static void advanced_exif_window_get_geometry(ExifWin *ew)
 {
-	GdkWindow *window;
-
 	LayoutWindow *lw = get_current_layout();
 	if (!ew || !lw) return;
 
+#if GTK_CHECK_VERSION(4, 0, 0)
+	GdkSurface *surface;
+
+	surface = gtk_native_get_surface(GTK_NATIVE(ew->window));
+	if (!surface)
+		{
+		return;
+		}
+
+	lw->options.advanced_exif_window = window_get_position_geometry(surface);
+#else
+	GdkWindow *window;
+
 	window = gtk_widget_get_window(ew->window);
 	lw->options.advanced_exif_window = window_get_position_geometry(window);
+#endif
 }
 
 static void advanced_exif_close(ExifWin *ew)
