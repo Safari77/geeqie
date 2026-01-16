@@ -290,13 +290,10 @@ static gint advanced_exif_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 }
 
 #if HAVE_GTK4
-static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
-{
-/* @FIXME GTK4 stub */
-	return TRUE;
-}
+static gboolean advanced_exif_mouseclick((GtkGestureClick *, gint, gdouble, gdouble, gpointer data)
 #else
 static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
+#endif
 {
 	auto ew = static_cast<ExifWin *>(data);
 	GtkTreePath *path;
@@ -329,7 +326,6 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 
 	return TRUE;
 }
-#endif
 
 static gboolean advanced_exif_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
 {
@@ -486,8 +482,15 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 #endif
 	g_signal_connect(controller, "key-pressed", G_CALLBACK(advanced_exif_keypress), ew);
 
-	g_signal_connect(G_OBJECT(ew->listview), "button_release_event",
-			G_CALLBACK(advanced_exif_mouseclick), ew);
+#if HAVE_GTK4
+	GtkGesture *click = gtk_gesture_click_new();
+
+	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(click));
+	g_signal_connect(click, "released", G_CALLBACK(advanced_exif_mouseclick), ew);
+	g_object_unref(click);
+#else
+	g_signal_connect(G_OBJECT(ew->listview), "button_release_event", G_CALLBACK(advanced_exif_mouseclick), ew);
+#endif
 
 	ew->scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(ew->scrolled), GTK_SHADOW_IN);
