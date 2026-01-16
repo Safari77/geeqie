@@ -302,7 +302,7 @@ static gint advanced_exif_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 }
 
 #if HAVE_GTK4
-static gboolean advanced_exif_mouseclick((GtkGestureClick *, gint, gdouble, gdouble, gpointer data)
+static gboolean advanced_exif_mouseclick(GtkGestureClick *, gint, gdouble, gdouble, gpointer data)
 #else
 static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
 #endif
@@ -398,7 +398,6 @@ static void exif_window_close_cb(GtkWidget *, gpointer data)
 GtkWidget *advanced_exif_new(LayoutWindow *lw)
 {
 	ExifWin *ew;
-	GdkGeometry geometry;
 	GtkListStore *store;
 	GtkTreeSortable *sortable;
 	GtkWidget *box;
@@ -411,9 +410,17 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	ew->window = window_new("view", nullptr, _("Metadata"));
 	DEBUG_NAME(ew->window);
 
+#if HAVE_GTK4
+    gtk_widget_set_size_request(GTK_WIDGET(ew->window), 900, 600);
+    gtk_window_set_default_size(GTK_WINDOW(ew->window), 900, 600);
+#else
+	GdkGeometry geometry;
+
 	geometry.min_width = 900;
 	geometry.min_height = 600;
+
 	gtk_window_set_geometry_hints(GTK_WINDOW(ew->window), nullptr, &geometry, GDK_HINT_MIN_SIZE);
+#endif
 
 	gtk_window_set_resizable(GTK_WINDOW(ew->window), TRUE);
 
@@ -497,7 +504,7 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 #if HAVE_GTK4
 	GtkGesture *click = gtk_gesture_click_new();
 
-	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(click));
+	gtk_widget_add_controller(ew->listview, GTK_EVENT_CONTROLLER(click));
 	g_signal_connect(click, "released", G_CALLBACK(advanced_exif_mouseclick), ew);
 	g_object_unref(click);
 #else
