@@ -38,7 +38,9 @@
 #include "compat.h"
 #include "dnd.h"
 #include "exif.h"
-#include "glua.h"
+#if HAVE_LUA
+#  include "glua.h"
+#endif
 #include "intl.h"
 #include "metadata.h"
 #include "ui-fileops.h"
@@ -300,7 +302,7 @@ GtkWidget *osd_new(gint max_cols, GtkWidget *template_view)
 	gq_gtk_container_add(scrolled, viewport);
 	gtk_widget_show(viewport);
 
-	const gint entries = G_N_ELEMENTS(predefined_tags);
+	constexpr gint entries = std::size(predefined_tags);
 	const gint max_rows = ceil(static_cast<gdouble>(entries) / max_cols);
 
 	auto *grid = GTK_GRID(gtk_grid_new());

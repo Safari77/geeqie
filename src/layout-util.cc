@@ -112,6 +112,33 @@ struct LayoutEditors
 	GList *desktop_files = nullptr;
 } layout_editors;
 
+/**
+ * @brief Checks if event key is mapped to Help
+ * @param event
+ * @returns
+ *
+ * Used to check if the user has re-mapped the Help key
+ * in Preferences/Keyboard
+ *
+ * Note: help_key.accel_mods and state
+ * differ in the higher bits
+ */
+gboolean is_help_key_impl(guint keyval, GdkModifierType state)
+{
+	GtkAccelKey help_key;
+	guint mask = GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK;
+
+	if (gtk_accel_map_lookup_entry("<Actions>/MenuActions/HelpContents", &help_key))
+		{
+		if (help_key.accel_key == keyval && (help_key.accel_mods & mask) == (state & mask))
+			{
+			return TRUE;
+			}
+		}
+
+	return FALSE;
+}
+
 } // namespace
 
 static gboolean layout_bar_enabled(LayoutWindow *lw);
@@ -2909,36 +2936,37 @@ void layout_actions_setup(LayoutWindow *lw)
 	gq_gtk_action_group_set_translate_func(lw->action_group, menu_translate, nullptr, nullptr);
 
 	gq_gtk_action_group_add_actions(lw->action_group,
-				     menu_entries, G_N_ELEMENTS(menu_entries), lw);
+	                                menu_entries, std::size(menu_entries), lw);
 	gq_gtk_action_group_add_toggle_actions(lw->action_group,
-					    menu_toggle_entries, G_N_ELEMENTS(menu_toggle_entries), lw);
+	                                       menu_toggle_entries, std::size(menu_toggle_entries),
+	                                       lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_radio_entries, G_N_ELEMENTS(menu_radio_entries),
-					   0, G_CALLBACK(layout_menu_list_cb), lw);
+	                                      menu_radio_entries, std::size(menu_radio_entries),
+	                                      0, G_CALLBACK(layout_menu_list_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_split_radio_entries, G_N_ELEMENTS(menu_split_radio_entries),
-					   0, G_CALLBACK(layout_menu_split_cb), lw);
+	                                      menu_split_radio_entries, std::size(menu_split_radio_entries),
+	                                      0, G_CALLBACK(layout_menu_split_cb), lw);
 	gq_gtk_action_group_add_toggle_actions(lw->action_group,
-					   menu_view_dir_toggle_entries, G_N_ELEMENTS(menu_view_dir_toggle_entries),
-					    lw);
+	                                       menu_view_dir_toggle_entries, std::size(menu_view_dir_toggle_entries),
+	                                       lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_color_radio_entries, COLOR_PROFILE_FILE + COLOR_PROFILE_INPUTS,
-					   0, G_CALLBACK(layout_color_menu_input_cb), lw);
+	                                      menu_color_radio_entries, std::size(menu_color_radio_entries),
+	                                      0, G_CALLBACK(layout_color_menu_input_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_histogram_channel, G_N_ELEMENTS(menu_histogram_channel),
-					   0, G_CALLBACK(layout_menu_histogram_channel_cb), lw);
+	                                      menu_histogram_channel, std::size(menu_histogram_channel),
+	                                      0, G_CALLBACK(layout_menu_histogram_channel_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_histogram_mode, G_N_ELEMENTS(menu_histogram_mode),
-					   0, G_CALLBACK(layout_menu_histogram_mode_cb), lw);
+	                                      menu_histogram_mode, std::size(menu_histogram_mode),
+	                                      0, G_CALLBACK(layout_menu_histogram_mode_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_stereo_mode_entries, G_N_ELEMENTS(menu_stereo_mode_entries),
-					   0, G_CALLBACK(layout_menu_stereo_mode_cb), lw);
+	                                      menu_stereo_mode_entries, std::size(menu_stereo_mode_entries),
+	                                      0, G_CALLBACK(layout_menu_stereo_mode_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_draw_rectangle_aspect_ratios, G_N_ELEMENTS(menu_draw_rectangle_aspect_ratios),
-					   0, G_CALLBACK(layout_menu_draw_rectangle_aspect_ratio_cb), lw);
+	                                      menu_draw_rectangle_aspect_ratios, std::size(menu_draw_rectangle_aspect_ratios),
+	                                      0, G_CALLBACK(layout_menu_draw_rectangle_aspect_ratio_cb), lw);
 	gq_gtk_action_group_add_radio_actions(lw->action_group,
-					   menu_osd, G_N_ELEMENTS(menu_osd),
-					   0, G_CALLBACK(layout_menu_osd_cb), lw);
+	                                      menu_osd, std::size(menu_osd),
+	                                      0, G_CALLBACK(layout_menu_osd_cb), lw);
 
 
 	lw->ui_manager = gq_gtk_ui_manager_new();
@@ -3624,34 +3652,16 @@ void layout_util_sync(LayoutWindow *lw)
 	layout_util_sync_thumb(lw);
 }
 
-/**
- * @brief Checks if event key is mapped to Help
- * @param event
- * @returns
- *
- * Used to check if the user has re-mapped the Help key
- * in Preferences/Keyboard
- *
- * Note: help_key.accel_mods and event->state
- * differ in the higher bits
- */
+gboolean is_help_key(guint keyval, GdkModifierType state)
+{
+	return is_help_key_impl(keyval, state);
+}
+#if !HAVE_GTK4
 gboolean is_help_key(GdkEventKey *event)
 {
-	GtkAccelKey help_key;
-	gboolean ret = FALSE;
-	guint mask = GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK;
-
-	if (gtk_accel_map_lookup_entry("<Actions>/MenuActions/HelpContents", &help_key))
-		{
-		if (help_key.accel_key == event->keyval &&
-					(help_key.accel_mods & mask) == (event->state & mask))
-			{
-			ret = TRUE;
-			}
-		}
-
-	return ret;
+	return is_help_key_impl(event->keyval, (GdkModifierType)event->state);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------

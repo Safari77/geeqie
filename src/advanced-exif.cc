@@ -245,13 +245,25 @@ static void advanced_exif_add_column(GtkWidget *listview, const gchar *title, gi
 
 static void advanced_exif_window_get_geometry(ExifWin *ew)
 {
-	GdkWindow *window;
-
 	LayoutWindow *lw = get_current_layout();
 	if (!ew || !lw) return;
 
+#if GTK_CHECK_VERSION(4, 0, 0)
+	GdkSurface *surface;
+
+	surface = gtk_native_get_surface(GTK_NATIVE(ew->window));
+	if (!surface)
+		{
+		return;
+		}
+
+	lw->options.advanced_exif_window = window_get_position_geometry(surface);
+#else
+	GdkWindow *window;
+
 	window = gtk_widget_get_window(ew->window);
 	lw->options.advanced_exif_window = window_get_position_geometry(window);
+#endif
 }
 
 static void advanced_exif_close(ExifWin *ew)
@@ -290,13 +302,10 @@ static gint advanced_exif_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 }
 
 #if HAVE_GTK4
-static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
-{
-/* @FIXME GTK4 stub */
-	return TRUE;
-}
+static gboolean advanced_exif_mouseclick(GtkGestureClick *, gint, gdouble, gdouble, gpointer data)
 #else
 static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
+#endif
 {
 	auto ew = static_cast<ExifWin *>(data);
 	GtkTreePath *path;
@@ -329,26 +338,27 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 
 	return TRUE;
 }
-#endif
 
-static gboolean advanced_exif_keypress(GtkWidget *, GdkEventKey *event, gpointer data)
+static gboolean advanced_exif_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
 {
 	auto ew = static_cast<ExifWin *>(data);
 	gboolean stop_signal = FALSE;
 
-	if (event->state & GDK_CONTROL_MASK)
+	if (state & GDK_CONTROL_MASK)
 		{
-		switch (event->keyval)
+		switch (keyval)
 			{
-			case 'W': case 'w':
+			case GDK_KEY_w:
+			case GDK_KEY_W:
 				advanced_exif_close(ew);
 				stop_signal = TRUE;
 				break;
 			default:
 				break;
 			}
-		} // if (event->state & GDK_CONTROL...
-	if (!stop_signal && is_help_key(event))
+		}
+
+	if (!stop_signal && is_help_key(keyval, state))
 		{
 		help_window_show("GuideOtherWindowsExif.html");
 		stop_signal = TRUE;
@@ -388,21 +398,29 @@ static void exif_window_close_cb(GtkWidget *, gpointer data)
 GtkWidget *advanced_exif_new(LayoutWindow *lw)
 {
 	ExifWin *ew;
-	GdkGeometry geometry;
 	GtkListStore *store;
 	GtkTreeSortable *sortable;
 	GtkWidget *box;
 	GtkWidget *button_box;
 	GtkWidget *hbox;
+	GtkEventController *controller;
 
 	ew = g_new0(ExifWin, 1);
 
 	ew->window = window_new("view", nullptr, _("Metadata"));
 	DEBUG_NAME(ew->window);
 
+#if HAVE_GTK4
+    gtk_widget_set_size_request(GTK_WIDGET(ew->window), 900, 600);
+    gtk_window_set_default_size(GTK_WINDOW(ew->window), 900, 600);
+#else
+	GdkGeometry geometry;
+
 	geometry.min_width = 900;
 	geometry.min_height = 600;
+
 	gtk_window_set_geometry_hints(GTK_WINDOW(ew->window), nullptr, &geometry, GDK_HINT_MIN_SIZE);
+#endif
 
 	gtk_window_set_resizable(GTK_WINDOW(ew->window), TRUE);
 
@@ -474,11 +492,24 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	g_signal_connect(G_OBJECT(ew->listview), "drag_begin",
 			 G_CALLBACK(advanced_exif_dnd_begin), ew);
 
-	g_signal_connect(G_OBJECT(ew->window), "key_press_event",
-			 G_CALLBACK(advanced_exif_keypress), ew);
+#if HAVE_GTK4
+	controller = gtk_event_controller_key_new();
+	gtk_widget_add_controller(ew->window, controller);
+	g_object_unref(controller);
+#else
+	controller = gtk_event_controller_key_new(ew->window);
+#endif
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(advanced_exif_keypress), ew);
 
-	g_signal_connect(G_OBJECT(ew->listview), "button_release_event",
-			G_CALLBACK(advanced_exif_mouseclick), ew);
+#if HAVE_GTK4
+	GtkGesture *click = gtk_gesture_click_new();
+
+	gtk_widget_add_controller(ew->listview, GTK_EVENT_CONTROLLER(click));
+	g_signal_connect(click, "released", G_CALLBACK(advanced_exif_mouseclick), ew);
+	g_object_unref(click);
+#else
+	g_signal_connect(G_OBJECT(ew->listview), "button_release_event", G_CALLBACK(advanced_exif_mouseclick), ew);
+#endif
 
 	ew->scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(ew->scrolled), GTK_SHADOW_IN);
