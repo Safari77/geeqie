@@ -225,6 +225,7 @@ void widget_input_grab(GtkWidget *widget, GdkSeatCapabilities capabilities, gboo
 void widget_input_ungrab(GtkWidget *widget);
 
 gboolean get_pointer_position(GtkWidget *widget, GdkDevice *device, int *x, int *y, GdkModifierType *mask);
+void get_device_position(GdkDevice *device, int &x, int &y);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

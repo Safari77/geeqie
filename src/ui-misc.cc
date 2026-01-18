@@ -1563,4 +1563,33 @@ gboolean get_pointer_position(GtkWidget *widget, GdkDevice *device, int *x, int 
 #endif
 }
 
+void get_device_position(GdkDevice *device, int &x, int &y)
+{
+#if HAVE_GTK4
+	double dx = 0.0;
+	double dy = 0.0;
+	GdkSurface *surface = nullptr;
+
+	if (!device)
+		{
+		x = y = -1;
+		return;
+		}
+
+	gdk_device_get_position(device, &surface, &dx, &dy);
+
+	if (!surface)
+		{
+		/* Pointer not over any surface */
+		x = y = -1;
+		return;
+		}
+
+	x = (int)dx;
+	y = (int)dy;
+#else
+	gdk_device_get_position(device, nullptr, &x, &y);
+#endif
+}
+
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
