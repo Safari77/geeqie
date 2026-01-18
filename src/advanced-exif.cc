@@ -314,7 +314,6 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 	GtkTreeModel *store;
 	GList *cols;
 	gint col_num;
-	GtkClipboard *clipboard;
 
 	gtk_tree_view_get_cursor(GTK_TREE_VIEW(ew->listview), &path, &column);
 	if (path && column)
@@ -328,8 +327,17 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 		g_autofree gchar *value = nullptr;
 		gtk_tree_model_get(store, &iter, display_order[col_num], &value, -1);
 
+#if HAVE_GTK4
+		GdkDisplay *display = gdk_display_get_default();
+		GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
+
+		gdk_clipboard_set_text(clipboard, value);
+#else
+		GtkClipboard *clipboard;
+
 		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
 		gtk_clipboard_set_text(clipboard, value, -1);
+#endif
 
 		g_list_free(cols);
 

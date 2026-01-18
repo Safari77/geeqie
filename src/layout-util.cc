@@ -467,7 +467,26 @@ static void layout_menu_copy_image_cb(GtkAction *, gpointer data)
 	GdkPixbuf *pixbuf;
 	pixbuf = image_get_pixbuf(imd);
 	if (!pixbuf) return;
+
+#if HAVE_GTK4
+	GdkDisplay *display = gdk_display_get_default();
+	if (!display)
+		{
+		return;
+		}
+
+	GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+	if (!clipboard)
+		{
+		return;
+		}
+
+	GdkTexture *texture = gdk_texture_new_for_pixbuf(pixbuf);
+	gdk_clipboard_set_texture(clipboard, texture);
+	g_object_unref(texture);
+#else
 	gtk_clipboard_set_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), pixbuf);
+#endif
 }
 
 static void layout_menu_cut_path_cb(GtkAction *, gpointer data)

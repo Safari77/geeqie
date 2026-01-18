@@ -586,25 +586,27 @@ void bar_pane_exif_conf_dialog_cb(GtkWidget *, gpointer data)
 	bar_pane_exif_conf_dialog(widget);
 }
 
-#if HAVE_GTK4
-void bar_pane_exif_copy_entry_cb(GtkWidget *, gpointer data)
-{
-/* @FIXME GTK4 stub */
-}
-#else
 void bar_pane_exif_copy_entry_cb(GtkWidget *, gpointer data)
 {
 	auto widget = static_cast<GtkWidget *>(data);
-	GtkClipboard *clipboard;
 	const gchar *value;
 	ExifEntry *ee;
 
 	ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
 	value = gtk_label_get_text(GTK_LABEL(ee->value_widget));
+
+#if HAVE_GTK4
+	GdkDisplay *display = gdk_display_get_default();
+	GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+
+	gdk_clipboard_set_text(clipboard, value);
+#else
+	GtkClipboard *clipboard;
+
 	clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
 	gtk_clipboard_set_text(clipboard, value, -1);
-}
 #endif
+}
 
 void bar_pane_exif_toggle_show_all_cb(GtkWidget *, gpointer data)
 {
@@ -653,32 +655,33 @@ gboolean bar_pane_exif_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpoint
 	return FALSE;
 }
 
-#if HAVE_GTK4
-gboolean bar_pane_exif_copy_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
-{
-/* @FIXME GTK4 stub */
-	return FALSE;
-}
-#else
 gboolean bar_pane_exif_copy_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
 {
 	const gchar *value;
-	GtkClipboard *clipboard;
 	ExifEntry *ee;
 
 	if (bevent->button == GDK_BUTTON_PRIMARY)
 		{
 		ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
 		value = gtk_label_get_text(GTK_LABEL(ee->value_widget));
+
+#if HAVE_GTK4
+		GdkDisplay *display = gdk_display_get_default();
+		GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
+
+		gdk_clipboard_set_text(clipboard, value);
+#else
+		GtkClipboard *clipboard;
+
 		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
 		gtk_clipboard_set_text(clipboard, value, -1);
+#endif
 
 		return TRUE;
 		}
 
 	return FALSE;
 }
-#endif
 
 void bar_pane_exif_entry_write_config(GtkWidget *entry, GString *outstr, gint indent)
 {
