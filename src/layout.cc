@@ -1494,15 +1494,10 @@ gboolean layout_sort_get(LayoutWindow *lw, FileData::FileList::SortSettings &set
 
 static gboolean layout_geometry_get(LayoutWindow *lw, GdkRectangle &rect)
 {
-	GdkWindow *window;
 	if (!layout_valid(&lw)) return FALSE;
 
-	window = gtk_widget_get_window(lw->window);
-	if (window)
-		{
-		rect = window_get_root_origin_geometry(window);
-		return TRUE;
-		}
+	rect = widget_get_root_origin_geometry(lw->window);
+	return TRUE;
 
 	return FALSE;
 }
@@ -1632,7 +1627,6 @@ static void layout_location_compute(LayoutLocation l1, LayoutLocation l2,
 
 static gboolean layout_geometry_get_tools(LayoutWindow *lw, GdkRectangle &rect, gint &divider_pos)
 {
-	GdkWindow *window;
 	GtkAllocation allocation;
 	if (!layout_valid(&lw)) return FALSE;
 
@@ -1645,8 +1639,7 @@ static gboolean layout_geometry_get_tools(LayoutWindow *lw, GdkRectangle &rect, 
 		return FALSE;
 		}
 
-	window = gtk_widget_get_window(lw->tools);
-	rect = window_get_root_origin_geometry(window);
+	rect = widget_get_root_origin_geometry(lw->tools);
 	gtk_widget_get_allocation(gtk_paned_get_child1(GTK_PANED(lw->tools_pane)), &allocation);
 
 	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(lw->tools_pane)) == GTK_ORIENTATION_VERTICAL)
@@ -1663,8 +1656,6 @@ static gboolean layout_geometry_get_tools(LayoutWindow *lw, GdkRectangle &rect, 
 
 static gboolean layout_geometry_get_log_window(LayoutWindow *lw, GdkRectangle &log_window)
 {
-	GdkWindow *window;
-
 	if (!layout_valid(&lw)) return FALSE;
 
 	if (!lw->log_window)
@@ -1672,8 +1663,7 @@ static gboolean layout_geometry_get_log_window(LayoutWindow *lw, GdkRectangle &l
 		return FALSE;
 		}
 
-	window = gtk_widget_get_window(lw->log_window);
-	log_window = window_get_root_origin_geometry(window);
+	log_window = widget_get_root_origin_geometry(lw->log_window);
 
 	return TRUE;
 }

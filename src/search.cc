@@ -3011,8 +3011,7 @@ static void search_window_get_geometry(SearchData *sd)
 	LayoutWindow *lw = get_current_layout();
 	if (!sd || !lw) return;
 
-	GdkWindow *window = gtk_widget_get_window(sd->ui.window);
-	lw->options.search_window = window_get_position_geometry(window);
+	lw->options.search_window = widget_get_position_geometry(sd->ui.window);
 }
 
 static void search_window_close(SearchData *sd)

@@ -720,12 +720,11 @@ static gboolean date_selection_popup_release_cb(GtkWidget *, GdkEventButton *, g
 static gboolean date_selection_popup_press_cb(GtkWidget *, GdkEventButton *event, gpointer data)
 {
 	auto ds = static_cast<DateSelection *>(data);
-	GdkWindow *window = gtk_widget_get_window(ds->window);
 
 	auto xr = static_cast<gint>(event->x_root);
 	auto yr = static_cast<gint>(event->y_root);
 
-	if (!window_received_event(window, {xr, yr}))
+	if (!widget_received_event(ds->window, {xr, yr}))
 		{
 		g_signal_connect(G_OBJECT(ds->window), "button_release_event",
 				 G_CALLBACK(date_selection_popup_release_cb), ds);
@@ -1347,23 +1346,72 @@ GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gcha
 	return gdk_pixbuf_copy(icon);
 }
 
-gboolean window_get_pointer_position(GdkWindow *window, GqPoint &pos)
+gboolean widget_get_pointer_position(GtkWidget *widget, GqPoint &pos)
 {
+#if HAVE_GTK4
+
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget));
+
+	if (!surface)
+		{
+		return rect;
+		}
+
+	if (!surface)
+		return FALSE;
+
+	GdkDisplay *display = gdk_surface_get_display(surface);
+	if (!display)
+		return FALSE;
+
+	GdkSeat *seat = gdk_display_get_default_seat(display);
+	if (!seat)
+		return FALSE;
+
+	GdkDevice *device = gdk_seat_get_pointer(seat);
+	if (!device)
+		return FALSE;
+
+	GdkSurface *pointer_surface = nullptr;
+	double x = 0.0, y = 0.0;
+
+	gdk_device_get_position(device, &pointer_surface, &x, &y);
+
+	if (pointer_surface != surface)
+		return FALSE;
+
+	pos.x = (int)x;
+	pos.y = (int)y;
+
+	int width  = gdk_surface_get_width(surface);
+	int height = gdk_surface_get_height(surface);
+
+	return 0 <= pos.x && pos.x < width && 0 <= pos.y && pos.y < height;
+#else
+	GdkWindow *window = gtk_widget_get_window(widget);
+
+	if (!window)
+		{
+		return FALSE;
+		}
+
 	GdkSeat *seat = gdk_display_get_default_seat(gdk_window_get_display(window));
 	GdkDevice *device = gdk_seat_get_pointer(seat);
 
-	gdk_window_get_device_position(window, device, &pos.x, &pos.y, nullptr);
+	get_pointer_position(widget, device, &pos.x, &pos.y, nullptr);
 	gint width = gdk_window_get_width(window);
 	gint height = gdk_window_get_height(window);
 
-	return 0 <= pos.x && pos.x < width &&
-	       0 <= pos.y && pos.y < height;
+	return 0 <= pos.x && pos.x < width && 0 <= pos.y && pos.y < height;
+#endif
 }
 
-#if HAVE_GTK4
-GdkRectangle window_get_position_geometry(GdkSurface *surface)
+GdkRectangle widget_get_position_geometry(GtkWidget *widget)
 {
-	GdkRectangle rect = {0};
+	GdkRectangle rect = {};
+
+#if HAVE_GTK4
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget));
 
 	if (!surface)
 		{
@@ -1377,9 +1425,7 @@ GdkRectangle window_get_position_geometry(GdkSurface *surface)
 	return rect;
 }
 #else
-GdkRectangle window_get_position_geometry(GdkWindow *window)
-{
-	GdkRectangle rect;
+	GdkWindow *window = gtk_widget_get_window(widget);
 
 	gdk_window_get_position(window, &rect.x, &rect.y);
 	rect.width = gdk_window_get_width(window);
@@ -1389,29 +1435,67 @@ GdkRectangle window_get_position_geometry(GdkWindow *window)
 }
 #endif
 
-GdkRectangle window_get_root_origin_geometry(GdkWindow *window)
+GdkRectangle widget_get_root_origin_geometry(GtkWidget *widget)
 {
-	GdkRectangle rect;
+	GdkRectangle rect = {};
 
-	gdk_window_get_root_origin(window, &rect.x, &rect.y);
-	rect.width = gdk_window_get_width(window);
-	rect.height = gdk_window_get_height(window);
+#if HAVE_GTK4
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget));
+
+	if (!surface)
+		{
+		return rect;
+		}
+
+	rect.width  = gdk_surface_get_width(surface);
+	rect.height = gdk_surface_get_height(surface);
 
 	return rect;
+#else
+	GdkWindow *win = gtk_widget_get_window(widget);
+
+	gdk_window_get_root_origin(win, &rect.x, &rect.y);
+	rect.width = gdk_window_get_width(win);
+	rect.height = gdk_window_get_height(win);
+
+	return rect;
+#endif
 }
 
-gboolean window_received_event(GdkWindow *window, GqPoint event)
+gboolean widget_received_event(GtkWidget *widget, GqPoint event)
 {
+#if HAVE_GTK4
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget));
+
+	if (!surface)
+		{
+		return FALSE;
+		}
+
+	int width  = gdk_surface_get_width(surface);
+	int height = gdk_surface_get_height(surface);
+
+	return 0 <= event.x && event.x <= width && 0 <= event.y && event.y <= height;
+
+#else
+	GdkWindow *window = gtk_widget_get_window(widget);
+
+	if (!window)
+		{
+		return FALSE;
+		}
+
 	gint x;
 	gint y;
 	gdk_window_get_origin(window, &x, &y);
 
-	gint widht = gdk_window_get_width(window);
+	gint width  = gdk_window_get_width(window);
 	gint height = gdk_window_get_height(window);
 
-	return x <= event.x && event.x <= x + widht &&
+	return x <= event.x && event.x <= x + width &&
 	       y <= event.y && event.y <= y + height;
 }
+#endif
 
 void widget_remove_from_parent(GtkWidget *widget)
 {
@@ -1452,6 +1536,31 @@ void widget_input_ungrab(GtkWidget *widget)
 
 	gdk_seat_ungrab(seat);
 	gtk_grab_remove(widget);
+}
+
+gboolean get_pointer_position(GtkWidget *widget, GdkDevice *device, int *x, int *y, GdkModifierType *mask)
+{
+#if HAVE_GTK4
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget));
+	GdkSurface *ps = NULL;
+	double dx;
+	double dy;
+
+	gdk_device_get_position(device, &ps, &dx, &dy);
+	if (ps != surface)
+		{
+		return FALSE;
+		}
+
+	*x = (int)dx;
+	*y = (int)dy;
+
+	return TRUE;
+#else
+	gdk_window_get_device_position(gtk_widget_get_window(widget), device, x, y, mask);
+
+	return TRUE;
+#endif
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

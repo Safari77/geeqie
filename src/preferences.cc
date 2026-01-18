@@ -589,13 +589,10 @@ static gboolean config_window_delete(GtkWidget *, GdkEventAny *, gpointer)
 static void config_window_ok_cb(GtkWidget *widget, gpointer data)
 {
 	auto notebook = static_cast<GtkNotebook *>(data);
-	GdkWindow *window;
 
 	LayoutWindow *lw = layout_window_first();
 
-	window = gtk_widget_get_window(widget);
-
-	lw->options.preferences_window.rect = window_get_root_origin_geometry(window);
+	lw->options.preferences_window.rect = widget_get_root_origin_geometry(widget);
 	lw->options.preferences_window.page_number = gtk_notebook_get_current_page(notebook);
 
 	config_window_apply();

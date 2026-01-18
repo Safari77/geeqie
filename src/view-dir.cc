@@ -905,7 +905,7 @@ static void vd_dnd_drop_receive(GtkWidget *widget, GdkDragContext *context,
 			GdkModifierType mask;
 			DnDAction action = options->dnd_default_action;
 
-			gdk_window_get_device_position(gtk_widget_get_window(widget), gdk_drag_context_get_device(context), nullptr, nullptr, &mask);
+			get_pointer_position(widget, gdk_drag_context_get_device(context), nullptr, nullptr, &mask);
 			if (mask & GDK_CONTROL_MASK)
 				{
 				action = DND_ACTION_COPY;
@@ -973,10 +973,8 @@ static gboolean vd_auto_scroll_idle_cb(gpointer data)
 
 	if (vd->drop_fd)
 		{
-		GdkWindow *window = gtk_widget_get_window(vd->view);
-
 		GqPoint pos;
-		if (window_get_pointer_position(window, pos))
+		if (widget_get_pointer_position(vd->view, pos))
 			{
 			vd_dnd_drop_update(vd, pos.x, pos.y);
 			}

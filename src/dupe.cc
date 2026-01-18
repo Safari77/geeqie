@@ -4103,13 +4103,10 @@ void dupe_window_clear(DupeWindow *dw)
 
 static void dupe_window_get_geometry(DupeWindow *dw)
 {
-	GdkWindow *window;
-
 	LayoutWindow *lw = get_current_layout();
 	if (!dw || !lw) return;
 
-	window = gtk_widget_get_window(dw->window);
-	lw->options.dupe_window.rect = window_get_position_geometry(window);
+	lw->options.dupe_window.rect = widget_get_position_geometry(dw->window);
 	lw->options.dupe_window.vdivider_pos = gtk_paned_get_position(GTK_PANED(dw->paned));
 }
 

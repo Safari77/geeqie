@@ -586,8 +586,7 @@ static void tip_show(CollectTable *ct)
 
 	seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(ct->listview)));
 	device = gdk_seat_get_pointer(seat);
-	gdk_window_get_device_position(gtk_widget_get_window(ct->listview),
-								device, &x, &y, nullptr);
+	get_pointer_position(ct->listview, device, &x, &y, nullptr);
 
 	ct->tip_info = collection_table_find_data_by_coord(ct, x, y, nullptr);
 	if (!ct->tip_info) return;
@@ -1380,8 +1379,7 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 		{
 		seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(ct->listview)));
 		device = gdk_seat_get_pointer(seat);
-		gdk_window_get_device_position(gtk_widget_get_window(ct->listview),
-									device, &x, &y, nullptr);
+		get_pointer_position(ct->listview, device, &x, &y, nullptr);
 		}
 
 	if (source)

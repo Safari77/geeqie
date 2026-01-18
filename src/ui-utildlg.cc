@@ -111,7 +111,7 @@ void generic_dialog_close(GenericDialog *gd)
 	g_autofree gchar *full_title = g_strdup(gtk_window_get_title(GTK_WINDOW(gd->dialog)));
 	g_autofree gchar *actual_title = strndup(full_title, g_strrstr(full_title, ident_string) - full_title);
 
-	GdkRectangle rect = window_get_root_origin_geometry(gtk_widget_get_window(gd->dialog));
+	GdkRectangle rect = widget_get_root_origin_geometry(gd->dialog);
 
 	generic_dialog_save_window(actual_title, gtk_window_get_role(GTK_WINDOW(gd->dialog)), rect);
 
