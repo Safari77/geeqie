@@ -66,9 +66,8 @@ struct PrintWindow
 
 	gint job_page;
 	GtkTextBuffer *page_text;
-	gchar *template_string;
 	GtkWidget *parent;
-	ImageLoader	*job_loader;
+	ImageLoader *job_loader;
 
 	GList *print_pixbuf_queue;
 	gboolean job_render_finished;
@@ -78,15 +77,9 @@ struct PrintWindow
 
 constexpr gint PRE_FORMATTED_COLUMNS = 4;
 
-gint print_layout_page_count(PrintWindow *pw)
+gint print_layout_page_count(const PrintWindow *pw)
 {
-	gint images;
-
-	images = g_list_length(pw->source_selection);
-
-	if (images < 1 ) return 0;
-
-	return images;
+	return g_list_length(pw->source_selection);
 }
 
 gboolean print_job_render_image(PrintWindow *pw);
@@ -100,8 +93,7 @@ void print_job_render_image_loader_done(ImageLoader *il, gpointer data)
 
 	pw->print_pixbuf_queue = g_list_append(pw->print_pixbuf_queue, g_object_ref(pixbuf));
 
-	image_loader_free(pw->job_loader);
-	pw->job_loader = nullptr;
+	g_clear_pointer(&pw->job_loader, image_loader_free);
 
 	pw->job_page++;
 
@@ -118,30 +110,25 @@ gboolean print_job_render_image(PrintWindow *pw)
 	fd = static_cast<FileData *>(g_list_nth_data(pw->source_selection, pw->job_page));
 	if (!fd) return FALSE;
 
-	image_loader_free(pw->job_loader);
-	pw->job_loader = nullptr;
-
+	g_clear_pointer(&pw->job_loader, image_loader_free);
 	pw->job_loader = image_loader_new(fd);
 	g_signal_connect(G_OBJECT(pw->job_loader), "done",
 						(GCallback)print_job_render_image_loader_done, pw);
 
 	if (!image_loader_start(pw->job_loader))
 		{
-		image_loader_free(pw->job_loader);
-		pw->job_loader= nullptr;
+		g_clear_pointer(&pw->job_loader, image_loader_free);
 		}
 
 	return TRUE;
 }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
-void font_activated_cb(GtkFontChooser *widget, gchar *fontname, gpointer option)
+
+void font_activated_cb(GtkFontChooser *widget, gchar *fontname, [[maybe_unused]] gpointer option)
 {
 	option = fontname;
 
 	gq_gtk_widget_destroy(GTK_WIDGET(widget));
 }
-#pragma GCC diagnostic pop
 
 void font_response_cb(GtkDialog *dialog, int response_id, gpointer option)
 {
@@ -373,7 +360,7 @@ gboolean paginate_cb(GtkPrintOperation *, GtkPrintContext *, gpointer data)
 	return pw->job_render_finished;
 }
 
-gchar *form_image_text(const gchar *template_string, FileData *fd, PrintWindow *pw, gint page_nr, gint total)
+gchar *form_image_text(const gchar *template_string, FileData *fd, PrintWindow *pw, gint page_nr)
 {
 	if (!fd) return nullptr;
 
@@ -388,7 +375,7 @@ gchar *form_image_text(const gchar *template_string, FileData *fd, PrintWindow *
 		}
 
 	osd_template_insert(vars, "number", std::to_string(page_nr + 1).c_str());
-	osd_template_insert(vars, "total", std::to_string(total).c_str());
+	osd_template_insert(vars, "total", std::to_string(print_layout_page_count(pw)).c_str());
 	osd_template_insert(vars, "name", fd->name);
 	osd_template_insert(vars, "date", text_from_time(fd->date));
 
@@ -501,8 +488,7 @@ void draw_page(GtkPrintOperation *, GtkPrintContext *context, gint page_nr, gpoi
 
 	if (options->printer.show_image_text)
 		{
-		gint total = g_list_length(pw->source_selection);
-		g_autofree gchar *image_text = form_image_text(options->printer.template_string, fd, pw, page_nr, total);
+		g_autofree gchar *image_text = form_image_text(options->printer.template_string, fd, pw, page_nr);
 
 		layout_image = create_layout(image_text, options->printer.image_font, image_text_width, pango_image_height);
 		}
@@ -602,11 +588,9 @@ void draw_page(GtkPrintOperation *, GtkPrintContext *context, gint page_nr, gpoi
 
 void begin_print(GtkPrintOperation *operation, GtkPrintContext *, gpointer user_data)
 {
-	auto pw = static_cast<PrintWindow *>(user_data);
-	gint page_count;
+	auto *pw = static_cast<PrintWindow *>(user_data);
 
-	page_count = print_layout_page_count(pw);
-	gtk_print_operation_set_n_pages (operation, page_count);
+	gtk_print_operation_set_n_pages(operation, print_layout_page_count(pw));
 
 	print_job_render_image(pw);
 }
@@ -619,55 +603,99 @@ GObject *option_tab_cb(GtkPrintOperation *, gpointer user_data)
 	return G_OBJECT(pw->vbox);
 }
 
-void end_print_cb(GtkPrintOperation *operation, GtkPrintContext *, gpointer data)
+GtkPrintSettings *load_print_settings()
 {
-	auto pw = static_cast<PrintWindow *>(data);
-	GList *work;
-	GdkPixbuf *pixbuf;
-	GtkPrintSettings *print_settings;
-	GtkPageSetup *page_setup;
-	GError *error = nullptr;
+	GtkPrintSettings *settings = gtk_print_settings_new();
 
-	print_settings = gtk_print_operation_get_print_settings(operation);
+	const gchar *dir = g_get_user_special_dir(G_USER_DIRECTORY_DOCUMENTS);
+	if (dir == nullptr)
+		{
+		dir = g_get_home_dir();
+		}
+	g_autofree gchar *uri = g_build_filename("file:/", dir, "geeqie-file.pdf", NULL);
+	gtk_print_settings_set(settings, GTK_PRINT_SETTINGS_OUTPUT_URI, uri);
+
+	g_autofree gchar *print_settings_path = g_build_filename(get_rc_dir(), PRINT_SETTINGS, NULL);
+	g_autoptr(GError) error = nullptr;
+	gtk_print_settings_load_file(settings, print_settings_path, &error);
+	if (error)
+		{
+		log_printf("Error: Printer settings load failed:\n%s", error->message);
+		}
+
+	return settings;
+}
+
+void save_print_settings(GtkPrintOperation *operation)
+{
+	g_autoptr(GtkPrintSettings) print_settings = gtk_print_operation_get_print_settings(operation);
 	g_autofree gchar *print_settings_path = g_build_filename(get_rc_dir(), PRINT_SETTINGS, NULL);
 
+	g_autoptr(GError) error = nullptr;
 	gtk_print_settings_to_file(print_settings, print_settings_path, &error);
 	if (error)
 		{
 		log_printf("Error: Print settings save failed:\n%s", error->message);
-		g_error_free(error);
-		error = nullptr;
 		}
-	g_object_unref(print_settings);
+}
 
-	page_setup = gtk_print_operation_get_default_page_setup(operation);
+GtkPageSetup *load_page_setup()
+{
+	GtkPageSetup *page_setup = gtk_page_setup_new();
+
+	g_autofree gchar *page_setup_path = g_build_filename(get_rc_dir(), PAGE_SETUP, NULL);
+	g_autoptr(GError) error = nullptr;
+	gtk_page_setup_load_file(page_setup, page_setup_path, &error);
+	if (error)
+		{
+		log_printf("Error: Print page setup load failed:\n%s", error->message);
+		}
+
+	return page_setup;
+}
+
+void save_page_setup(GtkPrintOperation *operation)
+{
+	g_autoptr(GtkPageSetup) page_setup = gtk_print_operation_get_default_page_setup(operation);
 	g_autofree gchar *page_setup_path = g_build_filename(get_rc_dir(), PAGE_SETUP, NULL);
 
+	g_autoptr(GError) error = nullptr;
 	gtk_page_setup_to_file(page_setup, page_setup_path, &error);
 	if (error)
 		{
 		log_printf("Error: Print page setup save failed:\n%s", error->message);
-		g_error_free(error);
-		error = nullptr;
 		}
-	g_object_unref(page_setup);
+}
 
-	g_free(options->printer.page_text);
-	options->printer.page_text = print_get_page_text(pw);
+void print_window_free(PrintWindow *pw)
+{
+	if (!pw) return;
 
-	work = pw->print_pixbuf_queue;
-	while (work)
+	for (GList *work = pw->print_pixbuf_queue; work; work = work->next)
 		{
-		pixbuf = static_cast<GdkPixbuf *>(work->data);
+		auto *pixbuf = static_cast<GdkPixbuf *>(work->data);
 		if (pixbuf)
 			{
 			g_object_unref(pixbuf);
 			}
-		work = work->next;
 		}
+
 	g_list_free(pw->print_pixbuf_queue);
 	g_object_unref(pw->page_text);
 	g_free(pw);
+}
+
+void end_print_cb(GtkPrintOperation *operation, GtkPrintContext *, gpointer data)
+{
+	save_print_settings(operation);
+	save_page_setup(operation);
+
+	auto *pw = static_cast<PrintWindow *>(data);
+
+	g_free(options->printer.page_text);
+	options->printer.page_text = print_get_page_text(pw);
+
+	print_window_free(pw);
 }
 
 void print_response_cb(GtkDialog *dialog, gint, gpointer)
@@ -682,25 +710,15 @@ void print_response_cb(GtkDialog *dialog, gint, gpointer)
  */
 void print_window_new(GList *selection, GtkWidget *parent)
 {
-	GtkWidget *vbox;
-	GtkPrintOperation *operation;
-	GtkPageSetup *page_setup;
-	const gchar *dir;
-	GError *error = nullptr;
-	GtkPrintSettings *settings;
-
-	auto pw = g_new0(PrintWindow, 1);
+	auto *pw = g_new0(PrintWindow, 1);
 
 	pw->source_selection = file_data_process_groups_in_selection(selection, FALSE, nullptr);
 
-	if (print_layout_page_count(pw) == 0)
-		{
-		return;
-		}
+	if (print_layout_page_count(pw) == 0) return;
 
 	pw->parent = parent;
 
-	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gtk_container_set_border_width(GTK_CONTAINER(vbox), PREF_PAD_BORDER);
 	gtk_widget_show(vbox);
 
@@ -711,42 +729,18 @@ void print_window_new(GList *selection, GtkWidget *parent)
 	pw->job_render_finished = FALSE;
 	pw->job_page = 0;
 
-	operation = gtk_print_operation_new();
-	settings = gtk_print_settings_new();
+	GtkPrintOperation *operation = gtk_print_operation_new();
 
 	gtk_print_operation_set_custom_tab_label(operation, _("Options"));
 	gtk_print_operation_set_use_full_page(operation, TRUE);
 	gtk_print_operation_set_unit(operation, GTK_UNIT_POINTS);
 	gtk_print_operation_set_embed_page_setup(operation, TRUE);
 	gtk_print_operation_set_allow_async (operation, TRUE);
-	dir = g_get_user_special_dir(G_USER_DIRECTORY_DOCUMENTS);
-	if (dir == nullptr)
-		{
-		dir = g_get_home_dir();
-		}
 
-	g_autofree gchar *uri = g_build_filename("file:/", dir, "geeqie-file.pdf", NULL);
-	gtk_print_settings_set(settings, GTK_PRINT_SETTINGS_OUTPUT_URI, uri);
-
-	g_autofree gchar *print_settings_path = g_build_filename(get_rc_dir(), PRINT_SETTINGS, NULL);
-	gtk_print_settings_load_file(settings, print_settings_path, &error);
-	if (error)
-		{
-		log_printf("Error: Printer settings load failed:\n%s", error->message);
-		g_error_free(error);
-		error = nullptr;
-		}
+	g_autoptr(GtkPrintSettings) settings = load_print_settings();
 	gtk_print_operation_set_print_settings(operation, settings);
 
-	page_setup = gtk_page_setup_new();
-	g_autofree gchar *page_setup_path = g_build_filename(get_rc_dir(), PAGE_SETUP, NULL);
-	gtk_page_setup_load_file(page_setup, page_setup_path, &error);
-	if (error)
-		{
-		log_printf("Error: Print page setup load failed:\n%s", error->message);
-		g_error_free(error);
-		error = nullptr;
-		}
+	g_autoptr(GtkPageSetup) page_setup = load_page_setup();
 	gtk_print_operation_set_default_page_setup(operation, page_setup);
 
 	g_signal_connect (G_OBJECT (operation), "begin-print",
@@ -762,6 +756,7 @@ void print_window_new(GList *selection, GtkWidget *parent)
 
 	gtk_print_operation_set_n_pages(operation, print_layout_page_count(pw));
 
+	g_autoptr(GError) error = nullptr;
 	gtk_print_operation_run(operation, GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG,
 												GTK_WINDOW (parent), &error);
 
@@ -774,14 +769,10 @@ void print_window_new(GList *selection, GtkWidget *parent)
 								GTK_MESSAGE_ERROR,
 								GTK_BUTTONS_CLOSE,
 								"%s", error->message);
-		g_error_free (error);
 
 		g_signal_connect(dialog, "response", G_CALLBACK(print_response_cb), NULL);
 
 		gtk_widget_show (dialog);
 		}
-
-	g_object_unref(page_setup);
-	g_object_unref(settings);
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

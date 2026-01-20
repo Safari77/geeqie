@@ -41,6 +41,7 @@
 #include "options.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
+#include "ui-misc.h"
 #include "ui-tree-edit.h"
 #include "utilops.h"
 #include "view-file.h"
@@ -320,10 +321,14 @@ static void tip_show(ViewFile *vf)
 
 	if (VFICON(vf)->tip_window) return;
 
+#if HAVE_GTK4
+	seat = gdk_display_get_default_seat(gtk_widget_get_display(GTK_WIDGET(vf->listview)));
+#else
 	seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_tree_view_get_bin_window(GTK_TREE_VIEW(vf->listview))));
+#endif
+
 	device = gdk_seat_get_pointer(seat);
-	gdk_window_get_device_position(gtk_tree_view_get_bin_window(GTK_TREE_VIEW(vf->listview)),
-						device, &x, &y, nullptr);
+	get_pointer_position(vf->listview, device, &x, &y, nullptr);
 
 	VFICON(vf)->tip_fd = vficon_find_data_by_coord(vf, x, y, nullptr);
 	if (!VFICON(vf)->tip_fd) return;
@@ -342,7 +347,7 @@ static void tip_show(ViewFile *vf)
 	display = gdk_display_get_default();
 	seat = gdk_display_get_default_seat(display);
 	device = gdk_seat_get_pointer(seat);
-	gdk_device_get_position(device, nullptr, &x, &y);
+	get_device_position(device, x, y);
 
 	if (!gtk_widget_get_realized(VFICON(vf)->tip_window)) gtk_widget_realize(VFICON(vf)->tip_window);
 	gq_gtk_window_move(GTK_WINDOW(VFICON(vf)->tip_window), x + 16, y + 16);
@@ -412,7 +417,7 @@ static void tip_update(ViewFile *vf, FileData *fd)
 		gint x;
 		gint y;
 
-		gdk_device_get_position(device, nullptr, &x, &y);
+		get_device_position(device, x, y);
 
 		gq_gtk_window_move(GTK_WINDOW(VFICON(vf)->tip_window), x + 16, y + 16);
 

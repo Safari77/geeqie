@@ -233,6 +233,12 @@ GdkPixbuf *pixbuf_inline(const gchar *key)
 	return icon_pixbuf;
 }
 
+#if HAVE_GTK4
+static void register_stock_icon(const gchar *key, GdkPixbuf *pixbuf)
+{
+/* @FIXME GTK4 stub */
+}
+#else
 static void register_stock_icon(const gchar *key, GdkPixbuf *pixbuf)
 {
 	static GtkIconFactory *icon_factory = []()
@@ -242,10 +248,10 @@ static void register_stock_icon(const gchar *key, GdkPixbuf *pixbuf)
 		return icon_factory;
 	}();
 
-	GtkIconSet *icon_set = gq_gtk_icon_set_new_from_pixbuf(pixbuf);
+	GtkIconSet *icon_set = gtk_icon_set_new_from_pixbuf(pixbuf);
 	gq_gtk_icon_factory_add(icon_factory, key, icon_set);
 }
-
+#endif
 
 void pixbuf_inline_register_stock_icons()
 {

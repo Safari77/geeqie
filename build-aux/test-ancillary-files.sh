@@ -36,7 +36,7 @@ do
 		fi
 	fi
 done << EOF
-$(find "./plugins" "./build-aux" "./packaging" "./snap/local" "./tools" -type f -not -name downsize -executable)
+$(find "./data/plugins" "./build-aux" "./packaging" "./snap/local" "./tools" -type f -not -name downsize -executable)
 EOF
 
 # Script files must have the file extension .sh  or
@@ -60,7 +60,7 @@ do
 		fi
 	fi
 done << EOF
-$(find "./plugins" "./build-aux" "./packaging" "./tools" "./snap/local" -type f -executable)
+$(find "./data/plugins" "./build-aux" "./packaging" "./tools" "./snap/local" -type f -executable)
 EOF
 
 # Check if all options are in the disabled checks

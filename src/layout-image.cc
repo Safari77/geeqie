@@ -587,23 +587,38 @@ static void li_pop_menu_cut_path_cb(GtkWidget *, gpointer data)
 	file_util_copy_path_to_clipboard(layout_image_get_fd(lw), FALSE, ClipboardAction::CUT);
 }
 
-#if HAVE_GTK4
-static void li_pop_menu_copy_image_cb(GtkWidget *, gpointer data)
-{
-/* @FIXME GTK4 stub */
-}
-#else
-static void li_pop_menu_copy_image_cb(GtkWidget *, gpointer data)
+static void li_pop_menu_copy_image_cb(GtkWidget *widget, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 	ImageWindow *imd = lw->image;
 
-	GdkPixbuf *pixbuf;
-	pixbuf = image_get_pixbuf(imd);
-	if (!pixbuf) return;
-	gtk_clipboard_set_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), pixbuf);
-}
+	GdkPixbuf *pixbuf = image_get_pixbuf(imd);
+	if (!pixbuf)
+		{
+		return;
+		}
+
+#if HAVE_GTK4
+	GdkDisplay *display = gtk_widget_get_display(widget);
+	if (!display)
+		{
+		return;
+		}
+
+	GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+	if (!clipboard)
+		{
+		return;
+		}
+
+	GdkTexture *texture = gdk_texture_new_for_pixbuf(pixbuf);
+
+	gdk_clipboard_set_texture(clipboard, texture);
+	g_object_unref(texture);
+#else
+	gtk_clipboard_set_image( gtk_widget_get_clipboard(widget, GDK_SELECTION_CLIPBOARD), pixbuf);
 #endif
+}
 
 static void li_pop_menu_move_cb(GtkWidget *widget, gpointer data)
 {

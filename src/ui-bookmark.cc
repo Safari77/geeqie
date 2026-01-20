@@ -459,7 +459,6 @@ static void bookmark_drag_set_data(GtkWidget *button,
 static void bookmark_drag_begin(GtkWidget *button, GdkDragContext *context, gpointer)
 {
 	GdkPixbuf *pixbuf;
-	GdkModifierType mask;
 	gint x;
 	gint y;
 	GtkAllocation allocation;
@@ -473,7 +472,7 @@ static void bookmark_drag_begin(GtkWidget *button, GdkDragContext *context, gpoi
 					    allocation.width, allocation.height);
 	seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(button)));
 	device = gdk_seat_get_pointer(seat);
-	gdk_window_get_device_position(gtk_widget_get_window(button), device, &x, &y, &mask);
+	get_pointer_position(button, device, &x, &y, nullptr);
 
 	gtk_drag_set_icon_pixbuf(context, pixbuf,
 				 x - allocation.x, y - allocation.y);

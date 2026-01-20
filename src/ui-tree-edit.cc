@@ -96,12 +96,11 @@ static gboolean tree_edit_click_end_cb(GtkWidget *, GdkEventButton *, gpointer d
 static gboolean tree_edit_click_cb(GtkWidget *, GdkEventButton *event, gpointer data)
 {
 	auto ted = static_cast<TreeEditData *>(data);
-	GdkWindow *window = gtk_widget_get_window(ted->window);
 
 	auto xr = static_cast<gint>(event->x_root);
 	auto yr = static_cast<gint>(event->y_root);
 
-	if (!window_received_event(window, {xr, yr}))
+	if (!widget_received_event(ted->window, {xr, yr}))
 		{
 		/* gobble the release event, so it does not propgate to an underlying widget */
 		g_signal_connect(G_OBJECT(ted->window), "button_release_event",
@@ -409,7 +408,7 @@ static gboolean widget_auto_scroll_cb(gpointer data)
 	GdkWindow *window = gtk_widget_get_window(sd->widget);
 
 	GqPoint pos;
-	if (!window_get_pointer_position(window, pos))
+	if (!widget_get_pointer_position(sd->widget, pos))
 		{
 		sd->timer_id = 0;
 		widget_auto_scroll_stop(sd->widget);

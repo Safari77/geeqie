@@ -39,7 +39,7 @@
 	#define gq_gtk_frame_set_shadow_type(frame, type) ;
 	#define gq_gtk_scrolled_window_new(hadjustment, vadjustment) gtk_scrolled_window_new()
 	#define gq_gtk_scrolled_window_set_shadow_type(scrolled_window, type) gtk_scrolled_window_set_has_frame(scrolled_window, TRUE)
-	#define gq_gtk_widget_destroy(widget) gtk_window_destroy(widget)
+	#define gq_gtk_widget_destroy(widget) gtk_window_destroy(GTK_WINDOW(widget))
 	#define gq_gtk_widget_queue_draw_area(widget, x, y, width, height) gtk_widget_queue_draw(widget);
 	#define gq_gtk_widget_show_all(widget) ;
 	#define gq_gtk_window_move(window, x, y) ;
@@ -64,6 +64,7 @@
 #endif
 
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
+GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size);
 
 #endif /* COMPAT_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

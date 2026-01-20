@@ -1018,13 +1018,11 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 static void collection_window_get_geometry(CollectWindow *cw)
 {
 	CollectionData *cd;
-	GdkWindow *window;
 
 	if (!cw) return;
 
 	cd = cw->cd;
-	window = gtk_widget_get_window(cw->window);
-	cd->window = window_get_position_geometry(window);
+	cd->window = widget_get_position_geometry(cw->window);
 	cd->window_read = TRUE;
 }
 

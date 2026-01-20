@@ -276,7 +276,7 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	display = gdk_display_get_default();
 	seat = gdk_display_get_default_seat(display);
 	device = gdk_seat_get_pointer(seat);
-	gdk_device_get_position(device, nullptr, &x, &y);
+	get_device_position(device, x, y);
 
 	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(expander));
 	auto *data_box = static_cast<GtkWidget *>(list->data);

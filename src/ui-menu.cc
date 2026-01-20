@@ -27,6 +27,7 @@
 #include <pango/pango.h>
 
 #include "compat-deprecated.h"
+#include "compat.h"
 #include "layout.h"
 
 /*

@@ -586,8 +586,7 @@ static void tip_show(CollectTable *ct)
 
 	seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(ct->listview)));
 	device = gdk_seat_get_pointer(seat);
-	gdk_window_get_device_position(gtk_widget_get_window(ct->listview),
-								device, &x, &y, nullptr);
+	get_pointer_position(ct->listview, device, &x, &y, nullptr);
 
 	ct->tip_info = collection_table_find_data_by_coord(ct, x, y, nullptr);
 	if (!ct->tip_info) return;
@@ -605,7 +604,7 @@ static void tip_show(CollectTable *ct)
 	display = gdk_display_get_default();
 	seat = gdk_display_get_default_seat(display);
 	device = gdk_seat_get_pointer(seat);
-	gdk_device_get_position(device, nullptr, &x, &y);
+	get_device_position(device, x, y);
 
 	if (!gtk_widget_get_realized(ct->tip_window)) gtk_widget_realize(ct->tip_window);
 	gq_gtk_window_move(GTK_WINDOW(ct->tip_window), x + 16, y + 16);
@@ -658,7 +657,7 @@ static void tip_update(CollectTable *ct, CollectInfo *info)
 		{
 		gint x;
 		gint y;
-		gdk_device_get_position(device, nullptr, &x, &y);
+		get_device_position(device, x, y);
 
 		gq_gtk_window_move(GTK_WINDOW(ct->tip_window), x + 16, y + 16);
 
@@ -1380,8 +1379,7 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 		{
 		seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(ct->listview)));
 		device = gdk_seat_get_pointer(seat);
-		gdk_window_get_device_position(gtk_widget_get_window(ct->listview),
-									device, &x, &y, nullptr);
+		get_pointer_position(ct->listview, device, &x, &y, nullptr);
 		}
 
 	if (source)

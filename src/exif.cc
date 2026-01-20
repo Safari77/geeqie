@@ -1088,13 +1088,11 @@ static gint exif_jpeg_parse(ExifData *exif,
 		return -2;
 		}
 
-	guint seg_offset = 0;
-	guint seg_length = 0;
-	if (jpeg_segment_find(data, size, JPEG_MARKER_APP1,
-	                      "Exif\x00\x00", 6,
-	                      seg_offset, seg_length))
+	constexpr std::string_view magic{ "Exif\x00\x00" };
+	JpegSegment seg;
+	if (jpeg_segment_find(data, size, JPEG_MARKER_APP1, magic, seg))
 		{
-		res = exif_tiff_parse(exif, data + seg_offset + 6, seg_length - 6, list);
+		res = exif_tiff_parse(exif, data + seg.offset + magic.size(), seg.length - magic.size(), list);
 		}
 
 	if (exif_jpeg_parse_color(exif, data, size))

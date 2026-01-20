@@ -2336,9 +2336,10 @@ static void file_util_delete_full(FileData *source_fd, GList *flist, GtkWidget *
 
 	ud->details_func = file_util_details_dialog;
 
-	gchar *message;
+	const gchar *message;
 	if (g_list_length(flist) > 1)
 		{
+		// @fixme message from here is never freed
 		if(options->file_ops.safe_delete_enable)
 			{
 			message = g_strdup_printf("%s%d%s", _("⚠ This will move the following    "), g_list_length(flist), _("    files to the Trash bin"));
@@ -3220,6 +3221,88 @@ void file_util_rename_dir(FileData *source_fd, const gchar *new_path, GtkWidget 
 	file_util_rename_dir_full(source_fd, new_path, parent, UtilityPhase::ENTERING, done_func);
 }
 
+#if HAVE_GTK4
+static GdkContentProvider * clipboard_build_provider(ClipboardData *cbd)
+{
+	g_autoptr(GdkContentProvider) provider = gdk_content_provider_new_union(NULL, 0);
+
+	GList *work = cbd->path_list;
+
+	/* Plain text version */
+	g_autoptr(GString) text = g_string_new("");
+
+	while (work)
+		{
+		const gchar *path = (const gchar *)work->data;
+		work = work->next;
+
+		if (cbd->quoted)
+			{
+			g_autofree gchar *q = g_shell_quote(path);
+			g_string_append(text, q);
+			}
+		else
+			{
+			g_string_append(text, path);
+			}
+
+		if (work)
+			{
+			g_string_append_c(text, ' ');
+			}
+		}
+
+	gdk_content_provider_union_add( provider, gdk_content_provider_new_typed(G_TYPE_STRING, g_strdup(text->str)));
+
+	/* GNOME copied-files format */
+	g_autoptr(GString) copied = g_string_new(cbd->action == ClipboardAction::CUT ? "cut" : "copy");
+
+	work = cbd->path_list;
+	while (work)
+		{
+		g_autofree gchar *uri =
+			g_filename_to_uri((gchar *)work->data, NULL, NULL);
+		g_string_append(copied, "\n");
+		g_string_append(copied, uri);
+		work = work->next;
+		}
+
+	gdk_content_provider_union_add(provider, gdk_content_provider_new_for_bytes("application/x-special-gnome-copied-files", g_bytes_new(copied->str, copied->len)));
+
+	return g_steal_pointer(&provider);
+}
+
+static gboolean path_list_to_clipboard(GList *path_list, gboolean quoted, ClipboardAction action, GdkAtom)
+{
+	ClipboardData cbd = {};
+	cbd.path_list = path_list;
+	cbd.quoted = quoted;
+	cbd.action = action;
+
+	GdkDisplay *display = gdk_display_get_default();
+	if (!display)
+		{
+		return FALSE;
+		}
+
+	GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+	if (!clipboard)
+		{
+		return FALSE;
+		}
+
+	GdkContentProvider *provider = clipboard_build_provider(&cbd);
+
+	gdk_clipboard_set_content(clipboard, provider);
+	g_object_unref(provider);
+
+	GdkClipboard *primary = gdk_display_get_primary_clipboard(display);
+	gdk_clipboard_set_content(primary, provider);
+
+	return TRUE;
+}
+#else
+
 /**
  * @brief
  * @param clipboard
@@ -3229,12 +3312,6 @@ void file_util_rename_dir(FileData *source_fd, const gchar *new_path, GtkWidget 
  *
  *
  */
-#if HAVE_GTK4
-static void clipboard_get_func(GtkClipboard *clipboard, GtkSelectionData *selection_data, guint info, gpointer data)
-{
-/* @FIXME GTK4 stub */
-}
-#else
 static void clipboard_get_func(GtkClipboard *clipboard, GtkSelectionData *selection_data, guint info, gpointer data)
 {
 	auto cbd = static_cast<ClipboardData *>(data);
@@ -3292,7 +3369,6 @@ static void clipboard_get_func(GtkClipboard *clipboard, GtkSelectionData *select
 
 	gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data), 8, reinterpret_cast<guchar *>(path_list_str->str), path_list_str->len);
 }
-#endif
 
 /**
  * @brief
@@ -3318,6 +3394,7 @@ static gboolean path_list_to_clipboard(GList *path_list, gboolean quoted, Clipbo
 
 	return gtk_clipboard_set_with_data(gtk_clipboard_get(selection), target_types.data(), target_types.size(), clipboard_get_func, clipboard_clear_func, cbd);
 }
+#endif
 
 /**
  * @brief

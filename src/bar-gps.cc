@@ -905,18 +905,10 @@ void bar_pane_gps_map_centreing(PaneGPSData *pgd)
 	gtk_widget_show(gd->dialog);
 }
 
-#if HAVE_GTK4
-gboolean bar_pane_gps_map_keypress_cb(GtkWidget *, GdkEventButton *bevent, gpointer data)
-{
-/* @FIXME GTK4 stub */
-	return FALSE;
-}
-#else
 gboolean bar_pane_gps_map_keypress_cb(GtkWidget *, GdkEventButton *bevent, gpointer data)
 {
 	auto pgd = static_cast<PaneGPSData *>(data);
 	GtkWidget *menu;
-	GtkClipboard *clipboard;
 
 	if (bevent->button == GDK_BUTTON_SECONDARY)
 		{
@@ -933,18 +925,27 @@ gboolean bar_pane_gps_map_keypress_cb(GtkWidget *, GdkEventButton *bevent, gpoin
 
 	if (bevent->button == GDK_BUTTON_PRIMARY)
 		{
-		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
 		g_autofree gchar *geo_coords = g_strdup_printf("%f %f",
 		                                               champlain_view_y_to_latitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->y),
 		                                               champlain_view_x_to_longitude(CHAMPLAIN_VIEW(pgd->gps_view),bevent->x));
+
+#if HAVE_GTK4
+		GdkDisplay *display = gdk_display_get_default();
+		GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
+
+		gdk_clipboard_set_text(clipboard, geo_coords);
+#else
+		GtkClipboard *clipboard;
+
+		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
 		gtk_clipboard_set_text(clipboard, geo_coords, -1);
+#endif
 
 		return TRUE;
 		}
 
 	return FALSE;
 }
-#endif
 
 void bar_pane_gps_destroy(gpointer data)
 {
