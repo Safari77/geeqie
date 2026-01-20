@@ -1307,7 +1307,11 @@ std::vector<ActionItem> get_action_items()
 					{
 					g_autofree gchar *action_label = get_action_label(action, action_name);
 
-					list_duplicates.emplace_back(action_name, action_label, gq_gtk_action_get_stock_id(action));
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+#else
+					list_duplicates.emplace_back(action_name, action_label, gtk_action_get_stock_id(action));
+#endif
 					}
 				}
 			}

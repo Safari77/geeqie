@@ -70,10 +70,22 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 		g_abort();
 		}
 }
+
+GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
+{
+	return nullptr;
+}
+
 #else
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
 	gtk_container_add(GTK_CONTAINER(container), widget);
 }
+
+GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
+{
+	return gtk_image_new_from_stock(stock_id, size);
+}
+
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
