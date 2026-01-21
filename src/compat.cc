@@ -95,6 +95,10 @@ GList *gq_gtk_widget_get_children(GtkWidget *widget)
 	return g_list_reverse(list);
 }
 
+void gq_gtk_viewport_set_shadow_type(GtkWidget *, int)
+{
+}
+
 #else
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
@@ -114,6 +118,11 @@ GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
 GList *gq_gtk_widget_get_children(GtkWidget *widget)
 {
 	return gtk_container_get_children(GTK_CONTAINER(widget));
+}
+
+void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
+{
+	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), static_cast<GtkShadowType>(type));
 }
 
 #endif
