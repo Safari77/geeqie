@@ -76,6 +76,11 @@ GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 	return nullptr;
 }
 
+GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
+{
+	return gtk_widget_get_first_child(widget);
+}
+
 #else
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
@@ -85,6 +90,11 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 {
 	return gtk_image_new_from_stock(stock_id, size);
+}
+
+GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
+{
+	return gtk_bin_get_child(GTK_BIN(widget));
 }
 
 #endif

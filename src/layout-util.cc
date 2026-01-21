@@ -234,7 +234,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 
 	if (lw->vf->file_filter.combo)
 		{
-		GtkWidget *combo_entry = gtk_bin_get_child(GTK_BIN(lw->vf->file_filter.combo));
+		GtkWidget *combo_entry = gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
 		if (gtk_widget_has_focus(combo_entry) && gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;

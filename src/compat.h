@@ -65,6 +65,7 @@
 
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size);
+GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget);
 
 #endif /* COMPAT_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
