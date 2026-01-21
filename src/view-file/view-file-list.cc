@@ -1693,6 +1693,10 @@ gboolean vflist_refresh(ViewFile *vf)
 
 static GdkRGBA *vflist_listview_color_shifted(GtkWidget *widget)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return nullptr;
+#else
 	static GdkRGBA color;
 	static GtkWidget *done = nullptr;
 
@@ -1708,6 +1712,7 @@ static GdkRGBA *vflist_listview_color_shifted(GtkWidget *widget)
 		}
 
 	return &color;
+#endif
 }
 
 static void vflist_listview_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell,
