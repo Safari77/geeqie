@@ -1836,7 +1836,7 @@ static gunichar star_rating_symbol_test(gpointer data)
 {
 	guint64 hex_value = 0;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(data));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(data));
 
 	auto *hex_code_entry = static_cast<GtkEntry *>(g_list_nth_data(list, 2));
 	const gchar *hex_code_full = gq_gtk_entry_get_text(hex_code_entry);

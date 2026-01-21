@@ -1091,7 +1091,7 @@ static gboolean vf_file_filter_class_cb(GtkWidget *widget, gpointer data)
 static gboolean vf_file_filter_class_set_all(GtkWidget *widget, gpointer data, gboolean state)
 {
 	GtkWidget *parent = gtk_widget_get_parent(widget);
-	g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(parent));
+	g_autoptr(GList) children = gq_gtk_widget_get_children(GTK_WIDGET(parent));
 
 	GList *work = children;
 	for (gboolean &class_filter : options->class_filter)

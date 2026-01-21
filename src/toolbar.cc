@@ -219,7 +219,7 @@ void toolbar_apply(ToolbarType bar)
 	{
 		layout_toolbar_clear(lw, bar);
 
-		g_autoptr(GList) work_toolbar = gtk_container_get_children(GTK_CONTAINER(toolbarlist[bar]->vbox));
+		g_autoptr(GList) work_toolbar = gq_gtk_widget_get_children(GTK_WIDGET(toolbarlist[bar]->vbox));
 		for (GList *work = work_toolbar; work; work = work->next)
 			{
 			auto button = static_cast<GtkButton *>(work->data);

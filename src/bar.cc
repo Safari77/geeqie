@@ -278,7 +278,7 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	device = gdk_seat_get_pointer(seat);
 	get_device_position(device, x, y);
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(expander));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(expander));
 	auto *data_box = static_cast<GtkWidget *>(list->data);
 
 #if HAVE_GTK4
@@ -438,7 +438,7 @@ gboolean bar_event(GtkWidget *bar, GdkEvent *event)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return FALSE;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 
 	for (GList *work = list; work; work = work->next)
 		{
@@ -466,7 +466,7 @@ GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return nullptr;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 	for (GList *work = list; work; work = work->next)
 		{
 		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(work->data));
@@ -489,7 +489,7 @@ void bar_clear(GtkWidget *bar)
 	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 
 	g_list_free_full(list, reinterpret_cast<GDestroyNotify>(widget_remove_from_parent));
 }
@@ -509,7 +509,7 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 	for (GList *work = list; work; work = work->next)
 		{
 		auto *expander = static_cast<GtkWidget *>(work->data);

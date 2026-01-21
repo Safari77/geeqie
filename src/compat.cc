@@ -81,6 +81,20 @@ GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
 	return gtk_widget_get_first_child(widget);
 }
 
+GList *gq_gtk_widget_get_children(GtkWidget *widget)
+{
+	GList *list = NULL;
+
+	for (GtkWidget *child = gtk_widget_get_first_child(widget);
+		child;
+		child = gtk_widget_get_next_sibling(child))
+		{
+		list = g_list_prepend(list, child);
+		}
+
+	return g_list_reverse(list);
+}
+
 #else
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
@@ -97,5 +111,11 @@ GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
 	return gtk_bin_get_child(GTK_BIN(widget));
 }
 
+GList *gq_gtk_widget_get_children(GtkWidget *widget)
+{
+	return gtk_container_get_children(GTK_CONTAINER(widget));
+}
+
 #endif
+
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

@@ -2108,7 +2108,7 @@ static void layout_menu_new_window_update(LayoutWindow *lw)
 	                                               options->hamburger_menu ? "/MainMenu/OpenMenu/WindowsMenu/NewWindow" : "/MainMenu/WindowsMenu/NewWindow");
 	GtkWidget *sub_menu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(menu));
 
-	g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(sub_menu));
+	g_autoptr(GList) children = gq_gtk_widget_get_children(GTK_WIDGET(sub_menu));
 	for (GList *iter = g_list_nth(children, 4); // separator, default, from current, separator
 	     iter != nullptr; iter = g_list_next(iter))
 		{
