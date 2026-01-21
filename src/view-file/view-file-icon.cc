@@ -1897,6 +1897,10 @@ gboolean vficon_refresh(ViewFile *vf)
 static void vficon_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *cell,
 				GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return;
+#else
 	auto cd = static_cast<ColumnData *>(data);
 	GList *list;
 
@@ -1976,6 +1980,7 @@ static void vficon_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *cell,
 					"foreground-set", FALSE,
 					"has-focus", FALSE, NULL);
 		}
+#endif
 }
 
 static void vficon_append_column(ViewFile *vf, gint n)

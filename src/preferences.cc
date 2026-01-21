@@ -1766,7 +1766,7 @@ static GtkWidget *scrolled_notebook_page(GtkWidget *notebook, const gchar *title
 	gtk_widget_show(scrolled);
 
 	GtkWidget *viewport = gtk_viewport_new(nullptr, nullptr);
-	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
+	gq_gtk_viewport_set_shadow_type(GTK_WIDGET(viewport), GTK_SHADOW_NONE);
 	gq_gtk_container_add(scrolled, viewport);
 	gtk_widget_show(viewport);
 
@@ -1836,7 +1836,7 @@ static gunichar star_rating_symbol_test(gpointer data)
 {
 	guint64 hex_value = 0;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(data));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(data));
 
 	auto *hex_code_entry = static_cast<GtkEntry *>(g_list_nth_data(list, 2));
 	const gchar *hex_code_full = gq_gtk_entry_get_text(hex_code_entry);
@@ -2760,7 +2760,7 @@ static void config_tab_metadata(GtkWidget *notebook)
 	gtk_widget_set_tooltip_text(label, _("A flowchart of the sequence is shown in the Help file"));
 
 	ct_button = pref_checkbox_new_int(group, "", options->metadata.save_in_image_file, &c_options->metadata.save_in_image_file);
-	text_label = gtk_bin_get_child(GTK_BIN(ct_button));
+	text_label = gq_gtk_bin_get_child(GTK_WIDGET(ct_button));
 	g_autofree gchar *step1_markup = g_markup_printf_escaped("<span weight=\"bold\">%s</span>%s",
 	                                                         _("Step 1"), _(") Save metadata in either the image file or the sidecar file, according to the XMP standard"));
 	gtk_label_set_markup(GTK_LABEL(text_label), step1_markup);
@@ -2775,7 +2775,7 @@ static void config_tab_metadata(GtkWidget *notebook)
 #endif
 
 	tmp_widget = pref_checkbox_new_int(group, "", options->metadata.enable_metadata_dirs, &c_options->metadata.enable_metadata_dirs);
-	text_label = gtk_bin_get_child(GTK_BIN(tmp_widget));
+	text_label = gq_gtk_bin_get_child(GTK_WIDGET(tmp_widget));
 	g_autofree gchar *step2_markup = g_markup_printf_escaped("<span weight=\"bold\">%s</span>%s<span style=\"italic\">%s</span>%s",
 	                                                         _("Step 2"), _(") Save metadata in the folder "),".metadata,", _(" local to the image folder (non-standard)"));
 	gtk_label_set_markup(GTK_LABEL(text_label), step2_markup);
@@ -2807,7 +2807,7 @@ static void config_tab_metadata(GtkWidget *notebook)
 
 	tmp_widget=	pref_checkbox_new_int(hbox, "", options->metadata.sidecar_extended_name, &c_options->metadata.sidecar_extended_name);
 	gtk_widget_set_tooltip_text(tmp_widget, _("This file naming convention is used by Darktable"));
-	text_label = gtk_bin_get_child(GTK_BIN(tmp_widget));
+	text_label = gq_gtk_bin_get_child(GTK_WIDGET(tmp_widget));
 
 	g_autofree gchar *markup = g_markup_printf_escaped("%s<span style=\"italic\">%s</span>%s<span style=\"italic\">%s</span>%s",
 	                                                   _("Create sidecar files named "), "image.ext.xmp", _(" (as opposed to the normal "), "image.xmp", ")");

@@ -219,7 +219,7 @@ void toolbar_apply(ToolbarType bar)
 	{
 		layout_toolbar_clear(lw, bar);
 
-		g_autoptr(GList) work_toolbar = gtk_container_get_children(GTK_CONTAINER(toolbarlist[bar]->vbox));
+		g_autoptr(GList) work_toolbar = gq_gtk_widget_get_children(GTK_WIDGET(toolbarlist[bar]->vbox));
 		for (GList *work = work_toolbar; work; work = work->next)
 			{
 			auto button = static_cast<GtkButton *>(work->data);
@@ -294,7 +294,7 @@ GtkWidget *toolbar_select_new(LayoutWindow *lw, ToolbarType bar)
 	toolbarlist[bar]->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gtk_widget_show(toolbarlist[bar]->vbox);
 	gq_gtk_container_add(scrolled, toolbarlist[bar]->vbox);
-	gtk_viewport_set_shadow_type(GTK_VIEWPORT(gtk_bin_get_child(GTK_BIN(scrolled))),
+	gq_gtk_viewport_set_shadow_type(GTK_WIDGET(gq_gtk_bin_get_child(GTK_WIDGET(scrolled))),
 																GTK_SHADOW_NONE);
 
 	add_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

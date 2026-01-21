@@ -304,7 +304,7 @@ gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 	auto *ped = static_cast<PaneExifData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!ped) return FALSE;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(ped->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(ped->vbox));
 	gboolean ret = FALSE;
 	for (GList *work = list; !ret && work; work = work->next)
 		{
@@ -390,7 +390,7 @@ void bar_pane_exif_dnd_receive(GtkWidget *pane, GdkDragContext *,
 			break;
 		}
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(ped->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(ped->vbox));
 	gint pos = 0;
 	for (GList *work = list; work; work = work->next)
 		{
@@ -709,7 +709,7 @@ void bar_pane_exif_write_config(GtkWidget *pane, GString *outstr, gint indent)
 	WRITE_STRING(">");
 	indent++;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(ped->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(ped->vbox));
 	for (GList *work = list; work; work = work->next)
 		{
 		auto entry = static_cast<GtkWidget *>(work->data);

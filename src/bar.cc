@@ -278,7 +278,7 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	device = gdk_seat_get_pointer(seat);
 	get_device_position(device, x, y);
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(expander));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(expander));
 	auto *data_box = static_cast<GtkWidget *>(list->data);
 
 #if HAVE_GTK4
@@ -366,7 +366,7 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 	GtkWidget *child;
 
 	expander = GTK_EXPANDER(object);
-	child = gtk_bin_get_child(GTK_BIN(expander));
+	child = gq_gtk_bin_get_child(GTK_WIDGET(expander));
 
 	if (gtk_expander_get_expanded(expander))
 		{
@@ -395,7 +395,7 @@ static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
 
 static void bar_pane_set_fd_cb(GtkWidget *expander, gpointer data)
 {
-	GtkWidget *widget = gtk_bin_get_child(GTK_BIN(expander));
+	GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
 	auto pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 	if (!pd) return;
 	if (pd->pane_set_fd) pd->pane_set_fd(widget, static_cast<FileData *>(data));
@@ -418,7 +418,7 @@ void bar_set_fd(GtkWidget *bar, FileData *fd)
 
 static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
 {
-	GtkWidget *widget = gtk_bin_get_child(GTK_BIN(expander));
+	GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
 	auto pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 	if (!pd) return;
 	if (pd->pane_notify_selection) pd->pane_notify_selection(widget, GPOINTER_TO_INT(data));
@@ -438,11 +438,11 @@ gboolean bar_event(GtkWidget *bar, GdkEvent *event)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return FALSE;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 
 	for (GList *work = list; work; work = work->next)
 		{
-		GtkWidget *widget = gtk_bin_get_child(GTK_BIN(work->data));
+		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(work->data));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && pd->pane_event && pd->pane_event(widget, event))
@@ -466,10 +466,10 @@ GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return nullptr;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 	for (GList *work = list; work; work = work->next)
 		{
-		GtkWidget *widget = gtk_bin_get_child(GTK_BIN(work->data));
+		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(work->data));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && type == pd->type && strcmp(id, pd->id) == 0)
@@ -489,7 +489,7 @@ void bar_clear(GtkWidget *bar)
 	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 
 	g_list_free_full(list, reinterpret_cast<GDestroyNotify>(widget_remove_from_parent));
 }
@@ -509,11 +509,11 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bd->vbox));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
 	for (GList *work = list; work; work = work->next)
 		{
 		auto *expander = static_cast<GtkWidget *>(work->data);
-		GtkWidget *widget = gtk_bin_get_child(GTK_BIN(expander));
+		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (!pd) continue;
@@ -654,7 +654,7 @@ GtkWidget *bar_new(LayoutWindow *lw)
 
 	bd->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gq_gtk_container_add(scrolled, bd->vbox);
-	gtk_viewport_set_shadow_type(GTK_VIEWPORT(gtk_bin_get_child(GTK_BIN(scrolled))), GTK_SHADOW_NONE);
+	gq_gtk_viewport_set_shadow_type(GTK_WIDGET(gq_gtk_bin_get_child(GTK_WIDGET(scrolled))), GTK_SHADOW_NONE);
 
 	add_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(add_box);

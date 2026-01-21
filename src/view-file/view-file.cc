@@ -1091,7 +1091,7 @@ static gboolean vf_file_filter_class_cb(GtkWidget *widget, gpointer data)
 static gboolean vf_file_filter_class_set_all(GtkWidget *widget, gpointer data, gboolean state)
 {
 	GtkWidget *parent = gtk_widget_get_parent(widget);
-	g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(parent));
+	g_autoptr(GList) children = gq_gtk_widget_get_children(GTK_WIDGET(parent));
 
 	GList *work = children;
 	for (gboolean &class_filter : options->class_filter)
@@ -1168,8 +1168,8 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 	GtkWidget *label;
 
 	vf->file_filter.combo = gtk_combo_box_text_new_with_entry();
-	combo_entry = gtk_bin_get_child(GTK_BIN(vf->file_filter.combo));
-	gtk_widget_show(gtk_bin_get_child(GTK_BIN(vf->file_filter.combo)));
+	combo_entry = gq_gtk_bin_get_child(GTK_WIDGET(vf->file_filter.combo));
+	gtk_widget_show(gq_gtk_bin_get_child(GTK_WIDGET(vf->file_filter.combo)));
 	gtk_widget_show(vf->file_filter.combo);
 	gtk_widget_set_tooltip_text(vf->file_filter.combo, _("Use regular expressions"));
 

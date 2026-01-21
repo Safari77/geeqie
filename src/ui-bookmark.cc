@@ -319,7 +319,7 @@ static void bookmark_move(BookMarkData *bm, GtkWidget *button, gint direction)
 	auto *b = static_cast<BookButtonData *>(g_object_get_data(G_OBJECT(button), "bookbuttondata"));
 	if (!b) return;
 
-	g_autoptr(GList) list = gtk_container_get_children(GTK_CONTAINER(bm->box));
+	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bm->box));
 
 	gint p = g_list_index(list, button);
 	if (p < 0 || p + direction < 0) return;
@@ -891,7 +891,7 @@ GtkWidget *history_combo_new(GtkWidget **entry, const gchar *text,
 
 	hc->combo = gtk_combo_box_text_new_with_entry();
 
-	hc->entry = gtk_bin_get_child(GTK_BIN(hc->combo));
+	hc->entry = gq_gtk_bin_get_child(GTK_WIDGET(hc->combo));
 
 	g_object_set_data_full(G_OBJECT(hc->combo), "history_combo_data", hc, history_combo_destroy);
 	g_object_set_data(G_OBJECT(hc->entry), "history_combo_data", hc);

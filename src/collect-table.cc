@@ -2302,6 +2302,10 @@ static void collection_table_dnd_init(CollectTable *ct)
 static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *cell,
 					  GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data)
 {
+#if HAVE_GTK4
+/* @FIXME GTK4 stub */
+	return;
+#else
 	auto cd = static_cast<ColumnData *>(data);
 	CollectInfo *info;
 	CollectTable *ct;
@@ -2396,6 +2400,7 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 		             "has-focus", FALSE,
 		             NULL);
 		}
+#endif
 }
 
 static void collection_table_append_column(CollectTable *ct, gint n)

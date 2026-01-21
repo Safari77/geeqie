@@ -1872,7 +1872,7 @@ gboolean bar_keywords_autocomplete_focus(LayoutWindow *lw)
 		return FALSE;
 		}
 
-	g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(pane));
+	g_autoptr(GList) children = gq_gtk_widget_get_children(GTK_WIDGET(pane));
 	const GList *last_child = g_list_last(children);
 
 	gboolean is_focused = (gtk_window_get_focus(GTK_WINDOW(lw->window)) == last_child->data);
