@@ -450,6 +450,7 @@ static void tip_update(ViewFile *vf, FileData *fd)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 void vficon_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context)
 {
 	tip_unschedule(vf);
@@ -478,6 +479,7 @@ void vficon_dnd_end(ViewFile *vf, GdkDragContext *context)
 
 	tip_unschedule(vf);
 }
+#endif
 
 /*
  *-------------------------------------------------------------------

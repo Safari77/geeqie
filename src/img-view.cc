@@ -1524,7 +1524,7 @@ static GtkWidget *view_confirm_dir_list(ViewWindow *vw, GList *list)
  * image drag and drop routines
  *-----------------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void view_window_get_dnd_data(GtkWidget *, GdkDragContext *context,
 				     gint, gint,
 				     GtkSelectionData *selection_data, guint info,
@@ -1626,19 +1626,20 @@ static void view_window_dnd_init(ViewWindow *vw)
 
 	imd = vw->imd;
 
-	gtk_drag_source_set(imd->pr, GDK_BUTTON2_MASK,
+	gq_gtk_drag_source_set(imd->pr, GDK_BUTTON2_MASK,
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(imd->pr), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_data_get",
 			 G_CALLBACK(view_window_set_dnd_data), vw);
 
-	gtk_drag_dest_set(imd->pr,
+	gq_gtk_drag_dest_set(imd->pr,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 	                  dnd_file_drop_types.data(), dnd_file_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(imd->pr), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_data_received",
 			 G_CALLBACK(view_window_get_dnd_data), vw);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------

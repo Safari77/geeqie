@@ -24,6 +24,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#if !HAVE_GTK4
+
 // Hide deprecation warnings
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 // Hide GtkAction deprecation warnings
@@ -99,6 +101,8 @@ const auto deprecated_gtk_widget_get_requisition = gtk_widget_get_requisition;
 const auto deprecated_gtk_widget_get_style = gtk_widget_get_style;
 const auto deprecated_gtk_widget_set_double_buffered = gtk_widget_set_double_buffered;
 G_GNUC_END_IGNORE_DEPRECATIONS
+
+#endif
 
 #endif /* COMPAT_DEPRECATED_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

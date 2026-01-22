@@ -2102,7 +2102,7 @@ static GtkWidget *collection_table_drop_menu(CollectTable *ct)
  * dnd
  *-------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void collection_table_dnd_get(GtkWidget *, GdkDragContext *,
 				     GtkSelectionData *selection_data, guint info,
 				     guint, gpointer data)
@@ -2271,27 +2271,28 @@ static void collection_table_dnd_leave(GtkWidget *, GdkDragContext *, guint, gpo
 
 static void collection_table_dnd_init(CollectTable *ct)
 {
-	gtk_drag_source_set(ct->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(ct->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    collection_drag_types.data(), collection_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(ct->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_data_get",
 			 G_CALLBACK(collection_table_dnd_get), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_begin",
 			 G_CALLBACK(collection_table_dnd_begin), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_end",
 			 G_CALLBACK(collection_table_dnd_end), ct);
 
-	gtk_drag_dest_set(ct->listview,
+	gq_gtk_drag_dest_set(ct->listview,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  collection_drop_types.data(), collection_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
-	g_signal_connect(G_OBJECT(ct->listview), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_motion",
 			 G_CALLBACK(collection_table_dnd_motion), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_leave",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_leave",
 			 G_CALLBACK(collection_table_dnd_leave), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_data_received",
 			 G_CALLBACK(collection_table_dnd_receive), ct);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------

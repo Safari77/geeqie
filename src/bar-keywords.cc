@@ -510,6 +510,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drop_types{{
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
 
+#if !HAVE_GTK4
 void bar_pane_keywords_dnd_get(GtkWidget *tree_view, GdkDragContext *,
 				     GtkSelectionData *selection_data, guint info,
 				     guint, gpointer)
@@ -771,6 +772,7 @@ gint bar_pane_keywords_dnd_motion(GtkWidget *tree_view, GdkDragContext *context,
 
 	return TRUE;
 }
+#endif
 
 /*
  *-------------------------------------------------------------------
@@ -1494,28 +1496,28 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	gtk_tree_view_append_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 	gtk_tree_view_set_expander_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 
-	gtk_drag_source_set(pkd->keyword_treeview,
+	gq_gtk_drag_source_set(pkd->keyword_treeview,
 	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    bar_pane_keywords_drag_types.data(), bar_pane_keywords_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_get",
 			 G_CALLBACK(bar_pane_keywords_dnd_get), pkd);
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_begin",
 			 G_CALLBACK(bar_pane_keywords_dnd_begin), pkd);
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_end",
 			 G_CALLBACK(bar_pane_keywords_dnd_end), pkd);
 
-	gtk_drag_dest_set(pkd->keyword_treeview,
+	gq_gtk_drag_dest_set(pkd->keyword_treeview,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  bar_pane_keywords_drop_types.data(), bar_pane_keywords_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_received",
 			 G_CALLBACK(bar_pane_keywords_dnd_receive), pkd);
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
 			 G_CALLBACK(bar_pane_keywords_dnd_motion), pkd);
 
 	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "button_release_event",

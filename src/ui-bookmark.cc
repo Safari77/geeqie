@@ -437,6 +437,7 @@ static gboolean bookmark_keypress_cb(GtkWidget *button, GdkEventKey *event, gpoi
 	return FALSE;
 }
 
+#if !HAVE_GTK4
 static void bookmark_drag_set_data(GtkWidget *button,
 				   GdkDragContext *context, GtkSelectionData *selection_data,
 				   guint, guint, gpointer data)
@@ -478,6 +479,7 @@ static void bookmark_drag_begin(GtkWidget *button, GdkDragContext *context, gpoi
 				 x - allocation.x, y - allocation.y);
 	g_object_unref(pixbuf);
 }
+#endif
 
 static gboolean bookmark_path_tooltip_cb(GtkWidget *button, gpointer)
 {
@@ -626,12 +628,12 @@ static void bookmark_populate(BookMarkData *bm)
 			g_signal_connect(G_OBJECT(b->button), "key_press_event",
 					 G_CALLBACK(bookmark_keypress_cb), bm);
 
-			gtk_drag_source_set(b->button, GDK_BUTTON1_MASK,
+			gq_gtk_drag_source_set(b->button, GDK_BUTTON1_MASK,
 			                    bookmark_drag_types.data(), bookmark_drag_types.size(),
 			                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-			g_signal_connect(G_OBJECT(b->button), "drag_data_get",
+			gq_drag_g_signal_connect(G_OBJECT(b->button), "drag_data_get",
 					 G_CALLBACK(bookmark_drag_set_data), bm);
-			g_signal_connect(G_OBJECT(b->button), "drag_begin",
+			gq_drag_g_signal_connect(G_OBJECT(b->button), "drag_begin",
 					 G_CALLBACK(bookmark_drag_begin), bm);
 
 			gtk_widget_set_has_tooltip(b->button, TRUE);
@@ -663,6 +665,7 @@ static void bookmark_populate_all(const gchar *key)
 		}
 }
 
+#if !HAVE_GTK4
 static void bookmark_dnd_get_data(GtkWidget *, GdkDragContext *,
 				  gint, gint,
 				  GtkSelectionData *selection_data, guint,
@@ -688,6 +691,7 @@ static void bookmark_dnd_get_data(GtkWidget *, GdkDragContext *,
 
 	bookmark_populate_all(bm->key);
 }
+#endif
 
 static void bookmark_list_destroy(gpointer data)
 {
@@ -737,7 +741,7 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 	g_object_set_data(G_OBJECT(scrolled), BOOKMARK_DATA_KEY, bm);
 	bm->widget = scrolled;
 
-	gtk_drag_dest_set(scrolled,
+	gq_gtk_drag_dest_set(scrolled,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 	                  bookmark_drop_types.data(), bookmark_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));

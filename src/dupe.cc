@@ -4710,7 +4710,7 @@ static void dupe_dest_set(GtkWidget *widget, gboolean enable)
 {
 	if (enable)
 		{
-		gtk_drag_dest_set(widget,
+		gq_gtk_drag_dest_set(widget,
 		                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 		                  dupe_drop_types.data(), dupe_drop_types.size(),
 		                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
@@ -4718,7 +4718,7 @@ static void dupe_dest_set(GtkWidget *widget, gboolean enable)
 		}
 	else
 		{
-		gtk_drag_dest_unset(widget);
+		gq_gtk_drag_dest_unset(widget);
 		}
 }
 
@@ -4771,32 +4771,32 @@ static void dupe_dnd_end(GtkWidget *, GdkDragContext *, gpointer data)
 
 static void dupe_dnd_init(DupeWindow *dw)
 {
-	gtk_drag_source_set(dw->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(dw->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dupe_drag_types.data(), dupe_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(dw->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_data_get",
 			 G_CALLBACK(dupe_dnd_data_set), dw);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_begin",
 			 G_CALLBACK(dupe_dnd_begin), dw);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_end",
 			 G_CALLBACK(dupe_dnd_end), dw);
 
 	dupe_dest_set(dw->listview, TRUE);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 
-	gtk_drag_source_set(dw->second_listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(dw->second_listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dupe_drag_types.data(), dupe_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_get",
 			 G_CALLBACK(dupe_dnd_data_set), dw);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_begin",
 			 G_CALLBACK(dupe_dnd_begin), dw);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_end",
 			 G_CALLBACK(dupe_dnd_end), dw);
 
 	dupe_dest_set(dw->second_listview, TRUE);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 }
 

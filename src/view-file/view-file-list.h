@@ -47,8 +47,10 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 
 FileData *vflist_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
 
+#if !HAVE_GTK4
 void vflist_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context);
 void vflist_dnd_end(ViewFile *vf, GdkDragContext *context);
+#endif
 
 void vflist_destroy_cb(ViewFile *vf);
 ViewFile *vflist_new(ViewFile *vf);

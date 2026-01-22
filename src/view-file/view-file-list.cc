@@ -219,6 +219,7 @@ static void vflist_move_cursor(ViewFile *vf, GtkTreeIter *iter)
  *-----------------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 void vflist_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context)
 {
 	vflist_color_set(vf, vf->click_fd, TRUE);
@@ -246,6 +247,7 @@ void vflist_dnd_end(ViewFile *vf, GdkDragContext *context)
 		vflist_refresh(vf);
 		}
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------

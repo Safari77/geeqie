@@ -68,6 +68,17 @@ GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size);
 GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget);
 GList *gq_gtk_widget_get_children(GtkWidget *widget);
 void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type);
+void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
+void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
+void gq_gtk_drag_dest_unset(GtkWidget *widget);
+
+#if HAVE_GTK4
+void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, gpointer, gint n_targets, GdkDragAction actions);
+void gq_gtk_drag_dest_set(GtkWidget *widget, gpointer, gpointer, gint n_targets, GdkDragAction actions);
+#else
+void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions);
+void gq_gtk_drag_dest_set(GtkWidget *widget, GtkDestDefaults flags, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions);
+#endif
 
 #endif /* COMPAT_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

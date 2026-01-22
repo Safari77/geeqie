@@ -1490,7 +1490,7 @@ static gboolean search_window_keypress_cb(GtkWidget *, GdkEventKey *event, gpoin
  * dnd
  *-------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void search_dnd_data_set(GtkWidget *, GdkDragContext *,
 				GtkSelectionData *selection_data, guint,
 				guint, gpointer data)
@@ -1629,38 +1629,39 @@ static void search_image_content_dnd_received_cb(GtkWidget *, GdkDragContext *,
 
 static void search_dnd_init(SearchData *sd)
 {
-	gtk_drag_source_set(sd->ui.result_view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(sd->ui.result_view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    result_drag_types.data(), result_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_data_get",
 	                 G_CALLBACK(search_dnd_data_set), sd);
-	g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_begin",
 	                 G_CALLBACK(search_dnd_begin), sd);
 
-	gtk_drag_dest_set(sd->ui.entry_gps_coord,
+	gq_gtk_drag_dest_set(sd->ui.entry_gps_coord,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.entry_gps_coord), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.entry_gps_coord), "drag_data_received",
 	                 G_CALLBACK(search_gps_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(sd->ui.path_entry,
+	gq_gtk_drag_dest_set(sd->ui.path_entry,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.path_entry), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.path_entry), "drag_data_received",
 	                 G_CALLBACK(search_path_entry_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(sd->ui.entry_similarity,
+	gq_gtk_drag_dest_set(sd->ui.entry_similarity,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.entry_similarity), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.entry_similarity), "drag_data_received",
 	                 G_CALLBACK(search_image_content_dnd_received_cb), sd);
 }
+#endif
 
 /*
  *-------------------------------------------------------------------

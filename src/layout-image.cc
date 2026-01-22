@@ -36,6 +36,7 @@
 #include "collect.h"
 #include "color-man.h"
 #include "compat-deprecated.h"
+#include "compat.h"
 #include "dnd.h"
 #include "editors.h"
 #include "exif.h"
@@ -888,7 +889,7 @@ void layout_image_menu_popup(LayoutWindow *lw)
  * dnd
  *----------------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void layout_image_dnd_receive(GtkWidget *widget, GdkDragContext *,
 				     gint, gint,
 				     GtkSelectionData *selection_data, guint info,
@@ -1036,24 +1037,25 @@ static void layout_image_dnd_end(GtkWidget *, GdkDragContext *context, gpointer 
 		layout_refresh(lw);
 		}
 }
+#endif
 
 static void layout_image_dnd_init(LayoutWindow *lw, gint i)
 {
 	ImageWindow *imd = lw->split_images[i];
 
-	gtk_drag_source_set(imd->pr, GDK_BUTTON2_MASK,
+	gq_gtk_drag_source_set(imd->pr, GDK_BUTTON2_MASK,
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(imd->pr), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_data_get",
 			 G_CALLBACK(layout_image_dnd_get), lw);
-	g_signal_connect(G_OBJECT(imd->pr), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_end",
 			 G_CALLBACK(layout_image_dnd_end), lw);
 
-	gtk_drag_dest_set(imd->pr,
+	gq_gtk_drag_dest_set(imd->pr,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 	                  dnd_file_drop_types.data(), dnd_file_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(imd->pr), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_data_received",
 			 G_CALLBACK(layout_image_dnd_receive), lw);
 }
 

@@ -317,6 +317,7 @@ void vf_selection_to_mark(ViewFile *vf, gint mark, SelectionToMarkMode mode)
  *-----------------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static gboolean vf_is_selected(ViewFile *vf, FileData *fd)
 {
 	switch (vf->type)
@@ -407,22 +408,23 @@ static void vf_drag_data_received(GtkWidget *, GdkDragContext *,
 
 static void vf_dnd_init(ViewFile *vf)
 {
-	gtk_drag_source_set(vf->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(vf->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	gtk_drag_dest_set(vf->listview, GTK_DEST_DEFAULT_ALL,
+	gq_gtk_drag_dest_set(vf->listview, GTK_DEST_DEFAULT_ALL,
 	                  dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 
-	g_signal_connect(G_OBJECT(vf->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(vf->listview), "drag_data_get",
 	                 G_CALLBACK(vf_dnd_get), vf);
-	g_signal_connect(G_OBJECT(vf->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(vf->listview), "drag_begin",
 	                 G_CALLBACK(vf_dnd_begin), vf);
-	g_signal_connect(G_OBJECT(vf->listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(vf->listview), "drag_end",
 	                 G_CALLBACK(vf_dnd_end), vf);
-	g_signal_connect(G_OBJECT(vf->listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(vf->listview), "drag_data_received",
 	                 G_CALLBACK(vf_drag_data_received), vf);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------
@@ -1270,7 +1272,9 @@ ViewFile *vf_new(FileViewType type, FileData *dir_fd)
 	case FILEVIEW_ICON: vf = vficon_new(vf); break;
 	}
 
+#if !HAVE_GTK4
 	vf_dnd_init(vf);
+#endif
 
 	g_signal_connect(G_OBJECT(vf->listview), "key_press_event",
 			 G_CALLBACK(vf_press_key_cb), vf);

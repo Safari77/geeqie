@@ -22,6 +22,8 @@
 #ifndef DND_H
 #define DND_H
 
+#if !HAVE_GTK4
+
 #include <array>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -51,5 +53,6 @@ void dnd_set_drag_icon(GtkWidget *widget, GdkDragContext *context, GdkPixbuf *pi
 
 void dnd_set_drag_label(GtkWidget *widget, GdkDragContext *context, const gchar *text);
 
+#endif
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

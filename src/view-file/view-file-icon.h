@@ -58,8 +58,10 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 
 FileData *vficon_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
 
+#if !HAVE_GTK4
 void vficon_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context);
 void vficon_dnd_end(ViewFile *vf, GdkDragContext *context);
+#endif
 
 void vficon_destroy_cb(ViewFile *vf);
 ViewFile *vficon_new(ViewFile *vf);

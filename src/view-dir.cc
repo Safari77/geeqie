@@ -809,17 +809,18 @@ static void vd_dest_set(ViewDir *vd, gint enable)
 {
 	if (enable)
 		{
-		gtk_drag_dest_set(vd->view,
+		gq_gtk_drag_dest_set(vd->view,
 		                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 		                  vd_dnd_drop_types.data(), vd_dnd_drop_types.size(),
 		                  static_cast<GdkDragAction>(GDK_ACTION_MOVE | GDK_ACTION_COPY));
 		}
 	else
 		{
-		gtk_drag_dest_unset(vd->view);
+		gq_gtk_drag_dest_unset(vd->view);
 		}
 }
 
+#if !HAVE_GTK4
 static void vd_dnd_get(GtkWidget *, GdkDragContext *,
 			   GtkSelectionData *selection_data, guint info,
 			   guint, gpointer data)
@@ -966,6 +967,7 @@ void vd_dnd_drop_scroll_cancel(ViewDir *vd)
 {
 	g_clear_handle_id(&vd->drop_scroll_id, g_source_remove);
 }
+#endif
 
 static gboolean vd_auto_scroll_idle_cb(gpointer data)
 {
@@ -1033,22 +1035,22 @@ static void vd_dnd_drop_leave(GtkWidget *, GdkDragContext *, guint, gpointer dat
 
 void vd_dnd_init(ViewDir *vd)
 {
-	gtk_drag_source_set(vd->view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(vd->view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
-	g_signal_connect(G_OBJECT(vd->view), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_data_get",
 			 G_CALLBACK(vd_dnd_get), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_begin",
 			 G_CALLBACK(vd_dnd_begin), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_end",
 			 G_CALLBACK(vd_dnd_end), vd);
 
 	vd_dest_set(vd, TRUE);
-	g_signal_connect(G_OBJECT(vd->view), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_data_received",
 			 G_CALLBACK(vd_dnd_drop_receive), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_motion",
 			 G_CALLBACK(vd_dnd_drop_motion), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_leave",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_leave",
 			 G_CALLBACK(vd_dnd_drop_leave), vd);
 }
 
