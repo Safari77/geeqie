@@ -344,7 +344,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_exif_drop_types{{
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
 
-
+#if !HAVE_GTK4
 void bar_pane_exif_entry_dnd_get(GtkWidget *entry, GdkDragContext *,
 				     GtkSelectionData *selection_data, guint info,
 				     guint, gpointer)
@@ -431,27 +431,28 @@ void bar_pane_exif_entry_dnd_init(GtkWidget *entry)
 {
 	auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(entry), "entry_data"));
 
-	gtk_drag_source_set(entry, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(entry, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    bar_pane_exif_drag_types.data(), bar_pane_exif_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(entry), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(entry), "drag_data_get",
 			 G_CALLBACK(bar_pane_exif_entry_dnd_get), ee);
 
-	g_signal_connect(G_OBJECT(entry), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(entry), "drag_begin",
 			 G_CALLBACK(bar_pane_exif_entry_dnd_begin), ee);
-	g_signal_connect(G_OBJECT(entry), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(entry), "drag_end",
 			 G_CALLBACK(bar_pane_exif_entry_dnd_end), ee);
 }
 
 void bar_pane_exif_dnd_init(GtkWidget *pane)
 {
-	gtk_drag_dest_set(pane,
+	gq_gtk_drag_dest_set(pane,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  bar_pane_exif_drop_types.data(), bar_pane_exif_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
-	g_signal_connect(G_OBJECT(pane), "drag_data_received",
-			 G_CALLBACK(bar_pane_exif_dnd_receive), NULL);
+	gq_drag_g_signal_connect(G_OBJECT(pane), "drag_data_received",
+			 G_CALLBACK(bar_pane_exif_dnd_receive), nullptr);
 }
+#endif
 
 void bar_pane_exif_edit_close_cb(GtkWidget *, gpointer data)
 {

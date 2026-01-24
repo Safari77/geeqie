@@ -3312,18 +3312,17 @@ static gboolean dupe_listview_press_cb(GtkWidget *widget, GdkEventButton *bevent
 {
 	auto dw = static_cast<DupeWindow *>(data);
 	GtkTreeModel *store;
-	GtkTreePath *tpath;
 	GtkTreeIter iter;
 	DupeItem *di = nullptr;
 
 	store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 
-	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
-					  &tpath, nullptr, nullptr, nullptr))
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, DUPE_COLUMN_POINTER, &di, -1);
-		gtk_tree_path_free(tpath);
 		}
 
 	dw->click_item = di;
@@ -3369,9 +3368,8 @@ static gboolean dupe_listview_press_cb(GtkWidget *widget, GdkEventButton *bevent
 			gtk_tree_selection_unselect_all(selection);
 			gtk_tree_selection_select_iter(selection, &iter);
 
-			tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
+			g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
 			gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-			gtk_tree_path_free(tpath);
 			}
 
 		return TRUE;
@@ -3395,7 +3393,6 @@ static gboolean dupe_listview_release_cb(GtkWidget *widget, GdkEventButton *beve
 {
 	auto dw = static_cast<DupeWindow *>(data);
 	GtkTreeModel *store;
-	GtkTreePath *tpath;
 	GtkTreeIter iter;
 	DupeItem *di = nullptr;
 
@@ -3403,13 +3400,13 @@ static gboolean dupe_listview_release_cb(GtkWidget *widget, GdkEventButton *beve
 
 	store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 
-	if ((bevent->x != 0 || bevent->y != 0) &&
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    (bevent->x != 0 || bevent->y != 0) &&
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
-					  &tpath, nullptr, nullptr, nullptr))
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, DUPE_COLUMN_POINTER, &di, -1);
-		gtk_tree_path_free(tpath);
 		}
 
 	if (bevent->button == GDK_BUTTON_MIDDLE)
@@ -3442,9 +3439,8 @@ static gboolean dupe_listview_release_cb(GtkWidget *widget, GdkEventButton *beve
 		gtk_tree_selection_unselect_all(selection);
 		gtk_tree_selection_select_iter(selection, &iter);
 
-		tpath = gtk_tree_model_get_path(store, &iter);
+		g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 		gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-		gtk_tree_path_free(tpath);
 
 		return TRUE;
 		}
@@ -3714,7 +3710,7 @@ static GdkRGBA *dupe_listview_color_shifted(GtkWidget *widget)
 		{
 		GtkStyle *style;
 
-		style = gq_gtk_widget_get_style(widget);
+		style = deprecated_gtk_widget_get_style(widget);
 		color = convert_gdkcolor_to_gdkrgba(&style->base[GTK_STATE_NORMAL]);
 
 		shift_color(color);
@@ -4710,7 +4706,7 @@ static void dupe_dest_set(GtkWidget *widget, gboolean enable)
 {
 	if (enable)
 		{
-		gtk_drag_dest_set(widget,
+		gq_gtk_drag_dest_set(widget,
 		                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 		                  dupe_drop_types.data(), dupe_drop_types.size(),
 		                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
@@ -4718,7 +4714,7 @@ static void dupe_dest_set(GtkWidget *widget, gboolean enable)
 		}
 	else
 		{
-		gtk_drag_dest_unset(widget);
+		gq_gtk_drag_dest_unset(widget);
 		}
 }
 
@@ -4737,15 +4733,13 @@ static void dupe_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointer 
 		if (dupe_listview_find_item(store, dw->click_item, &iter) >= 0)
 			{
 			GtkTreeSelection *selection;
-			GtkTreePath *tpath;
 
 			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
 			gtk_tree_selection_unselect_all(selection);
 			gtk_tree_selection_select_iter(selection, &iter);
 
-			tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
+			g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
 			gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-			gtk_tree_path_free(tpath);
 			}
 		}
 
@@ -4771,32 +4765,32 @@ static void dupe_dnd_end(GtkWidget *, GdkDragContext *, gpointer data)
 
 static void dupe_dnd_init(DupeWindow *dw)
 {
-	gtk_drag_source_set(dw->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(dw->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dupe_drag_types.data(), dupe_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(dw->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_data_get",
 			 G_CALLBACK(dupe_dnd_data_set), dw);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_begin",
 			 G_CALLBACK(dupe_dnd_begin), dw);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_end",
 			 G_CALLBACK(dupe_dnd_end), dw);
 
 	dupe_dest_set(dw->listview, TRUE);
-	g_signal_connect(G_OBJECT(dw->listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(dw->listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 
-	gtk_drag_source_set(dw->second_listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(dw->second_listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dupe_drag_types.data(), dupe_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_get",
 			 G_CALLBACK(dupe_dnd_data_set), dw);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_begin",
 			 G_CALLBACK(dupe_dnd_begin), dw);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_end",
 			 G_CALLBACK(dupe_dnd_end), dw);
 
 	dupe_dest_set(dw->second_listview, TRUE);
-	g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 }
 

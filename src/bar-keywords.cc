@@ -347,7 +347,6 @@ void bar_pane_keywords_keyword_toggle(GtkCellRendererToggle *, const gchar *path
 	auto pkd = static_cast<PaneKeywordsData *>(data);
 	GtkTreeModel *model;
 	GtkTreeIter iter;
-	GtkTreePath *tpath;
 	gboolean active;
 	GList *list;
 	GtkTreeIter child_iter;
@@ -357,9 +356,8 @@ void bar_pane_keywords_keyword_toggle(GtkCellRendererToggle *, const gchar *path
 
 	model = gtk_tree_view_get_model(GTK_TREE_VIEW(pkd->keyword_treeview));
 
-	tpath = gtk_tree_path_new_from_string(path);
+	g_autoptr(GtkTreePath) tpath = gtk_tree_path_new_from_string(path);
 	gtk_tree_model_get_iter(model, &iter, tpath);
-	gtk_tree_path_free(tpath);
 
 	gtk_tree_model_get(model, &iter, FILTER_KEYWORD_COLUMN_TOGGLE, &active, -1);
 	active = (!active);
@@ -510,6 +508,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drop_types{{
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
 
+#if !HAVE_GTK4
 void bar_pane_keywords_dnd_get(GtkWidget *tree_view, GdkDragContext *,
 				     GtkSelectionData *selection_data, guint info,
 				     guint, gpointer)
@@ -615,8 +614,6 @@ void bar_pane_keywords_dnd_receive(GtkWidget *tree_view, GdkDragContext *,
 					  guint, gpointer data)
 {
 	auto pkd = static_cast<PaneKeywordsData *>(data);
-	GtkTreePath *tpath = nullptr;
-        GtkTreeViewDropPosition pos;
 	GtkTreeModel *model;
 
 	GtkTreeModel *keyword_tree;
@@ -634,6 +631,8 @@ void bar_pane_keywords_dnd_receive(GtkWidget *tree_view, GdkDragContext *,
 	model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree_view));
 	keyword_tree = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
 
+	g_autoptr(GtkTreePath) tpath = nullptr;
+	GtkTreeViewDropPosition pos;
 	gtk_tree_view_get_dest_row_at_pos(GTK_TREE_VIEW(tree_view), x, y, &tpath, &pos);
 	gtk_tree_view_set_drag_dest_row(GTK_TREE_VIEW(tree_view), nullptr, pos);
 
@@ -654,8 +653,7 @@ void bar_pane_keywords_dnd_receive(GtkWidget *tree_view, GdkDragContext *,
 	if (tpath)
 		{
 		GtkTreeIter dest_iter;
-                gtk_tree_model_get_iter(model, &dest_iter, tpath);
-		gtk_tree_path_free(tpath);
+		gtk_tree_model_get_iter(model, &dest_iter, tpath);
 		gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model), &dest_kw_iter, &dest_iter);
 
 		if (src_valid && gtk_tree_store_is_ancestor(GTK_TREE_STORE(keyword_tree), &src_kw_iter, &dest_kw_iter))
@@ -745,8 +743,8 @@ void bar_pane_keywords_dnd_receive(GtkWidget *tree_view, GdkDragContext *,
 gint bar_pane_keywords_dnd_motion(GtkWidget *tree_view, GdkDragContext *context,
 					gint x, gint y, guint time, gpointer)
 {
-	GtkTreePath *tpath = nullptr;
-        GtkTreeViewDropPosition pos;
+	g_autoptr(GtkTreePath) tpath = nullptr;
+	GtkTreeViewDropPosition pos;
 	gtk_tree_view_get_dest_row_at_pos(GTK_TREE_VIEW(tree_view), x, y, &tpath, &pos);
 	if (tpath)
 		{
@@ -762,7 +760,6 @@ gint bar_pane_keywords_dnd_motion(GtkWidget *tree_view, GdkDragContext *context,
 		}
 
 	gtk_tree_view_set_drag_dest_row(GTK_TREE_VIEW(tree_view), tpath, pos);
-	gtk_tree_path_free(tpath);
 
 	if (tree_view == gtk_drag_get_source_widget(context))
 		gdk_drag_status(context, GDK_ACTION_MOVE, time);
@@ -771,6 +768,7 @@ gint bar_pane_keywords_dnd_motion(GtkWidget *tree_view, GdkDragContext *context,
 
 	return TRUE;
 }
+#endif
 
 /*
  *-------------------------------------------------------------------
@@ -1055,7 +1053,6 @@ void bar_pane_keywords_revert_cb(GtkWidget *, gpointer data)
 {
 	auto pkd = static_cast<PaneKeywordsData *>(data);
 	GList *work;
-	GtkTreePath *tree_path;
 	gchar *path;
 
 	gtk_tree_view_collapse_all(GTK_TREE_VIEW(pkd->keyword_treeview));
@@ -1064,10 +1061,9 @@ void bar_pane_keywords_revert_cb(GtkWidget *, gpointer data)
 	while (work)
 		{
 		path = static_cast<gchar *>(work->data);
-		tree_path = gtk_tree_path_new_from_string(path);
+		g_autoptr(GtkTreePath) tree_path = gtk_tree_path_new_from_string(path);
 		gtk_tree_view_expand_to_path(GTK_TREE_VIEW(pkd->keyword_treeview), tree_path);
 		work = work->next;
-		gtk_tree_path_free(tree_path);
 		}
 
 	bar_keyword_tree_sync(pkd);
@@ -1494,28 +1490,28 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	gtk_tree_view_append_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 	gtk_tree_view_set_expander_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 
-	gtk_drag_source_set(pkd->keyword_treeview,
+	gq_gtk_drag_source_set(pkd->keyword_treeview,
 	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    bar_pane_keywords_drag_types.data(), bar_pane_keywords_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_get",
 			 G_CALLBACK(bar_pane_keywords_dnd_get), pkd);
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_begin",
 			 G_CALLBACK(bar_pane_keywords_dnd_begin), pkd);
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_end",
 			 G_CALLBACK(bar_pane_keywords_dnd_end), pkd);
 
-	gtk_drag_dest_set(pkd->keyword_treeview,
+	gq_gtk_drag_dest_set(pkd->keyword_treeview,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  bar_pane_keywords_drop_types.data(), bar_pane_keywords_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_data_received",
 			 G_CALLBACK(bar_pane_keywords_dnd_receive), pkd);
 
-	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
 			 G_CALLBACK(bar_pane_keywords_dnd_motion), pkd);
 
 	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "button_release_event",
@@ -1752,7 +1748,6 @@ void bar_pane_keywords_entry_add_from_config(GtkWidget *pane, const gchar **attr
 #else
 	PaneKeywordsData *pkd;
 	gchar *path = nullptr;
-	GtkTreePath *tree_path;
 
 	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!pkd) return;
@@ -1764,9 +1759,8 @@ void bar_pane_keywords_entry_add_from_config(GtkWidget *pane, const gchar **attr
 
 		if (READ_CHAR_FULL("path", path))
 			{
-			tree_path = gtk_tree_path_new_from_string(path);
+			g_autoptr(GtkTreePath) tree_path = gtk_tree_path_new_from_string(path);
 			gtk_tree_view_expand_to_path(GTK_TREE_VIEW(pkd->keyword_treeview), tree_path);
-			gtk_tree_path_free(tree_path);
 			pkd->expanded_rows = g_list_append(pkd->expanded_rows, g_strdup(path));
 			continue;
 			}

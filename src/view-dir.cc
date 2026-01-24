@@ -342,17 +342,14 @@ static gboolean vd_rename_cb(TreeEditData *td, const gchar *, const gchar *new_n
 
 static void vd_rename_by_data(ViewDir *vd, FileData *fd)
 {
-	GtkTreeModel *store;
-	GtkTreePath *tpath;
 	GtkTreeIter iter;
-
 	if (!fd || !vd_find_row(vd, fd, &iter)) return;
-	store = gtk_tree_view_get_model(GTK_TREE_VIEW(vd->view));
-	tpath = gtk_tree_model_get_path(store, &iter);
+
+	GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(vd->view));
+	g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 
 	tree_edit_by_path(GTK_TREE_VIEW(vd->view), tpath, 0, fd->name,
-			  vd_rename_cb, vd);
-	gtk_tree_path_free(tpath);
+	                  vd_rename_cb, vd);
 }
 
 
@@ -809,17 +806,18 @@ static void vd_dest_set(ViewDir *vd, gint enable)
 {
 	if (enable)
 		{
-		gtk_drag_dest_set(vd->view,
+		gq_gtk_drag_dest_set(vd->view,
 		                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 		                  vd_dnd_drop_types.data(), vd_dnd_drop_types.size(),
 		                  static_cast<GdkDragAction>(GDK_ACTION_MOVE | GDK_ACTION_COPY));
 		}
 	else
 		{
-		gtk_drag_dest_unset(vd->view);
+		gq_gtk_drag_dest_unset(vd->view);
 		}
 }
 
+#if !HAVE_GTK4
 static void vd_dnd_get(GtkWidget *, GdkDragContext *,
 			   GtkSelectionData *selection_data, guint info,
 			   guint, gpointer data)
@@ -869,16 +867,15 @@ static void vd_dnd_drop_receive(GtkWidget *widget, GdkDragContext *context,
 				guint, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
-	GtkTreePath *tpath;
 	FileData *fd = nullptr;
 
 	vd->click_fd = nullptr;
 
-	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), x, y,
-					  &tpath, nullptr, nullptr, nullptr))
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), x, y,
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(widget), tpath);
-		gtk_tree_path_free(tpath);
 		}
 
 	if (!fd) return;
@@ -942,14 +939,13 @@ static void vd_dnd_drop_receive(GtkWidget *widget, GdkDragContext *context,
 
 static void vd_dnd_drop_update(ViewDir *vd, gint x, gint y)
 {
-	GtkTreePath *tpath;
 	FileData *fd = nullptr;
 
-	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(vd->view), x, y,
-					  &tpath, nullptr, nullptr, nullptr))
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(vd->view), x, y,
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(vd->view), tpath);
-		gtk_tree_path_free(tpath);
 		}
 
 	if (fd != vd->drop_fd)
@@ -966,6 +962,7 @@ void vd_dnd_drop_scroll_cancel(ViewDir *vd)
 {
 	g_clear_handle_id(&vd->drop_scroll_id, g_source_remove);
 }
+#endif
 
 static gboolean vd_auto_scroll_idle_cb(gpointer data)
 {
@@ -1033,22 +1030,22 @@ static void vd_dnd_drop_leave(GtkWidget *, GdkDragContext *, guint, gpointer dat
 
 void vd_dnd_init(ViewDir *vd)
 {
-	gtk_drag_source_set(vd->view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(vd->view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
-	g_signal_connect(G_OBJECT(vd->view), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_data_get",
 			 G_CALLBACK(vd_dnd_get), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_begin",
 			 G_CALLBACK(vd_dnd_begin), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_end",
 			 G_CALLBACK(vd_dnd_end), vd);
 
 	vd_dest_set(vd, TRUE);
-	g_signal_connect(G_OBJECT(vd->view), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_data_received",
 			 G_CALLBACK(vd_dnd_drop_receive), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_motion",
 			 G_CALLBACK(vd_dnd_drop_motion), vd);
-	g_signal_connect(G_OBJECT(vd->view), "drag_leave",
+	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_leave",
 			 G_CALLBACK(vd_dnd_drop_leave), vd);
 }
 
@@ -1079,7 +1076,7 @@ static GdkRGBA *vd_color_shifted(GtkWidget *widget)
 		GtkStyleContext *style_context;
 
 		style_context = gtk_widget_get_style_context(widget);
-		gq_gtk_style_context_get_background_color(style_context, GTK_STATE_FLAG_NORMAL, &color);
+		deprecated_gtk_style_context_get_background_color(style_context, GTK_STATE_FLAG_NORMAL, &color);
 
 		shift_color(color);
 		done = widget;
@@ -1103,7 +1100,6 @@ void vd_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell, GtkTreeModel *tree_
 gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
-	GtkTreePath *tpath;
 	FileData *fd = nullptr;
 
 	if (layout_handle_user_defined_mouse_buttons(vd->layout, bevent))
@@ -1119,12 +1115,12 @@ gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 
 	if (bevent->button != GDK_BUTTON_PRIMARY) return TRUE;
 
-	if ((bevent->x != 0 || bevent->y != 0) &&
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    (bevent->x != 0 || bevent->y != 0) &&
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
 					  &tpath, nullptr, nullptr, nullptr))
 		{
 		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(widget), tpath);
-		gtk_tree_path_free(tpath);
 		}
 
 	if (fd && vd->click_fd == fd)

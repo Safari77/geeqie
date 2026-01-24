@@ -1222,18 +1222,17 @@ static gboolean search_result_press_cb(GtkWidget *widget, GdkEventButton *bevent
 {
 	auto sd = static_cast<SearchData *>(data);
 	GtkTreeModel *store;
-	GtkTreePath *tpath;
 	GtkTreeIter iter;
 	MatchFileData *mfd = nullptr;
 
 	store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 
-	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
-					  &tpath, nullptr, nullptr, nullptr))
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, SEARCH_COLUMN_POINTER, &mfd, -1);
-		gtk_tree_path_free(tpath);
 		}
 
 	sd->click_fd = mfd ? mfd->fd : nullptr;
@@ -1263,9 +1262,8 @@ static gboolean search_result_press_cb(GtkWidget *widget, GdkEventButton *bevent
 			gtk_tree_selection_unselect_all(selection);
 			gtk_tree_selection_select_iter(selection, &iter);
 
-			tpath = gtk_tree_model_get_path(store, &iter);
+			g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 			gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-			gtk_tree_path_free(tpath);
 			}
 		return TRUE;
 		}
@@ -1287,7 +1285,6 @@ static gboolean search_result_release_cb(GtkWidget *widget, GdkEventButton *beve
 {
 	auto sd = static_cast<SearchData *>(data);
 	GtkTreeModel *store;
-	GtkTreePath *tpath;
 	GtkTreeIter iter;
 
 	MatchFileData *mfd = nullptr;
@@ -1296,13 +1293,13 @@ static gboolean search_result_release_cb(GtkWidget *widget, GdkEventButton *beve
 
 	store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 
-	if ((bevent->x != 0 || bevent->y != 0) &&
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    (bevent->x != 0 || bevent->y != 0) &&
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
-					  &tpath, nullptr, nullptr, nullptr))
+	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, SEARCH_COLUMN_POINTER, &mfd, -1);
-		gtk_tree_path_free(tpath);
 		}
 
 	if (bevent->button == GDK_BUTTON_MIDDLE)
@@ -1335,9 +1332,8 @@ static gboolean search_result_release_cb(GtkWidget *widget, GdkEventButton *beve
 		gtk_tree_selection_unselect_all(selection);
 		gtk_tree_selection_select_iter(selection, &iter);
 
-		tpath = gtk_tree_model_get_path(store, &iter);
+		g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 		gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-		gtk_tree_path_free(tpath);
 
 		return TRUE;
 		}
@@ -1490,7 +1486,7 @@ static gboolean search_window_keypress_cb(GtkWidget *, GdkEventKey *event, gpoin
  * dnd
  *-------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void search_dnd_data_set(GtkWidget *, GdkDragContext *,
 				GtkSelectionData *selection_data, guint,
 				guint, gpointer data)
@@ -1516,15 +1512,13 @@ static void search_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
 		if (search_result_find_row(sd, sd->click_fd, &iter) >= 0)
 			{
 			GtkTreeSelection *selection;
-			GtkTreePath *tpath;
 
 			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
 			gtk_tree_selection_unselect_all(selection);
 			gtk_tree_selection_select_iter(selection, &iter);
 
-			tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
+			g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(GTK_TREE_MODEL(store), &iter);
 			gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget), tpath, nullptr, FALSE);
-			gtk_tree_path_free(tpath);
 			}
 		}
 
@@ -1629,38 +1623,39 @@ static void search_image_content_dnd_received_cb(GtkWidget *, GdkDragContext *,
 
 static void search_dnd_init(SearchData *sd)
 {
-	gtk_drag_source_set(sd->ui.result_view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(sd->ui.result_view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    result_drag_types.data(), result_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_data_get",
 	                 G_CALLBACK(search_dnd_data_set), sd);
-	g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.result_view), "drag_begin",
 	                 G_CALLBACK(search_dnd_begin), sd);
 
-	gtk_drag_dest_set(sd->ui.entry_gps_coord,
+	gq_gtk_drag_dest_set(sd->ui.entry_gps_coord,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.entry_gps_coord), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.entry_gps_coord), "drag_data_received",
 	                 G_CALLBACK(search_gps_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(sd->ui.path_entry,
+	gq_gtk_drag_dest_set(sd->ui.path_entry,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.path_entry), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.path_entry), "drag_data_received",
 	                 G_CALLBACK(search_path_entry_dnd_received_cb), sd);
 
-	gtk_drag_dest_set(sd->ui.entry_similarity,
+	gq_gtk_drag_dest_set(sd->ui.entry_similarity,
 	                  GTK_DEST_DEFAULT_ALL,
 	                  result_drop_types.data(), result_drop_types.size(),
 	                  GDK_ACTION_COPY);
 
-	g_signal_connect(G_OBJECT(sd->ui.entry_similarity), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(sd->ui.entry_similarity), "drag_data_received",
 	                 G_CALLBACK(search_image_content_dnd_received_cb), sd);
 }
+#endif
 
 /*
  *-------------------------------------------------------------------

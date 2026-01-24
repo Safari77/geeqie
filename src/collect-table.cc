@@ -197,20 +197,19 @@ static CollectInfo *collection_table_find_data(CollectTable *ct, gint row, gint 
 
 static CollectInfo *collection_table_find_data_by_coord(CollectTable *ct, gint x, gint y, GtkTreeIter *iter)
 {
-	GtkTreePath *tpath;
 	GtkTreeViewColumn *column;
 	GtkTreeModel *store;
 	GtkTreeIter row;
 	GList *list;
 	gint n;
 
+	g_autoptr(GtkTreePath) tpath = nullptr;
 	if (!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(ct->listview), x, y,
 					   &tpath, &column, nullptr, nullptr))
 		return nullptr;
 
 	store = gtk_tree_view_get_model(GTK_TREE_VIEW(ct->listview));
 	gtk_tree_model_get_iter(store, &row, tpath);
-	gtk_tree_path_free(tpath);
 
 	gtk_tree_model_get(store, &row, CTABLE_COLUMN_POINTER, &list, -1);
 	if (!list) return nullptr;
@@ -1097,18 +1096,16 @@ void collection_table_set_focus(CollectTable *ct, CollectInfo *info)
 
 	if (collection_table_find_iter(ct, ct->focus_info, &iter, nullptr))
 		{
-		GtkTreePath *tpath;
 		GtkTreeViewColumn *column;
 		GtkTreeModel *store;
 
 		tree_view_row_make_visible(GTK_TREE_VIEW(ct->listview), &iter, FALSE);
 
 		store = gtk_tree_view_get_model(GTK_TREE_VIEW(ct->listview));
-		tpath = gtk_tree_model_get_path(store, &iter);
+		g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 		/* focus is set to an extra column with 0 width to hide focus, we draw it ourself */
 		column = gtk_tree_view_get_column(GTK_TREE_VIEW(ct->listview), COLLECT_TABLE_MAX_COLUMNS);
 		gtk_tree_view_set_cursor(GTK_TREE_VIEW(ct->listview), tpath, column, FALSE);
-		gtk_tree_path_free(tpath);
 		}
 }
 
@@ -1368,7 +1365,6 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 	CollectInfo *info = nullptr;
 	GtkTreeModel *store;
 	GtkTreeIter iter;
-	GtkTreePath *tpath;
 	GtkTreeViewColumn *column;
 	GdkSeat *seat;
 	GdkDevice *device;
@@ -1387,10 +1383,9 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 		gint col;
 		if (collection_table_find_iter(ct, source, &iter, &col))
 			{
-			tpath = gtk_tree_model_get_path(store, &iter);
+			g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 			column = gtk_tree_view_get_column(GTK_TREE_VIEW(ct->listview), col);
 			gtk_tree_view_get_background_area(GTK_TREE_VIEW(ct->listview), tpath, column, cell);
-			gtk_tree_path_free(tpath);
 
 			info = source;
 			*after = !!(x > cell->x + (cell->width / 2));
@@ -1398,8 +1393,9 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 		return info;
 		}
 
-	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(ct->listview), x, y,
-					  &tpath, &column, nullptr, nullptr))
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(ct->listview), x, y,
+	                                  &tpath, &column, nullptr, nullptr))
 		{
 		GList *list;
 		gint n;
@@ -1415,8 +1411,6 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 			gtk_tree_view_get_background_area(GTK_TREE_VIEW(ct->listview), tpath, column, cell);
 			*after = !!(x > cell->x + (cell->width / 2));
 			}
-
-		gtk_tree_path_free(tpath);
 		}
 
 	if (info == nullptr)
@@ -1433,10 +1427,9 @@ static CollectInfo *collection_table_insert_find(CollectTable *ct, CollectInfo *
 
 			if (collection_table_find_iter(ct, info, &iter, &col))
 				{
-				tpath = gtk_tree_model_get_path(store, &iter);
+				g_autoptr(GtkTreePath) tpath = gtk_tree_model_get_path(store, &iter);
 				column = gtk_tree_view_get_column(GTK_TREE_VIEW(ct->listview), col);
 				gtk_tree_view_get_background_area(GTK_TREE_VIEW(ct->listview), tpath, column, cell);
-				gtk_tree_path_free(tpath);
 				}
 			}
 		}
@@ -2102,7 +2095,7 @@ static GtkWidget *collection_table_drop_menu(CollectTable *ct)
  * dnd
  *-------------------------------------------------------------------
  */
-
+#if !HAVE_GTK4
 static void collection_table_dnd_get(GtkWidget *, GdkDragContext *,
 				     GtkSelectionData *selection_data, guint info,
 				     guint, gpointer data)
@@ -2271,27 +2264,28 @@ static void collection_table_dnd_leave(GtkWidget *, GdkDragContext *, guint, gpo
 
 static void collection_table_dnd_init(CollectTable *ct)
 {
-	gtk_drag_source_set(ct->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
+	gq_gtk_drag_source_set(ct->listview, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    collection_drag_types.data(), collection_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-	g_signal_connect(G_OBJECT(ct->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_data_get",
 			 G_CALLBACK(collection_table_dnd_get), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_begin",
 			 G_CALLBACK(collection_table_dnd_begin), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_end",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_end",
 			 G_CALLBACK(collection_table_dnd_end), ct);
 
-	gtk_drag_dest_set(ct->listview,
+	gq_gtk_drag_dest_set(ct->listview,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  collection_drop_types.data(), collection_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
-	g_signal_connect(G_OBJECT(ct->listview), "drag_motion",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_motion",
 			 G_CALLBACK(collection_table_dnd_motion), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_leave",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_leave",
 			 G_CALLBACK(collection_table_dnd_leave), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "drag_data_received",
+	gq_drag_g_signal_connect(G_OBJECT(ct->listview), "drag_data_received",
 			 G_CALLBACK(collection_table_dnd_receive), ct);
 }
+#endif
 
 /*
  *-----------------------------------------------------------------------------
@@ -2306,19 +2300,9 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 /* @FIXME GTK4 stub */
 	return;
 #else
-	auto cd = static_cast<ColumnData *>(data);
-	CollectInfo *info;
-	CollectTable *ct;
-	GdkRGBA color_bg;
-	GdkRGBA color_fg;
-	GList *list;
-	GtkStyle *style;
-
 	if (!GQV_IS_CELL_RENDERER_ICON(cell)) return;
 
-	ct = cd->ct;
-
-	gtk_tree_model_get(tree_model, iter, CTABLE_COLUMN_POINTER, &list, -1);
+	auto *cd = static_cast<ColumnData *>(data);
 
 	/** @FIXME this is a primitive hack to stop a crash.
 	 * When compiled with GTK3, if a Collection window containing
@@ -2327,10 +2311,28 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 	 */
 	if (cd->number == COLLECT_TABLE_MAX_COLUMNS) return;
 
-	info = static_cast<CollectInfo *>(g_list_nth_data(list, cd->number));
+	GList *list;
+	gtk_tree_model_get(tree_model, iter, CTABLE_COLUMN_POINTER, &list, -1);
 
-	style = gq_gtk_widget_get_style(ct->listview);
-	if (info && (info->flag_mask & SELECTION_SELECTED))
+	auto *info = static_cast<CollectInfo *>(g_list_nth_data(list, cd->number));
+	if (!info)
+		{
+		g_object_set(cell,
+		             "pixbuf", NULL,
+		             "text", NULL,
+		             "cell-background-set", FALSE,
+		             "foreground-set", FALSE,
+		             "has-focus", FALSE,
+		             NULL);
+		return;
+		}
+
+	const CollectTable *ct = cd->ct;
+
+	GtkStyle *style = deprecated_gtk_widget_get_style(ct->listview);
+	GdkRGBA color_bg;
+	GdkRGBA color_fg;
+	if (info->flag_mask & SELECTION_SELECTED)
 		{
 		color_fg = convert_gdkcolor_to_gdkrgba(&style->text[GTK_STATE_SELECTED]);
 		color_bg = convert_gdkcolor_to_gdkrgba(&style->base[GTK_STATE_SELECTED]);
@@ -2341,23 +2343,13 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 		color_bg = convert_gdkcolor_to_gdkrgba(&style->base[GTK_STATE_NORMAL]);
 		}
 
-	if (info && (info->flag_mask & SELECTION_PRELIGHT))
+	if (info->flag_mask & SELECTION_PRELIGHT)
 		{
 		shift_color(color_bg);
 		}
 
-	g_autofree gchar *star_rating = nullptr;
-	if (ct->show_stars && info && info->fd)
-		{
-		star_rating = metadata_read_rating_stars(info->fd);
-		}
-	else
-		{
-		star_rating = g_strdup("");
-		}
-
 	g_autoptr(GString) display_text = g_string_new("");
-	if (info && info->fd)
+	if (info->fd)
 		{
 		if (ct->show_text)
 			{
@@ -2367,6 +2359,7 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 		if (ct->show_stars)
 			{
 			if (display_text->len) g_string_append(display_text, "\n");
+			g_autofree gchar *star_rating = metadata_read_rating_stars(info->fd);
 			g_string_append(display_text, star_rating);
 			}
 
@@ -2377,29 +2370,15 @@ static void collection_table_cell_data_cb(GtkTreeViewColumn *, GtkCellRenderer *
 			}
 		}
 
-
-	if (info)
-		{
-		g_object_set(cell,
-		             "pixbuf", info->pixbuf,
-		             "text", display_text->str,
-		             "cell-background-rgba", &color_bg,
-		             "cell-background-set", TRUE,
-		             "foreground-rgba", &color_fg,
-		             "foreground-set", TRUE,
-		             "has-focus", (ct->focus_info == info),
-		             NULL);
-		}
-	else
-		{
-		g_object_set(cell,
-		             "pixbuf", NULL,
-		             "text", NULL,
-		             "cell-background-set", FALSE,
-		             "foreground-set", FALSE,
-		             "has-focus", FALSE,
-		             NULL);
-		}
+	g_object_set(cell,
+	             "pixbuf", info->pixbuf,
+	             "text", display_text->str,
+	             "cell-background-rgba", &color_bg,
+	             "cell-background-set", TRUE,
+	             "foreground-rgba", &color_fg,
+	             "foreground-set", TRUE,
+	             "has-focus", (ct->focus_info == info),
+	             NULL);
 #endif
 }
 

@@ -90,9 +90,11 @@ constexpr gint display_order[6] = {
 
 constexpr gint ADVANCED_EXIF_DATA_COLUMN_WIDTH = 200;
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 1> advanced_exif_drag_types{{
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 } // namespace
 
@@ -180,7 +182,7 @@ void advanced_exif_set_fd(GtkWidget *window, FileData *fd)
 	advanced_exif_update(ew);
 }
 
-
+#if !HAVE_GTK4
 static void advanced_exif_dnd_get(GtkWidget *listview, GdkDragContext *,
 				  GtkSelectionData *selection_data,
 				  guint, guint, gpointer)
@@ -213,7 +215,7 @@ static void advanced_exif_dnd_begin(GtkWidget *listview, GdkDragContext *context
 
 	dnd_set_drag_label(listview, context, key);
 }
-
+#endif
 
 
 static void advanced_exif_add_column(GtkWidget *listview, const gchar *title, gint n, gboolean sizable)
@@ -486,16 +488,18 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	gtk_tree_view_set_search_column(GTK_TREE_VIEW(ew->listview), EXIF_ADVCOL_DESCRIPTION);
 	gtk_tree_view_set_search_equal_func(GTK_TREE_VIEW(ew->listview), search_function_cb, ew, nullptr);
 
-	gtk_drag_source_set(ew->listview,
+#if !HAVE_GTK4
+	gq_gtk_drag_source_set(ew->listview,
 	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    advanced_exif_drag_types.data(), advanced_exif_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 
-	g_signal_connect(G_OBJECT(ew->listview), "drag_data_get",
+	gq_drag_g_signal_connect(G_OBJECT(ew->listview), "drag_data_get",
 			 G_CALLBACK(advanced_exif_dnd_get), ew);
 
-	g_signal_connect(G_OBJECT(ew->listview), "drag_begin",
+	gq_drag_g_signal_connect(G_OBJECT(ew->listview), "drag_begin",
 			 G_CALLBACK(advanced_exif_dnd_begin), ew);
+#endif
 
 #if HAVE_GTK4
 	controller = gtk_event_controller_key_new();

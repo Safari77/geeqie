@@ -22,6 +22,8 @@
 
 #include <config.h>
 
+#include "compat-deprecated.h"
+
 #if HAVE_GTK4
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
@@ -99,6 +101,26 @@ void gq_gtk_viewport_set_shadow_type(GtkWidget *, int)
 {
 }
 
+void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
+{
+}
+
+void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
+{
+}
+
+void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, gpointer, gint n_targets, GdkDragAction actions)
+{
+}
+
+void gq_gtk_drag_dest_set(GtkWidget *widget, gpointer, gpointer, gint n_targets, GdkDragAction actions)
+{
+}
+
+void gq_gtk_drag_dest_unset(GtkWidget *widget)
+{
+}
+
 #else
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
@@ -107,7 +129,7 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 {
-	return gtk_image_new_from_stock(stock_id, size);
+	return deprecated_gtk_image_new_from_stock(stock_id, size);
 }
 
 GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
@@ -123,6 +145,31 @@ GList *gq_gtk_widget_get_children(GtkWidget *widget)
 void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
 {
 	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), static_cast<GtkShadowType>(type));
+}
+
+void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
+{
+	g_signal_connect(instance, detailed_signal, c_handler, data);
+}
+
+void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
+{
+	g_signal_connect(instance, detailed_signal, c_handler, data);
+}
+
+void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions)
+{
+	gtk_drag_source_set(widget, start_button_mask, targets, n_targets, actions);
+}
+
+void gq_gtk_drag_dest_set(GtkWidget *widget, GtkDestDefaults flags, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions)
+{
+	gtk_drag_dest_set(widget, flags, targets, n_targets, actions);
+}
+
+void gq_gtk_drag_dest_unset(GtkWidget *widget)
+{
+	gtk_drag_dest_unset(widget);
 }
 
 #endif

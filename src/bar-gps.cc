@@ -145,6 +145,7 @@ void bar_pane_gps_close_save_cb(GenericDialog *, gpointer data)
 	g_list_free(pgd->geocode_list);
 }
 
+#if !HAVE_GTK4
 void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
                               gint x, gint y,
                               GtkSelectionData *selection_data, guint info,
@@ -261,17 +262,18 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 #endif
 		}
 }
+#endif
 
 void bar_pane_gps_dnd_init(gpointer data)
 {
 	auto pgd = static_cast<PaneGPSData *>(data);
 
-	gtk_drag_dest_set(pgd->widget,
+	gq_gtk_drag_dest_set(pgd->widget,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_HIGHLIGHT | GTK_DEST_DEFAULT_DROP),
 	                  bar_pane_gps_drop_types.data(), bar_pane_gps_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
-	g_signal_connect(G_OBJECT(pgd->widget), "drag_data_received",
-			 G_CALLBACK(bar_pane_gps_dnd_receive), NULL);
+	gq_drag_g_signal_connect(G_OBJECT(pgd->widget), "drag_data_received",
+			 G_CALLBACK(bar_pane_gps_dnd_receive), nullptr);
 
 }
 
