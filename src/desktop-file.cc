@@ -23,6 +23,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 
 #include <gdk/gdk.h>
@@ -432,40 +433,33 @@ gint editor_list_window_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter
 void plugin_disable_cb(GtkCellRendererToggle *, gchar *path_str, gpointer data)
 {
 	auto ewl = static_cast<EditorListWindow *>(data);
-	GtkTreePath *tpath;
+
+	GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(ewl->view));
 	GtkTreeIter iter;
-	GtkTreeModel *model;
+	g_autoptr(GtkTreePath) tpath = gtk_tree_path_new_from_string(path_str);
+	gtk_tree_model_get_iter(model, &iter, tpath);
+
 	gboolean disabled;
-	gchar *path;
-	GList *list;
-	gchar *haystack;
+	g_autofree gchar *path = nullptr;
+	gtk_tree_model_get(model, &iter,
+	                   DESKTOP_FILE_COLUMN_DISABLED, &disabled,
+	                   DESKTOP_FILE_COLUMN_PATH, &path,
+	                   -1);
 
-	tpath = gtk_tree_path_new_from_string(path_str);
-	model = gtk_tree_view_get_model(GTK_TREE_VIEW(ewl->view));
-	gtk_tree_model_get_iter(GTK_TREE_MODEL(model), &iter, tpath);
-	gtk_tree_model_get(GTK_TREE_MODEL(model), &iter, DESKTOP_FILE_COLUMN_DISABLED, &disabled, -1);
-	gtk_tree_model_get(GTK_TREE_MODEL(model), &iter, DESKTOP_FILE_COLUMN_PATH, &path, -1);
+	gtk_list_store_set(GTK_LIST_STORE(desktop_file_list), &iter,
+	                   DESKTOP_FILE_COLUMN_DISABLED, !disabled,
+	                   -1);
 
-	gtk_list_store_set(GTK_LIST_STORE(desktop_file_list), &iter, DESKTOP_FILE_COLUMN_DISABLED, !disabled, -1);
-
-	if (!disabled)
+	if (path)
 		{
-		options->disabled_plugins = g_list_append((options->disabled_plugins), g_strdup(path));
-		}
-	else
-		{
-		list = options->disabled_plugins;
-		while (list)
+		if (!disabled)
 			{
-			haystack = static_cast<gchar *>(list->data);
-
-			if (haystack && strcmp(haystack, path) == 0)
-				{
-				options->disabled_plugins = g_list_remove(options->disabled_plugins, haystack);
-				g_free(haystack);
-				}
-
-			list = list->next;
+			options->disabled_plugins.emplace_back(path);
+			}
+		else
+			{
+			options->disabled_plugins.erase(std::remove(options->disabled_plugins.begin(), options->disabled_plugins.end(), path),
+			                                options->disabled_plugins.end());
 			}
 		}
 
@@ -480,14 +474,7 @@ void plugin_disable_set_func(GtkTreeViewColumn *, GtkCellRenderer *cell,
 
 	gtk_tree_model_get(tree_model, iter, DESKTOP_FILE_COLUMN_DISABLED, &disabled, -1);
 
-	if (disabled)
-		{
-		g_object_set(GTK_CELL_RENDERER(cell), "active", TRUE, NULL);
-		}
-	else
-		{
-		g_object_set(GTK_CELL_RENDERER(cell), "active", FALSE, NULL);
-		}
+	g_object_set(GTK_CELL_RENDERER(cell), "active", disabled, NULL);
 }
 
 void editor_list_window_create()
