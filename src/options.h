@@ -249,6 +249,7 @@ struct ConfOptions
 	/* file filtering */
 	struct {
 		gboolean show_hidden_files;
+		gboolean dot_prefix_hidden_files;
 		gboolean show_parent_directory;
 		gboolean show_dot_directory;
 		gboolean disable_file_extension_checks;

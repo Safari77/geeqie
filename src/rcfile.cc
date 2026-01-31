@@ -564,6 +564,7 @@ static void write_global_attributes(GString *outstr, gint indent)
 
 	/* Filtering Options */
 	WRITE_NL(); WRITE_BOOL(*options, file_filter.show_hidden_files);
+	WRITE_NL(); WRITE_BOOL(*options, file_filter.dot_prefix_hidden_files);
 	WRITE_NL(); WRITE_BOOL(*options, file_filter.show_parent_directory);
 	WRITE_NL(); WRITE_BOOL(*options, file_filter.show_dot_directory);
 	WRITE_NL(); WRITE_BOOL(*options, file_filter.disable_file_extension_checks);
@@ -1058,6 +1059,7 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 
 		/* Filtering options */
 		if (READ_BOOL(*options, file_filter.show_hidden_files)) continue;
+		if (READ_BOOL(*options, file_filter.dot_prefix_hidden_files)) continue;
 		if (READ_BOOL(*options, file_filter.show_parent_directory)) continue;
 		if (READ_BOOL(*options, file_filter.show_dot_directory)) continue;
 		if (READ_BOOL(*options, file_filter.disable_file_extension_checks)) continue;
