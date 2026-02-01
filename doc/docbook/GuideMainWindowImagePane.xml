@@ -55,8 +55,7 @@
     <section id="Keyboard">
       <title>Keyboard and mouse</title>
       <para>
-        <emphasis role="underline"><link linkend="GuideReferenceKeyboardShortcuts" endterm="titleGuideReferenceKeyboardShortcuts" /></emphasis>
-        describes how you may manipulate the image displayed.
+        Keyboard Shortcuts describes how you may manipulate the image displayed.
       </para>
       <note>
         <para>
@@ -121,7 +120,6 @@
       <title>Mouse</title>
       <para>
         To change to the next image in the list click the left mouse button, click the middle mouse button to change to the previous image. The mouse wheel can also be used to change the current image
-        <footnoteref linkend='ref2' />
         .
       </para>
       <para />

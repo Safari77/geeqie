@@ -1415,7 +1415,17 @@ static void layout_menu_help_keys_cb(GtkAction *, gpointer data)
 	auto lw = static_cast<LayoutWindow *>(data);
 
 	layout_exit_fullscreen(lw);
-	help_window_show("GuideReferenceKeyboardShortcuts.html");
+
+	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/keyboard-shortcuts.ui");
+
+	GtkWidget *win = GTK_WIDGET(gtk_builder_get_object(builder, "shortcuts-builder"));
+
+#if !HAVE_GTK4
+	gtk_window_set_type_hint(GTK_WINDOW(win), GDK_WINDOW_TYPE_HINT_NORMAL);
+#endif
+
+	g_object_unref(builder);
+	gq_gtk_widget_show_all(win);
 }
 
 static void layout_menu_notes_cb(GtkAction *, gpointer data)
