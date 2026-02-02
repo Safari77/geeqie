@@ -92,6 +92,11 @@ gboolean FileData::FileList::is_hidden_file(const gchar *filepath)
 	GFileInfo *info;
 	gboolean res = FALSE;
 
+	if (filepath == nullptr)
+		{
+		return FALSE;
+		}
+
 	if (options->file_filter.dot_prefix_hidden_files)
 		{
 		const gchar *base = strrchr(filepath, G_DIR_SEPARATOR);
