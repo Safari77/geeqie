@@ -79,7 +79,10 @@ GList *FileData::FileList::filter_out_sidecars(GList *flist)
  * @param filepath Full path to file
  * @returns
  *
- * Takes into account the contents of a .hidden file.
+ * Takes into account the contents of a .hidden file
+ * unless the dot_prefix_hidden_files override is selected,
+ * in which case only the file dot_prefix is checked.
+ *
  * The Preferences/File Filters/Show Hidden Files Or Folders
  * option will ultimately determine if the file is displayed.
  */
@@ -88,6 +91,29 @@ gboolean FileData::FileList::is_hidden_file(const gchar *filepath)
 	GFile *file;
 	GFileInfo *info;
 	gboolean res = FALSE;
+
+	if (filepath == nullptr)
+		{
+		return FALSE;
+		}
+
+	if (options->file_filter.dot_prefix_hidden_files)
+		{
+		const gchar *base = strrchr(filepath, G_DIR_SEPARATOR);
+		base = base ? base + 1 : filepath;
+
+		if (base[0] != '.')
+			{
+			return FALSE;
+			}
+
+		if (base[1] == '\0' || (base[1] == '.' && base[2] == '\0'))
+			{
+			return FALSE;
+			}
+
+		return TRUE;
+		}
 
 	file = g_file_new_for_path(filepath);
 	info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN, G_FILE_QUERY_INFO_NONE, nullptr, nullptr);

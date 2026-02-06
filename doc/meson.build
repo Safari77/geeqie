@@ -24,6 +24,7 @@ if not option.disabled()
                  guideindex_ln,
                 '@OUTPUT@'
                 ],
+            build_by_default: true,
             install: false
             )
         summary({'help': ['Help files created:', true]}, section: 'Documentation', bool_yn: true)

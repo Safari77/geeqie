@@ -19,8 +19,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _MAIN_DEFINES_H
-#define _MAIN_DEFINES_H
+#ifndef MAIN_DEFINES_H
+#define MAIN_DEFINES_H
 
 #define USE_XDG 1
 
@@ -45,11 +45,6 @@
 #define DEFAULT_WINDOW_LAYOUT "default_window_layout.xml"
 
 #define GQ_COLLECTION_EXT ".gqv"
-
-// @todo Deduplicate mousewheel_scrolls processing
-#define MOUSEWHEEL_SCROLL_SIZE 20
-
-#define GQ_RESPONSE_WITH_RENAME 1
 
 #define GQ_DEFAULT_SHELL_PATH "/bin/sh"
 #define GQ_DEFAULT_SHELL_OPTIONS "-c"
@@ -174,5 +169,5 @@
 // PIXBUF_INLINE_ICON_ZOOMFILLHOR
 // PIXBUF_INLINE_ICON_ZOOMFILLVERT
 
-#endif /* _MAIN_DEFINES_H */
+#endif /* MAIN_DEFINES_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

@@ -1798,15 +1798,6 @@
     <para>Menus can be permanently displayed by selecting the dotted line item at the top of each menu category. A tear off menu will behave the same as an ordinary window. To close a tear off menu, select the dotted line item at the top of the menu.</para>
     <para />
   </section>
-  <section id="Keyboardshortcuts">
-    <title>Keyboard shortcuts</title>
-    <para>
-      The keyboard sequence associated to each menu entry is listed within the main window menu bar. For reference, the complete list of default keyboard shortcuts can be found in section
-      <emphasis role="underline"><link linkend="GuideReferenceKeyboardShortcuts">Keyboard Shortcuts</link></emphasis>
-      .
-    </para>
-    <para />
-  </section>
   <section id="Changingthemainwindowmenubarkeyboardshortcuts">
     <title>Changing the main window menu bar keyboard shortcuts</title>
     <para>

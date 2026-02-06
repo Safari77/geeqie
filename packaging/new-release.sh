@@ -161,11 +161,6 @@ then
 	printf '%s\n' "generate-man-page.sh failed"
 	exit 1
 fi
-if ! ./build-aux/create-shortcuts-xml.sh
-then
-	printf '%s\n' "create-shortcuts-xml.sh failed"
-	exit 1
-fi
 
 git add NEWS
 git add org.geeqie.Geeqie.metainfo.xml.in

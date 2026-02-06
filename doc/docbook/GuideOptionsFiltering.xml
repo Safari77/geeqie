@@ -16,6 +16,14 @@
       </varlistentry>
       <varlistentry>
         <term>
+          <guilabel>Use dot prefix as hidden file indicator</guilabel>
+        </term>
+        <listitem>
+          <para>Use only the file dot prefix as a method of identifying hidden files. This may speed up file operations. However, the contents of a <code>.hidden</code> file will be ignored, as will some other methods of hiding files.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
           <guilabel>Show parent folder</guilabel>
         </term>
         <listitem>

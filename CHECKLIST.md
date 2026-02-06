@@ -30,10 +30,10 @@ options
 ./build-aux/generate-man-page.sh
 ```
 
-* Update the keyboard shortcuts page in Help if any keyboard shortcuts have changed
+* Update the keyboard shortcuts window if any keyboard shortcuts have changed
 
 ```sh
-./doc/create-shortcuts-xml.sh
+./data//ui/keyboard-shortcuts.ui
 ```
 
 * Commit the changes and push to the .repo

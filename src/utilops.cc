@@ -85,6 +85,8 @@ constexpr std::array<GtkTargetEntry, 4> target_types
 	{const_cast<gchar *>("UTF8_STRING"), 0, CLIPBOARD_UTF8_STRING},
 }};
 
+constexpr gint GQ_RESPONSE_WITH_RENAME = 1;
+
 constexpr gint DIALOG_DEF_IMAGE_DIM_X = 150;
 constexpr gint DIALOG_DEF_IMAGE_DIM_Y = 100;
 
@@ -193,7 +195,7 @@ static void generic_dialog_add_image(GenericDialog *gd, GtkWidget *box,
 		}
 
 	imd = image_new(FALSE);
-	g_object_set(G_OBJECT(imd->pr), "zoom_expand", FALSE, NULL);
+	g_object_set(imd->pr, "zoom_expand", FALSE, NULL);
 	gtk_widget_set_size_request(imd->widget, DIALOG_DEF_IMAGE_DIM_X, DIALOG_DEF_IMAGE_DIM_Y);
 	gq_gtk_box_pack_start(GTK_BOX(vbox), imd->widget, TRUE, TRUE, 0);
 	image_change_fd(imd, fd1, 0.0);
@@ -226,7 +228,7 @@ static void generic_dialog_add_image(GenericDialog *gd, GtkWidget *box,
 			}
 
 		imd = image_new(FALSE);
-		g_object_set(G_OBJECT(imd->pr), "zoom_expand", FALSE, NULL);
+		g_object_set(imd->pr, "zoom_expand", FALSE, NULL);
 		gtk_widget_set_size_request(imd->widget, DIALOG_DEF_IMAGE_DIM_X, DIALOG_DEF_IMAGE_DIM_Y);
 		gq_gtk_box_pack_start(GTK_BOX(vbox), imd->widget, TRUE, TRUE, 0);
 		if (fd2) image_change_fd(imd, fd2, 0.0);

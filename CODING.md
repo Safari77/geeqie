@@ -1,7 +1,7 @@
 # Coding and Documentation Style
 
 [Error Logging](#error-logging)  
-[GPL header](#gpl-header)  
+[SPDX license](#spdx-license)  
 [Git change log](#git-change-log)  
 [Source Code Style](#source-code-style)  
 [Shell Script Style](#shell-script-style)  
@@ -70,7 +70,7 @@ This feature may be used to open an editor at a file location in the text string
 In all new files include a header, like this:
 
 ```c
-/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 ```
 
@@ -183,7 +183,7 @@ Pragma: (Indentation 2 spaces)
 Headers:
 
 ```c
-#ifndef _FILENAME_H
+#ifndef FILENAME_H
 ```
 
 Use [Names and Order of Includes](https://google.github.io/styleguide/cppguide.html#Names_and_Order_of_Includes) for headers include order.
