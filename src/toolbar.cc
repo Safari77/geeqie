@@ -50,14 +50,15 @@
 namespace
 {
 
-struct ToolbarData
-{
-	GtkWidget *vbox;
-};
-
 const gchar *action_name_key = "action_name";
+const gchar *toolbar_action_key = "toolbar_action";
 
-ToolbarData *toolbarlist[TOOLBAR_COUNT];
+GtkWidget *toolbarlist[TOOLBAR_COUNT];
+
+void action_item_delete(ActionItem *action_item)
+{
+	delete action_item;
+}
 
 } // namespace
 
@@ -134,35 +135,28 @@ static void toolbarlist_add_button(const gchar *name, const gchar *label,
 
 static void toolbarlist_add_cb(GtkWidget *widget, gpointer data)
 {
-	auto name = static_cast<const gchar *>(g_object_get_data(G_OBJECT(widget), "toolbar_add_name"));
-	auto label = static_cast<const gchar *>(g_object_get_data(G_OBJECT(widget), "toolbar_add_label"));
-	auto stock_id = static_cast<const gchar *>(g_object_get_data(G_OBJECT(widget), "toolbar_add_stock_id"));
-	auto tbbd = static_cast<ToolbarData *>(data);
+	auto *action = static_cast<ActionItem *>(g_object_get_data(G_OBJECT(widget), toolbar_action_key));
 
-	toolbarlist_add_button(name, label, stock_id, GTK_BOX(tbbd->vbox));
+	toolbarlist_add_button(action->name, action->label, action->icon_name, GTK_BOX(data));
 }
 
 // toolbar_menu_add_popup
 static gboolean toolbar_menu_add_cb(GtkWidget *, gpointer data)
 {
-	GtkWidget *item;
-	GtkWidget *menu;
+	GtkWidget *menu = popup_menu_short_lived();
 
-	menu = popup_menu_short_lived();
+	static auto *separator = new ActionItem("Separator", "Separator", "no-icon");
 
-	item = menu_item_add_stock(menu, "Separator", "Separator", G_CALLBACK(toolbarlist_add_cb), data);
-	g_object_set_data_full(G_OBJECT(item), "toolbar_add_name", g_strdup("Separator"), g_free);
-	g_object_set_data_full(G_OBJECT(item), "toolbar_add_label", g_strdup("Separator"), g_free);
-	g_object_set_data_full(G_OBJECT(item), "toolbar_add_stock_id", g_strdup("no-icon"), g_free);
+	GtkWidget *item = menu_item_add_stock(menu, "Separator", "Separator", G_CALLBACK(toolbarlist_add_cb), data);
+	g_object_set_data(G_OBJECT(item), toolbar_action_key, separator);
 
 	std::vector<ActionItem> list = get_action_items();
 
 	for (const ActionItem &action_item : list)
 		{
 		item = menu_item_add_stock(menu, action_item.label, action_item.icon_name, G_CALLBACK(toolbarlist_add_cb), data);
-		g_object_set_data_full(G_OBJECT(item), "toolbar_add_name", g_strdup(action_item.name), g_free);
-		g_object_set_data_full(G_OBJECT(item), "toolbar_add_label", g_strdup(action_item.label), g_free);
-		g_object_set_data_full(G_OBJECT(item), "toolbar_add_stock_id", g_strdup(action_item.icon_name), g_free);
+		g_object_set_data_full(G_OBJECT(item), toolbar_action_key, new ActionItem(action_item),
+		                       reinterpret_cast<GDestroyNotify>(action_item_delete));
 		}
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
@@ -177,12 +171,13 @@ static gboolean toolbar_menu_add_cb(GtkWidget *, gpointer data)
  */
 void toolbar_apply(ToolbarType bar)
 {
-	const auto layout_toolbar_apply = [bar](LayoutWindow *lw)
+	g_autoptr(GList) list = gq_gtk_widget_get_children(toolbarlist[bar]);
+
+	const auto layout_toolbar_apply = [bar, list](LayoutWindow *lw)
 	{
 		layout_toolbar_clear(lw, bar);
 
-		g_autoptr(GList) work_toolbar = gq_gtk_widget_get_children(GTK_WIDGET(toolbarlist[bar]->vbox));
-		for (GList *work = work_toolbar; work; work = work->next)
+		for (GList *work = list; work; work = work->next)
 			{
 			auto button = static_cast<GtkButton *>(work->data);
 			auto *action_name = static_cast<gchar *>(g_object_get_data(G_OBJECT(button), action_name_key));
@@ -257,11 +252,6 @@ GtkWidget *toolbar_select_new(LayoutWindow *lw, ToolbarType bar)
 
 	if (!lw) return nullptr;
 
-	if (!toolbarlist[bar])
-		{
-		toolbarlist[bar] = g_new0(ToolbarData, 1);
-		}
-
 	GtkWidget *widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gtk_widget_show(widget);
 
@@ -272,9 +262,9 @@ GtkWidget *toolbar_select_new(LayoutWindow *lw, ToolbarType bar)
 	gq_gtk_box_pack_start(GTK_BOX(widget), scrolled, TRUE, TRUE, 0);
 	gtk_widget_show(scrolled);
 
-	toolbarlist[bar]->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_show(toolbarlist[bar]->vbox);
-	gq_gtk_container_add(scrolled, toolbarlist[bar]->vbox);
+	toolbarlist[bar] = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	gtk_widget_show(toolbarlist[bar]);
+	gq_gtk_container_add(scrolled, toolbarlist[bar]);
 	gq_gtk_viewport_set_shadow_type(GTK_WIDGET(gq_gtk_bin_get_child(GTK_WIDGET(scrolled))),
 																GTK_SHADOW_NONE);
 
@@ -288,7 +278,7 @@ GtkWidget *toolbar_select_new(LayoutWindow *lw, ToolbarType bar)
 	                                            G_CALLBACK(toolbar_menu_add_cb), toolbarlist[bar]);
 	gtk_widget_show(add_button);
 
-	toolbarlist_populate(lw->toolbar_actions[bar], GTK_BOX(toolbarlist[bar]->vbox));
+	toolbarlist_populate(lw->toolbar_actions[bar], GTK_BOX(toolbarlist[bar]));
 
 	return widget;
 }
