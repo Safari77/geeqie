@@ -42,6 +42,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <file>gq-icon-panorama.svg</file>
     <file>gq-icon-pdf-dark.svg</file>
     <file>gq-icon-pdf.svg</file>
+    <file>gq-icon-placeholder-dark.svg</file>
+    <file>gq-icon-placeholder.svg</file>
     <file>gq-icon-rename-dark.svg</file>
     <file>gq-icon-rename.svg</file>
     <file>gq-icon-rotate-180-dark.svg</file>
