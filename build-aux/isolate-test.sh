@@ -58,8 +58,18 @@ mkdir -p "$XDG_CONFIG_HOME"
 # export G_DEBUG="fatal-warnings"  # Causes persistent SIGTRAP currently.
 export G_DEBUG="fatal-critical"
 
+SANDBOX_PATH="${HOME}/bin"
+mkdir -p "$SANDBOX_PATH"
+
+# If `bwrap` is installed, symlink it into the sandbox PATH. Used by glycin GdkPixuf.
+if command -v bwrap >/dev/null; then
+    ln -sf "$(command -v bwrap)" "$SANDBOX_PATH/bwrap"
+fi
+# Take into account system binaries that may be used by glycin
+export PATH="$SANDBOX_PATH:/usr/bin:/bin"
+
 echo "Variables in isolated environment:" >&2
-env -i G_DEBUG="$G_DEBUG" HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" dbus-run-session -- env >&2
+env -i PATH="$PATH" G_DEBUG="$G_DEBUG" HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" dbus-run-session -- env >&2
 echo >&2
 
-env -i G_DEBUG="$G_DEBUG" HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" dbus-run-session -- "$@"
+env -i PATH="$PATH" G_DEBUG="$G_DEBUG" HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" dbus-run-session -- "$@"
