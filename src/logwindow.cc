@@ -50,23 +50,18 @@ struct LogWindow
 	GtkTextTag *color_tags[LOG_COUNT];
 	gint lines;
 #ifdef DEBUG
+	enum SearchDirection {
+		SEARCH_BACKWARDS,
+		SEARCH_FORWARDS
+	};
+
 	GtkWidget *regexp_box;
-#endif
-	gint debug_value; /**< Not used */
 	GtkWidget *search_entry_box;
 	gboolean highlight_all;
-};
-
-enum LogWindowSearchDirection {
-	LOGWINDOW_SEARCH_BACKWARDS,
-	LOGWINDOW_SEARCH_FORWARDS
+#endif
 };
 
 static LogWindow *logwindow = nullptr;
-
-static void hide_cb(GtkWidget *, LogWindow *)
-{
-}
 
 /**
  * @brief Handle escape and F1 keys
@@ -222,7 +217,7 @@ static void search_activate_event(GtkEntry *, LogWindow *logwin)
 		}
 }
 
-template<LogWindowSearchDirection direction>
+template<LogWindow::SearchDirection direction>
 static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *logwin)
 {
 	GtkTextIter start_find;
@@ -257,7 +252,7 @@ static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *
 			}
 		}
 
-	auto text_iter_search = (direction == LOGWINDOW_SEARCH_BACKWARDS) ? gtk_text_iter_backward_search : gtk_text_iter_forward_search;
+	auto text_iter_search = (direction == LogWindow::SEARCH_BACKWARDS) ? gtk_text_iter_backward_search : gtk_text_iter_forward_search;
 
 	GtkTextMark *cursor_mark = gtk_text_buffer_get_insert(buffer);
 	gtk_text_buffer_get_iter_at_mark(buffer, &cursor_iter, cursor_mark);
@@ -268,7 +263,7 @@ static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *
 
 		gtk_text_buffer_apply_tag_by_name(buffer, "green_bg",  &start_match, &end_match);
 
-		if (direction == LOGWINDOW_SEARCH_BACKWARDS)
+		if (direction == LogWindow::SEARCH_BACKWARDS)
 			{
 			gtk_text_buffer_place_cursor(buffer, &start_match);
 			}
@@ -291,11 +286,9 @@ static gboolean all_keypress_event_cb(GtkToggleButton *widget, LogWindow *logwin
 	return FALSE;
 }
 
-static gboolean debug_changed_cb(GtkSpinButton *widget, LogWindow *)
+static void debug_changed_cb(GtkSpinButton *widget, gpointer)
 {
-	set_debug_level((gtk_spin_button_get_value(widget)));
-
-	return FALSE;
+	set_debug_level(gtk_spin_button_get_value_as_int(widget));
 }
 
 static void search_entry_icon_cb(GtkEntry *search_entry_box, GtkEntryIconPosition pos, GdkEvent *, gpointer user_data)
@@ -344,8 +337,6 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 
 	g_signal_connect(G_OBJECT(window), "delete_event",
 			 G_CALLBACK(gtk_widget_hide_on_delete), NULL);
-	g_signal_connect(G_OBJECT(window), "hide",
-			 G_CALLBACK(hide_cb), logwin);
 	gtk_widget_realize(window);
 
 	GtkWidget *scrolledwin = gq_gtk_scrolled_window_new(nullptr, nullptr);
@@ -376,8 +367,8 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	GtkWidget *hbox = pref_box_new(win_vbox, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	gtk_widget_show(hbox);
 
-	GtkWidget *debug_level = pref_spin_new_int(hbox, _("Debug level:"), nullptr, 0, 4, 1, get_debug_level(), &logwin->debug_value);
-	g_signal_connect(debug_level, "value-changed", G_CALLBACK(debug_changed_cb), nullptr);
+	pref_spin_new(hbox, _("Debug level:"), nullptr, DEBUG_LEVEL_MIN, DEBUG_LEVEL_MAX, 1, 0,
+	              get_debug_level(), G_CALLBACK(debug_changed_cb), nullptr);
 
 	GtkWidget *pause = gtk_toggle_button_new_with_label("Pause");
 	gtk_widget_set_tooltip_text(pause, _("Pause scrolling"));
@@ -422,7 +413,7 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	gq_gtk_box_pack_start(GTK_BOX(search_box), backwards_button, FALSE, FALSE, 0);
 	gtk_widget_show(backwards_button);
 	g_signal_connect(backwards_button, "button_release_event",
-	                 G_CALLBACK(search_keypress_event_cb<LOGWINDOW_SEARCH_BACKWARDS>), logwin);
+	                 G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_BACKWARDS>), logwin);
 
 	GtkWidget *forwards_button = gtk_button_new();
 	gtk_button_set_image(GTK_BUTTON(forwards_button),
@@ -431,7 +422,7 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	gq_gtk_box_pack_start(GTK_BOX(search_box), forwards_button, FALSE, FALSE, 0);
 	gtk_widget_show(forwards_button);
 	g_signal_connect(forwards_button, "button_release_event",
-	                 G_CALLBACK(search_keypress_event_cb<LOGWINDOW_SEARCH_FORWARDS>), logwin);
+	                 G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_FORWARDS>), logwin);
 
 	GtkWidget *all_button = gtk_toggle_button_new();
 	gtk_button_set_image(GTK_BUTTON(all_button),
