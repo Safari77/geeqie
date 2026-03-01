@@ -295,25 +295,24 @@ struct ConfOptions
 		gchar *template_string;
 		gint x;
 		gint y;
-		guint16 text_red;
-		guint16 text_green;
-		guint16 text_blue;
-		guint16 text_alpha;
-		guint16 background_red;
-		guint16 background_green;
-		guint16 background_blue;
-		guint16 background_alpha;
+		struct Color
+		{
+			void from_gdk_rgba(const GdkRGBA &color);
+			GdkRGBA to_gdk_rgba() const;
+
+			guint8 red;
+			guint8 green;
+			guint8 blue;
+			guint8 alpha;
+		};
+		Color text_color;
+		Color background;
 		gchar *font;
 	} image_overlay;
 
 	ImageOverlay image_overlay_n[OVERLAY_SCREEN_DISPLAY_PROFILE_COUNT];
 
 	OverlayScreenDisplaySelectedTab overlay_screen_display_selected_profile;
-
-	/* properties dialog */
-	struct {
-		gchar *tabs_order;
-	} properties;
 
 	/* color profiles */
 	struct {

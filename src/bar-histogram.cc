@@ -139,8 +139,8 @@ static void bar_pane_histogram_write_config(GtkWidget *pane, GString *outstr, gi
 	if (!phd) return;
 
 	WRITE_NL(); WRITE_STRING("<pane_histogram ");
-	write_char_option(outstr, "id", phd->pane.id);
-	write_char_option(outstr, "title", gtk_label_get_text(GTK_LABEL(phd->pane.title)));
+	WRITE_CHAR(phd->pane, id);
+	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(phd->pane.title)));
 	WRITE_BOOL(phd->pane, expanded);
 	WRITE_INT(phd->histogram, histogram_channel);
 	WRITE_INT(phd->histogram, histogram_mode);
@@ -353,8 +353,8 @@ void bar_pane_histogram_update_from_config(GtkWidget *pane, const gchar **attrib
 		const gchar *option = *attribute_names++;
 		const gchar *value = *attribute_values++;
 
-		if (READ_CHAR_FULL("id", phd->pane.id)) continue;
-		if (READ_BOOL_FULL("expanded", phd->pane.expanded)) continue;
+		if (READ_CHAR(phd->pane, id)) continue;
+		if (READ_BOOL(phd->pane, expanded)) continue;
 		if (READ_INT_FULL("histogram_channel", histogram_channel)) continue;
 		if (READ_INT_FULL("histogram_mode", histogram_mode)) continue;
 

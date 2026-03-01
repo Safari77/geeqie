@@ -185,8 +185,8 @@ static void bar_pane_comment_write_config(GtkWidget *pane, GString *outstr, gint
 		}
 
 	WRITE_NL(); WRITE_STRING("<pane_comment ");
-	write_char_option(outstr, "id", pcd->pane.id);
-	write_char_option(outstr, "title", gtk_label_get_text(GTK_LABEL(pcd->pane.title)));
+	WRITE_CHAR(pcd->pane, id);
+	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(pcd->pane.title)));
 	WRITE_BOOL(pcd->pane, expanded);
 	WRITE_CHAR(*pcd, key);
 	WRITE_INT(*pcd, height);
@@ -358,10 +358,10 @@ void bar_pane_comment_update_from_config(GtkWidget *pane, const gchar **attribut
 		const gchar *value = *attribute_values++;
 
 		if (READ_CHAR_FULL("title", title)) continue;
-		if (READ_CHAR_FULL("key", pcd->key)) continue;
-		if (READ_BOOL_FULL("expanded", pcd->pane.expanded)) continue;
-		if (READ_INT_FULL("height", pcd->height)) continue;
-		if (READ_CHAR_FULL("id", pcd->pane.id)) continue;
+		if (READ_CHAR(*pcd, key)) continue;
+		if (READ_BOOL(pcd->pane, expanded)) continue;
+		if (READ_INT(*pcd, height)) continue;
+		if (READ_CHAR(pcd->pane, id)) continue;
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}

@@ -703,8 +703,8 @@ void bar_pane_exif_write_config(GtkWidget *pane, GString *outstr, gint indent)
 	if (!ped) return;
 
 	WRITE_NL(); WRITE_STRING("<pane_exif ");
-	write_char_option(outstr, "id", ped->pane.id);
-	write_char_option(outstr, "title", gtk_label_get_text(GTK_LABEL(ped->pane.title)));
+	WRITE_CHAR(ped->pane, id);
+	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(ped->pane.title)));
 	WRITE_BOOL(ped->pane, expanded);
 	WRITE_BOOL(*ped, show_all);
 	WRITE_STRING(">");
@@ -841,9 +841,9 @@ void bar_pane_exif_update_from_config(GtkWidget *pane, const gchar **attribute_n
 		const gchar *value = *attribute_values++;
 
 		if (READ_CHAR_FULL("title", title)) continue;
-		if (READ_BOOL_FULL("expanded", ped->pane.expanded)) continue;
-		if (READ_BOOL_FULL("show_all", ped->show_all)) continue;
-		if (READ_CHAR_FULL("id", ped->pane.id)) continue;
+		if (READ_BOOL(ped->pane, expanded)) continue;
+		if (READ_BOOL(*ped, show_all)) continue;
+		if (READ_CHAR(ped->pane, id)) continue;
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}

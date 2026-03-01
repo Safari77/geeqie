@@ -302,8 +302,8 @@ void bar_pane_keywords_write_config(GtkWidget *pane, GString *outstr, gint inden
 	pkd->height = h;
 
 	WRITE_NL(); WRITE_STRING("<pane_keywords ");
-	write_char_option(outstr, "id", pkd->pane.id);
-	write_char_option(outstr, "title", gtk_label_get_text(GTK_LABEL(pkd->pane.title)));
+	WRITE_CHAR(pkd->pane, id);
+	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(pkd->pane.title)));
 	WRITE_BOOL(pkd->pane, expanded);
 	WRITE_CHAR(*pkd, key);
 	WRITE_INT(*pkd, height);
@@ -1721,9 +1721,9 @@ void bar_pane_keywords_update_from_config(GtkWidget *pane, const gchar **attribu
 		const gchar *value = *attribute_values++;
 
 		if (READ_CHAR_FULL("title", title)) continue;
-		if (READ_CHAR_FULL("key", pkd->key)) continue;
-		if (READ_BOOL_FULL("expanded", pkd->pane.expanded)) continue;
-		if (READ_CHAR_FULL("id", pkd->pane.id)) continue;
+		if (READ_CHAR(*pkd, key)) continue;
+		if (READ_BOOL(pkd->pane, expanded)) continue;
+		if (READ_CHAR(pkd->pane, id)) continue;
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}

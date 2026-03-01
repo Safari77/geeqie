@@ -106,6 +106,26 @@ struct GQParserData
 	gboolean startup = FALSE; /* reading config for the first time - add commandline and defaults */
 };
 
+template<typename T>
+bool read_unsigned_int_option(const gchar *option, const gchar *label, const gchar *value, T &n)
+{
+	if (g_ascii_strcasecmp(option, label) != 0) return false;
+
+	if (g_ascii_isdigit(value[0]))
+		{
+		n = strtoul(value, nullptr, 10);
+		}
+	else
+		{
+		if (g_ascii_strcasecmp(value, "true") == 0)
+			n = 1;
+		else
+			n = 0;
+		}
+
+	return true;
+}
+
 } // namespace
 
 void config_file_error(const gchar *message)
@@ -262,24 +282,9 @@ gboolean read_int_option(const gchar *option, const gchar *label, const gchar *v
 	return TRUE;
 }
 
-gboolean read_ushort_option(const gchar *option, const gchar *label, const gchar *value, guint16 *n)
+bool read_uchar_option(const gchar *option, const gchar *label, const gchar *value, guint8 &n)
 {
-	if (g_ascii_strcasecmp(option, label) != 0) return FALSE;
-	if (!n) return FALSE;
-
-	if (g_ascii_isdigit(value[0]))
-		{
-		*n = strtoul(value, nullptr, 10);
-		}
-	else
-		{
-		if (g_ascii_strcasecmp(value, "true") == 0)
-			*n = 1;
-		else
-			*n = 0;
-		}
-
-	return TRUE;
+	return read_unsigned_int_option(option, label, value, n);
 }
 
 void write_uint_option(GString *str, const gchar *label, guint n)
@@ -289,22 +294,7 @@ void write_uint_option(GString *str, const gchar *label, guint n)
 
 gboolean read_uint_option(const gchar *option, const gchar *label, const gchar *value, guint *n)
 {
-	if (g_ascii_strcasecmp(option, label) != 0) return FALSE;
-	if (!n) return FALSE;
-
-	if (g_ascii_isdigit(value[0]))
-		{
-		*n = strtoul(value, nullptr, 10);
-		}
-	else
-		{
-		if (g_ascii_strcasecmp(value, "true") == 0)
-			*n = 1;
-		else
-			*n = 0;
-		}
-
-	return TRUE;
+	return read_unsigned_int_option(option, label, value, *n);
 }
 
 gboolean read_uint_option_clamp(const gchar *option, const gchar *label, const gchar *value, guint *n, guint min, guint max)
@@ -485,9 +475,6 @@ static void write_global_attributes(GString *outstr, gint indent)
 	WRITE_NL(); WRITE_INT(*options, file_ops.safe_delete_folder_maxsize);
 	WRITE_NL(); WRITE_BOOL(*options, file_ops.no_trash);
 
-	/* Properties dialog Options */
-	WRITE_NL(); WRITE_CHAR(*options, properties.tabs_order);
-
 	/* Image Options */
 	WRITE_NL(); WRITE_UINT(*options, image.zoom_mode);
 
@@ -543,14 +530,14 @@ static void write_global_attributes(GString *outstr, gint indent)
 
 	WRITE_NL(); WRITE_INT(*options, image_overlay.x);
 	WRITE_NL(); WRITE_INT(*options, image_overlay.y);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.text_red);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.text_green);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.text_blue);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.text_alpha);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.background_red);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.background_green);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.background_blue);
-	WRITE_NL(); WRITE_INT(*options, image_overlay.background_alpha);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.text_red", options->image_overlay.text_color.red);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.text_green", options->image_overlay.text_color.green);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.text_blue", options->image_overlay.text_color.blue);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.text_alpha", options->image_overlay.text_color.alpha);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.background_red", options->image_overlay.background.red);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.background_green", options->image_overlay.background.green);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.background_blue", options->image_overlay.background.blue);
+	WRITE_NL(); WRITE_INT_FULL("image_overlay.background_alpha", options->image_overlay.background.alpha);
 	WRITE_NL(); WRITE_CHAR(*options, image_overlay.font);
 	WRITE_NL(); WRITE_UINT(*options, overlay_screen_display_selected_profile);
 
@@ -669,8 +656,8 @@ static void write_color_profile(GString *outstr, gint indent)
 	for (i = 0; i < COLOR_PROFILE_INPUTS; i++)
 		{
 		WRITE_NL(); WRITE_STRING("<profile ");
-		write_char_option(outstr, "input_file", options->color_profile.input_file[i]);
-		write_char_option(outstr, "input_name", options->color_profile.input_name[i]);
+		WRITE_CHAR_FULL("input_file", options->color_profile.input_file[i]);
+		WRITE_CHAR_FULL("input_name", options->color_profile.input_name[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -688,18 +675,18 @@ static void write_osd_profiles(GString *outstr, gint indent)
 		{
 		WRITE_NL(); WRITE_STRING("<osd ");
 		indent++;
-		WRITE_NL(); write_char_option(outstr, "template_string", options->image_overlay_n[i].template_string);
-		WRITE_NL(); write_int_option(outstr, "x", options->image_overlay_n[i].x);
-		WRITE_NL(); write_int_option(outstr, "y", options->image_overlay_n[i].y);
-		WRITE_NL(); write_int_option(outstr, "text_red", options->image_overlay_n[i].text_red);
-		WRITE_NL(); write_int_option(outstr, "text_green", options->image_overlay_n[i].text_green);
-		WRITE_NL(); write_int_option(outstr, "text_blue", options->image_overlay_n[i].text_blue);
-		WRITE_NL(); write_int_option(outstr, "text_alpha", options->image_overlay_n[i].text_alpha);
-		WRITE_NL(); write_int_option(outstr, "background_red", options->image_overlay_n[i].background_red);
-		WRITE_NL(); write_int_option(outstr, "background_green", options->image_overlay_n[i].background_green);
-		WRITE_NL(); write_int_option(outstr, "background_blue", options->image_overlay_n[i].background_blue);
-		WRITE_NL(); write_int_option(outstr, "background_alpha", options->image_overlay_n[i].background_alpha);
-		WRITE_NL(); write_char_option(outstr, "font", options->image_overlay_n[i].font);
+		WRITE_NL(); WRITE_CHAR(options->image_overlay_n[i], template_string);
+		WRITE_NL(); WRITE_INT(options->image_overlay_n[i], x);
+		WRITE_NL(); WRITE_INT(options->image_overlay_n[i], y);
+		WRITE_NL(); WRITE_INT_FULL("text_red", options->image_overlay_n[i].text_color.red);
+		WRITE_NL(); WRITE_INT_FULL("text_green", options->image_overlay_n[i].text_color.green);
+		WRITE_NL(); WRITE_INT_FULL("text_blue", options->image_overlay_n[i].text_color.blue);
+		WRITE_NL(); WRITE_INT_FULL("text_alpha", options->image_overlay_n[i].text_color.alpha);
+		WRITE_NL(); WRITE_INT_FULL("background_red", options->image_overlay_n[i].background.red);
+		WRITE_NL(); WRITE_INT_FULL("background_green", options->image_overlay_n[i].background.green);
+		WRITE_NL(); WRITE_INT_FULL("background_blue", options->image_overlay_n[i].background.blue);
+		WRITE_NL(); WRITE_INT_FULL("background_alpha", options->image_overlay_n[i].background.alpha);
+		WRITE_NL(); WRITE_CHAR(options->image_overlay_n[i], font);
 		indent--;
 		WRITE_NL();
 		WRITE_STRING("/>");
@@ -717,8 +704,8 @@ static void write_marks_tooltips(GString *outstr, gint indent)
 	indent++;
 	for (i = 0; i < FILEDATA_MARKS_SIZE; i++)
 		{
-		WRITE_NL();
-		write_char_option(outstr, "<tooltip text", options->marks_tooltips[i]);
+		WRITE_NL(); WRITE_STRING("<tooltip ");
+		WRITE_CHAR_FULL("text", options->marks_tooltips[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -734,8 +721,8 @@ static void write_class_filter(GString *outstr, gint indent)
 	for (i = 0; i < FILE_FORMAT_CLASSES; i++)
 		{
 		WRITE_NL(); WRITE_STRING("<filter_type ");
-		write_char_option(outstr, "filter", format_class_list[i]);
-		write_bool_option(outstr, "enabled", options->class_filter[i]);
+		WRITE_CHAR_FULL("filter", format_class_list[i]);
+		WRITE_BOOL_FULL("enabled", options->class_filter[i]);
 		WRITE_STRING("/>");
 		}
 	indent--;
@@ -762,8 +749,8 @@ static void write_disabled_plugins(GString *outstr, gint indent)
 				{
 				g_autofree gchar *desktop_path = nullptr;
 				gtk_tree_model_get(GTK_TREE_MODEL(desktop_file_list), &iter, DESKTOP_FILE_COLUMN_PATH, &desktop_path, -1);
-				WRITE_NL();
-				write_char_option(outstr, "<plugin path", desktop_path);
+				WRITE_NL(); WRITE_STRING("<plugin ");
+				WRITE_CHAR_FULL("path", desktop_path);
 				WRITE_STRING("/>");
 				}
 			valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(desktop_file_list), &iter);
@@ -971,9 +958,6 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 		if (READ_BOOL(*options, selectable_bars.status_bar)) continue;
 		if (READ_BOOL(*options, selectable_bars.tool_bar)) continue;
 
-		/* Properties dialog options */
-		if (READ_CHAR(*options, properties.tabs_order)) continue;
-
 		if (READ_BOOL(*options, with_rename)) continue;
 
 		/* Image options */
@@ -1038,14 +1022,14 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 		if (READ_CHAR(*options, image_overlay.template_string)) continue;
 		if (READ_INT(*options, image_overlay.x)) continue;
 		if (READ_INT(*options, image_overlay.y)) continue;
-		if (READ_USHORT(*options, image_overlay.text_red)) continue;
-		if (READ_USHORT(*options, image_overlay.text_green)) continue;
-		if (READ_USHORT(*options, image_overlay.text_blue)) continue;
-		if (READ_USHORT(*options, image_overlay.text_alpha)) continue;
-		if (READ_USHORT(*options, image_overlay.background_red)) continue;
-		if (READ_USHORT(*options, image_overlay.background_green)) continue;
-		if (READ_USHORT(*options, image_overlay.background_blue)) continue;
-		if (READ_USHORT(*options, image_overlay.background_alpha)) continue;
+		if (READ_UCHAR_FULL("image_overlay.text_red", options->image_overlay.text_color.red)) continue;
+		if (READ_UCHAR_FULL("image_overlay.text_green", options->image_overlay.text_color.green)) continue;
+		if (READ_UCHAR_FULL("image_overlay.text_blue", options->image_overlay.text_color.blue)) continue;
+		if (READ_UCHAR_FULL("image_overlay.text_alpha", options->image_overlay.text_color.alpha)) continue;
+		if (READ_UCHAR_FULL("image_overlay.background_red", options->image_overlay.background.red)) continue;
+		if (READ_UCHAR_FULL("image_overlay.background_green", options->image_overlay.background.green)) continue;
+		if (READ_UCHAR_FULL("image_overlay.background_blue", options->image_overlay.background.blue)) continue;
+		if (READ_UCHAR_FULL("image_overlay.background_alpha", options->image_overlay.background.alpha)) continue;
 		if (READ_CHAR(*options, image_overlay.font)) continue;
 		if (READ_UINT_ENUM(*options, overlay_screen_display_selected_profile)) continue;
 
@@ -1270,18 +1254,18 @@ static void options_load_osd_profiles(GQParserData *parser_data, const gchar **a
 		const gchar *option = *attribute_names++;
 		const gchar *value = *attribute_values++;
 
-		if (READ_CHAR_FULL("template_string", options->image_overlay_n[i].template_string)) continue;
-		if (READ_INT_FULL("x", options->image_overlay_n[i].x)) continue;
-		if (READ_INT_FULL("y", options->image_overlay_n[i].y)) continue;
-		if (READ_USHORT_FULL("text_red", options->image_overlay_n[i].text_red)) continue;
-		if (READ_USHORT_FULL("text_green", options->image_overlay_n[i].text_green)) continue;
-		if (READ_USHORT_FULL("text_blue", options->image_overlay_n[i].text_blue)) continue;
-		if (READ_USHORT_FULL("text_alpha", options->image_overlay_n[i].text_alpha)) continue;
-		if (READ_USHORT_FULL("background_red", options->image_overlay_n[i].background_red)) continue;
-		if (READ_USHORT_FULL("background_green", options->image_overlay_n[i].background_green)) continue;
-		if (READ_USHORT_FULL("background_blue", options->image_overlay_n[i].background_blue)) continue;
-		if (READ_USHORT_FULL("background_alpha", options->image_overlay_n[i].background_alpha)) continue;
-		if (READ_CHAR_FULL("font", options->image_overlay_n[i].font)) continue;
+		if (READ_CHAR(options->image_overlay_n[i], template_string)) continue;
+		if (READ_INT(options->image_overlay_n[i], x)) continue;
+		if (READ_INT(options->image_overlay_n[i], y)) continue;
+		if (READ_UCHAR_FULL("text_red", options->image_overlay_n[i].text_color.red)) continue;
+		if (READ_UCHAR_FULL("text_green", options->image_overlay_n[i].text_color.green)) continue;
+		if (READ_UCHAR_FULL("text_blue", options->image_overlay_n[i].text_color.blue)) continue;
+		if (READ_UCHAR_FULL("text_alpha", options->image_overlay_n[i].text_color.alpha)) continue;
+		if (READ_UCHAR_FULL("background_red", options->image_overlay_n[i].background.red)) continue;
+		if (READ_UCHAR_FULL("background_green", options->image_overlay_n[i].background.green)) continue;
+		if (READ_UCHAR_FULL("background_blue", options->image_overlay_n[i].background.blue)) continue;
+		if (READ_UCHAR_FULL("background_alpha", options->image_overlay_n[i].background.alpha)) continue;
+		if (READ_CHAR(options->image_overlay_n[i], font)) continue;
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}

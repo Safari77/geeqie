@@ -80,6 +80,7 @@
 #include "pixbuf-util.h"
 #include "third-party/whereami.h"
 #include "thumb.h"
+#include "ui-bookmark.h"
 #include "ui-fileops.h"
 #include "ui-utildlg.h"
 
@@ -771,6 +772,7 @@ void startup_common(GtkApplication *, gpointer)
 	DEBUG_1("%s main: setting default options before commandline handling", get_exec_time());
 	options = init_options(nullptr);
 	setup_default_options(options);
+	bookmark_setup_default();
 	/* Generate a unique identifier used by the open archive function */
 	instance_identifier = g_strdup_printf("%x", g_random_int());
 
@@ -849,16 +851,9 @@ void startup_cb(GtkApplication *app, gpointer)
 	 */
 	if (options->image_overlay_n[0].template_string == nullptr)
 		{
+		options->image_overlay_n[0] = options->image_overlay;
 		options->image_overlay_n[0].template_string = g_strdup(options->image_overlay.template_string);
 		options->image_overlay_n[0].font = g_strdup(options->image_overlay.font);
-		options->image_overlay_n[0].text_red = options->image_overlay.text_red;
-		options->image_overlay_n[0].text_green = options->image_overlay.text_green;
-		options->image_overlay_n[0].text_blue = options->image_overlay.text_blue;
-		options->image_overlay_n[0].text_alpha = options->image_overlay.text_alpha;
-		options->image_overlay_n[0].background_red = options->image_overlay.background_red;
-		options->image_overlay_n[0].background_green = options->image_overlay.background_green;
-		options->image_overlay_n[0].background_blue = options->image_overlay.background_blue;
-		options->image_overlay_n[0].background_alpha = options->image_overlay.background_alpha;
 		}
 
 #if HAVE_CLUTTER

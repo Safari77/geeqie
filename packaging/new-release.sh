@@ -56,13 +56,19 @@ then
 	exit 1
 fi
 
-if [ ! -f org.geeqie.Geeqie.metainfo.xml.in ]
+if [ ! -f ./data/org.geeqie.Geeqie.appdata.xml.in ]
 then
-	printf '%s\n' "File org.geeqie.Geeqie.metainfo.xml.in does not exist"
+	printf '%s\n' "File ./data/org.geeqie.Geeqie.appdata.xml.in does not exist"
 	exit 1
 fi
 
-if ! zenity --title="NEW RELEASE" --question --text "Have the following files been updated?\n\n$orig_dir/NEWS\n$orig_dir/org.geeqie.Geeqie.metainfo.xml.in\n\nContinue?"
+if [ ! -f ./data/org.geeqie.Geeqie.metainfo.xml.in ]
+then
+	printf '%s\n' "File ./data/org.geeqie.Geeqie.metainfo.xml.in does not exist"
+	exit 1
+fi
+
+if ! zenity --title="NEW RELEASE" --question --text "Have the following files been updated?\n\n$orig_dir/NEWS\n$orig_dir/data/org.geeqie.Geeqie.appdata.xml.in\n$orig_dir/data/org.geeqie.Geeqie.metainfo.xml.in\n\nContinue?"
 then
 	exit 1
 fi
@@ -81,7 +87,7 @@ working_dir=$(mktemp --directory "$tmp_dir/geeqie.XXXXXXXXXX")
 git clone git://git.geeqie.org/geeqie.git "$working_dir"
 
 cp "$orig_dir/NEWS" "$working_dir"
-cp "$orig_dir/org.geeqie.Geeqie.metainfo.xml.in" "$working_dir"
+cp "$orig_dir/data/org.geeqie.Geeqie.metainfo.xml.in" "$working_dir/data/"
 
 cd "$working_dir" || exit 1
 
@@ -163,8 +169,8 @@ then
 fi
 
 git add NEWS
-git add org.geeqie.Geeqie.metainfo.xml.in
-git add geeqie.1
+git add data/org.geeqie.Geeqie.metainfo.xml.in
+git add data/man/geeqie.1
 git add doc/docbook/CommandLineOptions.xml
 git commit --message="Preparing for release v$revision"
 
@@ -199,13 +205,13 @@ cd "geeqie-$revision" || exit 1
 git checkout master
 
 git checkout stable/"$version" NEWS
-git checkout stable/"$version" geeqie.1
+git checkout stable/"$version" data/man/geeqie.1
 git checkout stable/"$version" doc/docbook/CommandLineOptions.xml
-git checkout stable/"$version" org.geeqie.Geeqie.metainfo.xml.in
+git checkout stable/"$version" data/org.geeqie.Geeqie.metainfo.xml.in
 
 git add NEWS
-git add org.geeqie.Geeqie.metainfo.xml.in
-git add geeqie.1
+git add data/org.geeqie.Geeqie.metainfo.xml.in
+git add data/man/geeqie.1
 git add doc/docbook/CommandLineOptions.xml
 git commit --message="Release v$revision files"
 

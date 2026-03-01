@@ -31,7 +31,6 @@
 #include "pixbuf-renderer.h"
 #include "print.h"
 #include "rcfile.h"
-#include "ui-bookmark.h"
 #include "ui-fileops.h"
 
 namespace
@@ -45,21 +44,31 @@ void image_overlay_init(ConfOptions::ImageOverlay &image_overlay)
 	image_overlay.template_string = nullptr;
 	image_overlay.x = 10;
 	image_overlay.y = -10;
+	image_overlay.text_color = { 0, 0, 0, 255 };
+	image_overlay.background = { 240, 240, 240, 210 };
 	image_overlay.font = g_strdup("Sans 10");
-	image_overlay.text_red = 0;
-	image_overlay.text_green = 0;
-	image_overlay.text_blue = 0;
-	image_overlay.text_alpha = 255;
-	image_overlay.background_red = 240;
-	image_overlay.background_green = 240;
-	image_overlay.background_blue = 240;
-	image_overlay.background_alpha = 210;
 }
 
 } // namespace
 
 ConfOptions *options;
 CommandLine *command_line;
+
+void ConfOptions::ImageOverlay::Color::from_gdk_rgba(const GdkRGBA &color)
+{
+	red = color.red * 255;
+	green = color.green * 255;
+	blue = color.blue * 255;
+	alpha = color.alpha * 255;
+}
+
+GdkRGBA ConfOptions::ImageOverlay::Color::to_gdk_rgba() const
+{
+	return { static_cast<double>(red) / 255,
+	         static_cast<double>(green) / 255,
+	         static_cast<double>(blue) / 255,
+	         static_cast<double>(alpha) / 255 };
+}
 
 ConfOptions *init_options(ConfOptions *options)
 {
@@ -271,13 +280,6 @@ ConfOptions *init_options(ConfOptions *options)
 void setup_default_options(ConfOptions *options)
 {
 	gint i;
-
-	g_autofree gchar *current_path = get_current_dir();
-	bookmark_add_default(".", current_path);
-	bookmark_add_default(_("Home"), homedir());
-	g_autofree gchar *desktop_path = g_build_filename(homedir(), "Desktop", NULL);
-	bookmark_add_default(_("Desktop"), desktop_path);
-	bookmark_add_default(_("Collections"), get_collections_dir());
 
 	g_free(options->file_ops.safe_delete_path);
 	options->file_ops.safe_delete_path = g_strdup(get_trash_dir());
