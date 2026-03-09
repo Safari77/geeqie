@@ -30,6 +30,7 @@
 #include "geometry.h"
 
 class FileData;
+struct GqColor;
 
 gboolean pixbuf_to_file_as_png (GdkPixbuf *pixbuf, const gchar *filename);
 
@@ -85,9 +86,7 @@ GdkPixbuf *pixbuf_copy_rotate_90(GdkPixbuf *src, gboolean counter_clockwise);
 GdkPixbuf *pixbuf_copy_mirror(GdkPixbuf *src, gboolean mirror, gboolean flip);
 GdkPixbuf* pixbuf_apply_orientation(GdkPixbuf *pixbuf, gint orientation);
 
-void pixbuf_draw_rect_fill(GdkPixbuf *pb,
-                           GdkRectangle rect,
-                           gint r, gint g, gint b, gint a);
+void pixbuf_draw_rect_fill(GdkPixbuf *pb, GdkRectangle rect, GqColor color);
 
 void pixbuf_set_rect_fill(GdkPixbuf *pb,
 			  gint x, gint y, gint w, gint h,
@@ -102,8 +101,7 @@ void pixbuf_pixel_set(GdkPixbuf *pb, gint x, gint y, gint r, gint g, gint b, gin
 
 
 void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
-                        gint x, gint y,
-                        guint8 r, guint8 g, guint8 b, guint8 a);
+                        gint x, gint y, GqColor color);
 
 void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
                           GqPoint c1, GqPoint c2, GqPoint c3,
@@ -111,7 +109,7 @@ void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
 
 void pixbuf_draw_line(GdkPixbuf *pb, GdkRectangle clip,
                       gint x1, gint y1, gint x2, gint y2,
-                      guint8 r, guint8 g, guint8 b, guint8 a);
+                      GqColor color);
 
 void pixbuf_draw_shadow(GdkPixbuf *pb, GdkRectangle clip,
                         gint x, gint y, gint w, gint h, gint border,

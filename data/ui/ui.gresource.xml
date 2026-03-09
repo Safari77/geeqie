@@ -4,7 +4,7 @@
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/ui">
+  <gresource prefix="/org/geeqie/geeqie/ui">
     <file>keyboard-shortcuts.ui</file>
     <file>menu-classic.ui</file>
     <file>menu-hamburger.ui</file>

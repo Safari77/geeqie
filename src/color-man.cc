@@ -76,7 +76,7 @@ using ColorManCachePtr = std::shared_ptr<ColorMan::Cache>;
 namespace
 {
 
-#define GQ_RESOURCE_PATH_ICC "/org/geeqie/icc"
+#define GQ_RESOURCE_PATH_ICC "/org/geeqie/geeqie/icc"
 
 G_DEFINE_AUTO_CLEANUP_FREE_FUNC(cmsHPROFILE, cmsCloseProfile, nullptr)
 G_DEFINE_AUTO_CLEANUP_FREE_FUNC(cmsHTRANSFORM, cmsDeleteTransform, nullptr)

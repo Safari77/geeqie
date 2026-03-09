@@ -47,11 +47,11 @@ struct PanItemBoxShadow
 
 constexpr gint PAN_OUTLINE_THICKNESS = 1;
 constexpr guint8 PAN_OUTLINE_ALPHA = 180;
-constexpr PanColor PAN_OUTLINE_COLOR_1{255, 255, 255, PAN_OUTLINE_ALPHA};
-constexpr PanColor PAN_OUTLINE_COLOR_2{64, 64, 64, PAN_OUTLINE_ALPHA};
+constexpr GqColor PAN_OUTLINE_COLOR_1{255, 255, 255, PAN_OUTLINE_ALPHA};
+constexpr GqColor PAN_OUTLINE_COLOR_2{64, 64, 64, PAN_OUTLINE_ALPHA};
 
 /* popup info box */
-constexpr PanColor PAN_POPUP_TEXT_COLOR{0, 0, 0, 225};
+constexpr GqColor PAN_POPUP_TEXT_COLOR{0, 0, 0, 225};
 
 } // namespace
 
@@ -129,7 +129,7 @@ void pan_item_size_coordinates(PanItem *pi, gint border, gint &w, gint &h)
  */
 
 PanItem *pan_item_box_new(PanWindow *pw, FileData *fd, gint x, gint y, gint width, gint height,
-                          gint border_size, PanColor base, PanColor bord)
+                          gint border_size, GqColor base, GqColor bord)
 {
 	PanItem *pi;
 
@@ -214,14 +214,14 @@ gboolean pan_item_box_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
 		}
 
 	const GdkRectangle request_rect{x, y, width, height};
-	const auto draw_rect_if_intersect = [pixbuf, &request_rect, x, y](GdkRectangle box_rect, PanColor color)
+	const auto draw_rect_if_intersect = [pixbuf, &request_rect, x, y](GdkRectangle box_rect, GqColor color)
 	{
 		GdkRectangle r;
 		if (!gdk_rectangle_intersect(&request_rect, &box_rect, &r)) return;
 
 		r.x -= x;
 		r.y -= y;
-		pixbuf_draw_rect_fill(pixbuf, r, color.r, color.g, color.b, color.a);
+		pixbuf_draw_rect_fill(pixbuf, r, color);
 	};
 
 	draw_rect_if_intersect({pi->x, pi->y, bw, bh}, pi->color);
@@ -243,8 +243,8 @@ gboolean pan_item_box_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
 
 PanItem *pan_item_tri_new(PanWindow *pw,
                           GqPoint c1, GqPoint c2, GqPoint c3,
-                          PanColor color,
-                          gint borders, PanColor border_color)
+                          GqColor color,
+                          gint borders, GqColor border_color)
 {
 	GdkRectangle tri_rect = util_triangle_bounding_box(c1, c2, c3);
 
@@ -289,12 +289,12 @@ gboolean pan_item_tri_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufRe
 		                     {coord[2].x - x, coord[2].y - y},
 		                     pi->color.r, pi->color.g, pi->color.b, pi->color.a);
 
-		const auto draw_line = [pixbuf, &r, x, y, &color = pi->color2](GqPoint start, GqPoint end)
+		const auto draw_line = [pixbuf, &r, x, y, pi](GqPoint start, GqPoint end)
 		{
 			pixbuf_draw_line(pixbuf, r,
 			                 start.x - x, start.y - y,
 			                 end.x - x, end.y - y,
-			                 color.r, color.g, color.b, color.a);
+			                 pi->color2);
 		};
 
 		if (pi->border & PAN_BORDER_1) draw_line(coord[0], coord[1]);
@@ -368,7 +368,7 @@ static void pan_item_text_compute_size(PanItem *pi, GtkWidget *widget)
 }
 
 PanItem *pan_item_text_new(PanWindow *pw, gint x, gint y, const gchar *text,
-                           PanTextAttrType attr, PanBorderType border, PanColor color)
+                           PanTextAttrType attr, PanBorderType border, GqColor color)
 {
 	PanItem *pi;
 
@@ -398,7 +398,7 @@ gboolean pan_item_text_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, PixbufR
 	layout = pan_item_text_layout(pi, GTK_WIDGET(pr));
 	pixbuf_draw_layout(pixbuf, layout,
 	                   pi->x - x + pi->border, pi->y - y + pi->border,
-	                   pi->color.r, pi->color.g, pi->color.b, pi->color.a);
+	                   pi->color);
 	g_object_unref(G_OBJECT(layout));
 
 	return FALSE;
@@ -489,14 +489,14 @@ gboolean pan_item_thumb_draw(PanWindow *pw, PanItem *pi, GdkPixbuf *pixbuf, Pixb
 					     255);
 			}
 
-		const auto draw_rect_if_intersect = [pixbuf, &request_rect, x, y](GdkRectangle thumb_rect, PanColor color)
+		const auto draw_rect_if_intersect = [pixbuf, &request_rect, x, y](GdkRectangle thumb_rect, GqColor color)
 		{
 			GdkRectangle r;
 			if (!gdk_rectangle_intersect(&request_rect, &thumb_rect, &r)) return;
 
 			r.x -= x;
 			r.y -= y;
-			pixbuf_draw_rect_fill(pixbuf, r, color.r, color.g, color.b, color.a);
+			pixbuf_draw_rect_fill(pixbuf, r, color);
 		};
 
 		thumb_rect = {tx, ty, tw, PAN_OUTLINE_THICKNESS};
@@ -525,8 +525,7 @@ gboolean pan_item_thumb_draw(PanWindow *pw, PanItem *pi, GdkPixbuf *pixbuf, Pixb
 			r.y -= y;
 			d = (pw->size <= PAN_IMAGE_SIZE_THUMB_NONE) ? 2 : 8;
 			pixbuf_draw_rect_fill(pixbuf, r,
-			                      PAN_SHADOW_COLOR,
-			                      PAN_SHADOW_ALPHA / d);
+			                      { PAN_SHADOW_COLOR, static_cast<guint8>(PAN_SHADOW_ALPHA / d) });
 			}
 		}
 
@@ -588,7 +587,7 @@ gboolean pan_item_image_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, Pixbuf
 			}
 		else
 			{
-			pixbuf_draw_rect_fill(pixbuf, r, pi->color2.r, pi->color2.g, pi->color2.b, pi->color2.a);
+			pixbuf_draw_rect_fill(pixbuf, r, pi->color2);
 			}
 		}
 

@@ -185,7 +185,7 @@ static gchar *bookmark_string(const gchar *name, const gchar *path, const gchar 
 {
 	if (!name) name = _("New Bookmark");
 
-	if (icon)
+	if (icon && icon[0] != '\0')
 		{
 		return g_strdup_printf("%s" MARKER_PATH "%s" MARKER_ICON "%s", name, path, icon);
 		}
@@ -466,9 +466,7 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 		{
 		b->path = history_list_find_last_path_by_key("path_list");
 
-		const gchar *icon = b->icon.empty() ? nullptr : b->icon.c_str();
-		g_autofree gchar *buf = bookmark_string(".", b->path.c_str(), icon);
-
+		g_autofree gchar *buf = bookmark_string(".", b->path.c_str(), b->icon.c_str());
 		history_list_item_change("bookmarks", b->text.c_str(), buf);
 		b->text = buf;
 		}
@@ -658,14 +656,10 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 
-	PangoLayout *layout;
-	gint width;
-	gint height;
-
-	layout = gtk_widget_create_pango_layout(scrolled, "reasonable width");
-	pango_layout_get_pixel_size(layout, &width, &height);
-	gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled), width);
-	g_object_unref(layout);
+	g_autoptr(PangoLayout) layout = gtk_widget_create_pango_layout(scrolled, "reasonable width");
+	GqSize size;
+	pango_layout_get_pixel_size(layout, &size.width, &size.height);
+	gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled), size.width);
 
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 

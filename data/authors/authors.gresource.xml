@@ -4,7 +4,7 @@
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/credits">
+  <gresource prefix="/org/geeqie/geeqie/credits">
     <file>authors</file>
   </gresource>
 </gresources>

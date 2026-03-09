@@ -110,8 +110,7 @@ void SelectionRectangle::set_cursor(gint cursor_x, gint cursor_y)
 }
 
 // For draw rectangle function
-gint image_start_x;
-gint image_start_y;
+GqPoint image_start;
 gint rect_x1, rect_x2, rect_y1, rect_y2;
 gint rect_id = 0;
 SelectionRectangle selection_rectangle;
@@ -149,31 +148,31 @@ static void switch_coords_orientation(ImageWindow *imd, gint x, gint y, gint wid
 		{
 		case EXIF_ORIENTATION_TOP_LEFT: /* normal -- nothing to do */
 		case EXIF_ORIENTATION_LEFT_TOP: /* left mirrored, swap later */
-			rect_x1 = image_start_x;
-			rect_y1 = image_start_y;
+			rect_x1 = image_start.x;
+			rect_y1 = image_start.y;
 			rect_x2 = x;
 			rect_y2 = y;
 			break;
 		case EXIF_ORIENTATION_TOP_RIGHT: /* mirrored */
 		case EXIF_ORIENTATION_RIGHT_TOP: /* rotated -90 (270), swap later */
 			rect_x1 = width - x;
-			rect_y1 = image_start_y;
-			rect_x2 = width - image_start_x;
+			rect_y1 = image_start.y;
+			rect_x2 = width - image_start.x;
 			rect_y2 = y;
 			break;
 		case EXIF_ORIENTATION_BOTTOM_RIGHT: /* upside down */
 		case EXIF_ORIENTATION_RIGHT_BOTTOM: /* right mirrored, swap later */
 			rect_x1 = width - x;
 			rect_y1 = height - y;
-			rect_x2 = width - image_start_x;
-			rect_y2 = height - image_start_y;
+			rect_x2 = width - image_start.x;
+			rect_y2 = height - image_start.y;
 			break;
 		case EXIF_ORIENTATION_BOTTOM_LEFT: /* flipped */
 		case EXIF_ORIENTATION_LEFT_BOTTOM: /* rotated 90, swap later */
-			rect_x1 = image_start_x;
+			rect_x1 = image_start.x;
 			rect_y1 = height - y;
 			rect_x2 = x;
-			rect_y2 = height - image_start_y;
+			rect_y2 = height - image_start.y;
 			break;
 		default:
 			/* The other values are out of range */
@@ -205,8 +204,8 @@ static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer d
 		GqPoint pixel;
 		pixbuf_renderer_get_mouse_position(pr, pixel);
 		selection_rectangle = SelectionRectangle(std::max(0, gint(event->x)), std::max(0, gint(event->y)), options->rectangle_draw_aspect_ratio);
-		image_start_x = std::max(0, pixel.x);
-		image_start_y = std::max(0, pixel.y);
+		image_start.x = std::max(0, pixel.x);
+		image_start.y = std::max(0, pixel.y);
 		}
 	if (rect_id)
 		{
@@ -243,35 +242,34 @@ static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer d
 static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer data)
 {
 	auto imd = static_cast<ImageWindow *>(data);
-	gint width;
-	gint height;
-	GdkPixbuf *rect_pixbuf;
 
 	selection_rectangle.set_cursor(event->x, event->y);
 
 	if (options->draw_rectangle)
 		{
-		pixbuf_renderer_get_image_size(pr, &width, &height);
+		gint width;
+		gint height;
+		pixbuf_renderer_get_image_size(pr, width, height);
 
 		GqPoint pixel;
 		pixbuf_renderer_get_mouse_position(pr, pixel);
 
-		gint image_x_pixel = (pixel.x != -1) ? pixel.x : width;
-		gint image_y_pixel = (pixel.y != -1) ? pixel.y : height;
+		if (pixel.x == -1) pixel.x = width;
+		if (pixel.y == -1) pixel.y = height;
 
 		if (options->rectangle_draw_aspect_ratio != RECTANGLE_DRAW_ASPECT_RATIO_NONE)
 			{
-			if (gdouble(image_x_pixel - image_start_x) / (image_y_pixel - image_start_y) < selection_rectangle.aspect_ratio)
+			if (gdouble(pixel.x - image_start.x) / (pixel.y - image_start.y) < selection_rectangle.aspect_ratio)
 				{
-				image_x_pixel = image_start_x + ((image_y_pixel - image_start_y) * selection_rectangle.aspect_ratio);
+				pixel.x = image_start.x + ((pixel.y - image_start.y) * selection_rectangle.aspect_ratio);
 				}
 			else
 				{
-				image_y_pixel = image_start_y + ((image_x_pixel - image_start_x) / selection_rectangle.aspect_ratio);
+				pixel.y = image_start.y + ((pixel.x - image_start.x) / selection_rectangle.aspect_ratio);
 				}
 			}
 
-		switch_coords_orientation(imd, image_x_pixel, image_y_pixel, width, height);
+		switch_coords_orientation(imd, pixel.x, pixel.y, width, height);
 
 		if (rect_id)
 			{
@@ -284,15 +282,13 @@ static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer da
 			selection_rectangle.width = 1;
 
 		// decorative border
-		rect_pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, selection_rectangle.width, selection_rectangle.height);
+		g_autoptr(GdkPixbuf) rect_pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, selection_rectangle.width, selection_rectangle.height);
 		pixbuf_set_rect_fill(rect_pixbuf, 0, 0, selection_rectangle.width, selection_rectangle.height, 255, 255, 255, 0);
 		pixbuf_set_rect(rect_pixbuf, 1, 1, selection_rectangle.width-2, selection_rectangle.height - 2, 0, 0, 0, 255, 1, 1, 1, 1);
 		pixbuf_set_rect(rect_pixbuf, 0, 0, selection_rectangle.width, selection_rectangle.height, 255, 255, 255, 255, 1, 1, 1, 1);
 
 		rect_id = pixbuf_renderer_overlay_add(PIXBUF_RENDERER(imd->pr), rect_pixbuf, selection_rectangle.x, selection_rectangle.y, OVL_NORMAL);
 		}
-
-	pixbuf_renderer_get_scaled_size(pr, &width, &height);
 
 	if (imd->func_drag)
 		{
@@ -1309,7 +1305,7 @@ void image_change_fd(ImageWindow *imd, FileData *fd, gdouble zoom)
 	image_change_real(imd, fd, nullptr, nullptr, zoom);
 }
 
-gboolean image_get_image_size(ImageWindow *imd, gint *width, gint *height)
+gboolean image_get_image_size(ImageWindow *imd, gint &width, gint &height)
 {
 	return pixbuf_renderer_get_image_size(PIXBUF_RENDERER(imd->pr), width, height);
 }
@@ -1595,7 +1591,7 @@ void image_scroll_to_point(ImageWindow *imd, gint x, gint y,
 	pixbuf_renderer_scroll_to_point(PIXBUF_RENDERER(imd->pr), x, y, x_align, y_align);
 }
 
-void image_get_scroll_center(ImageWindow *imd, gdouble *x, gdouble *y)
+void image_get_scroll_center(ImageWindow *imd, gdouble &x, gdouble &y)
 {
 	pixbuf_renderer_get_scroll_center(PIXBUF_RENDERER(imd->pr), x, y);
 }
@@ -1633,7 +1629,7 @@ void image_zoom_set_fill_geometry(ImageWindow *imd, gboolean vertical)
 	gint height;
 
 	if (!pixbuf_renderer_get_pixbuf(pr) ||
-	    !pixbuf_renderer_get_image_size(pr, &width, &height)) return;
+	    !pixbuf_renderer_get_image_size(pr, width, height)) return;
 
 	if (vertical)
 		{
@@ -1805,7 +1801,7 @@ void image_top_window_set_sync(ImageWindow *imd, gboolean allow_sync)
 	g_object_set(imd->pr, "window_fit", allow_sync, NULL);
 }
 
-void image_background_set_color(ImageWindow *imd, GdkRGBA *color)
+void image_background_set_color(ImageWindow *imd, const GdkRGBA &color)
 {
 	pixbuf_renderer_set_color(PIXBUF_RENDERER(imd->pr), color);
 }
@@ -1822,7 +1818,6 @@ void image_background_set_color_from_options(ImageWindow *imd, gboolean fullscre
 		{
 		color = &options->image.border_color;
 		}
-
 	else
 		{
 		LayoutWindow *lw = get_current_layout();
@@ -1838,7 +1833,7 @@ void image_background_set_color_from_options(ImageWindow *imd, gboolean fullscre
 		color = &theme_color;
 		}
 
-	image_background_set_color(imd, color);
+	image_background_set_color(imd, *color);
 }
 
 void image_color_profile_set(ImageWindow *imd, gint input_type, gboolean use_image)

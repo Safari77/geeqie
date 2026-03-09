@@ -4,7 +4,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/icons">
+  <gresource prefix="/org/geeqie/geeqie/icons">
     <file>geeqie-logo.svg</file>
     <file>gq-icon-archive-file-dark.svg</file>
     <file>gq-icon-archive-file.svg</file>

@@ -4,7 +4,7 @@
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/images">
+  <gresource prefix="/org/geeqie/geeqie/images">
     <file>keymap-template.svg</file>
   </gresource>
 </gresources>

@@ -4,7 +4,7 @@
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/icc">
+  <gresource prefix="/org/geeqie/geeqie/icc">
     <file>ClayRGB1998.icc</file>
   </gresource>
 </gresources>

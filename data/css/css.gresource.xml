@@ -4,7 +4,7 @@
 -->
 
 <gresources>
-  <gresource prefix="/org/geeqie/css">
+  <gresource prefix="/org/geeqie/geeqie/css">
     <file>custom.css</file>
   </gresource>
 </gresources>

@@ -44,6 +44,7 @@
 #include "filedata.h"
 #include "filefilter.h"
 #include "geometry.h"
+#include "gq-color.h"
 #include "main-defines.h"
 #include "ui-fileops.h"
 
@@ -680,13 +681,11 @@ GdkPixbuf *pixbuf_apply_orientation(GdkPixbuf *pixbuf, gint orientation)
  *        parameter.
  * @param pb The `GdkPixbuf` to paint into.
  * @param rect The specified region.
- * @param r,g,b Fill color.
- * @param a The alpha to use for compositing. a=255 is solid (fully the new
- *          color).  a=0 is tranparent (fully the original contents).
+ * @param color Fill color. The color.a is used for compositing.
+ *              a=255 is solid (fully the new color).
+ *              a=0 is tranparent (fully the original contents).
  */
-void pixbuf_draw_rect_fill(GdkPixbuf *pb,
-                           GdkRectangle rect,
-                           gint r, gint g, gint b, gint a)
+void pixbuf_draw_rect_fill(GdkPixbuf *pb, GdkRectangle rect, GqColor color)
 {
 	gboolean has_alpha;
 	gint pw;
@@ -706,12 +705,12 @@ void pixbuf_draw_rect_fill(GdkPixbuf *pb,
 	prs = gdk_pixbuf_get_rowstride(pb);
 	p_pix = gdk_pixbuf_get_pixels(pb);
 
-	const auto get_a = [a](gint, gint){ return a; };
+	const auto get_a = [a = color.a](gint, gint){ return a; };
 
 	// TODO(xsdg): Should we do anything about a potential
 	// existing alpha value here?
 
-	pixbuf_draw_rect_fill(p_pix, prs, has_alpha, rect, r, g, b, get_a);
+	pixbuf_draw_rect_fill(p_pix, prs, has_alpha, rect, color.r, color.g, color.b, get_a);
 }
 
 /**
@@ -903,8 +902,7 @@ static void pixbuf_copy_font(GdkPixbuf *src, gint sx, gint sy,
 }
 
 void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
-                        gint x, gint y,
-                        guint8 r, guint8 g, guint8 b, guint8 a)
+                        gint x, gint y, GqColor color)
 {
 	GdkPixbuf *buffer;
 	gint w;
@@ -961,9 +959,8 @@ void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
 	if (x + w > dw)	w = dw - x;
 	if (y + h > dh) h = dh - y;
 
-	pixbuf_copy_font(buffer, sx, sy,
-			 pixbuf, x, y, w, h,
-			 r, g, b, a);
+	pixbuf_copy_font(buffer, sx, sy, pixbuf, x, y, w, h,
+	                 color.r, color.g, color.b, color.a);
 
 	g_object_unref(buffer);
 	cairo_surface_destroy(source);
@@ -1227,11 +1224,11 @@ static gboolean util_clip_line(gdouble clip_x, gdouble clip_y, gdouble clip_w, g
  * @param clip Clipping region.
  * @param x1,y1 Coordinates of the first point of the line segment.
  * @param x2,y2 Coordinates of the second point of the line segment.
- * @param r,g,b,a Color and alpha.
+ * @param color Color and alpha.
  */
 void pixbuf_draw_line(GdkPixbuf *pb, GdkRectangle clip,
                       gint x1, gint y1, gint x2, gint y2,
-                      guint8 r, guint8 g, guint8 b, guint8 a)
+                      GqColor color)
 {
 	gboolean has_alpha;
 	gint prs;
@@ -1263,15 +1260,15 @@ void pixbuf_draw_line(GdkPixbuf *pb, GdkRectangle clip,
 
 	p_step = (has_alpha) ? 4 : 3;
 
-	const auto fill_pixel = [pb_rect, p_pix, prs, p_step, r, g, b, a](gint x, gint y)
+	const auto fill_pixel = [pb_rect, p_pix, prs, p_step, &color](gint x, gint y)
 	{
 		if (x < pb_rect.x || x >= pb_rect.x + pb_rect.width ||
 		    y < pb_rect.y || y >= pb_rect.y + pb_rect.height) return;
 
 		guchar *pp = p_pix + (y * prs) + (x * p_step);
-		pp[0] = (r * a + pp[0] * (256-a)) >> 8;
-		pp[1] = (g * a + pp[1] * (256-a)) >> 8;
-		pp[2] = (b * a + pp[2] * (256-a)) >> 8;
+		pp[0] = (color.r * color.a + pp[0] * (256 - color.a)) >> 8;
+		pp[1] = (color.g * color.a + pp[1] * (256 - color.a)) >> 8;
+		pp[2] = (color.b * color.a + pp[2] * (256 - color.a)) >> 8;
 	};
 
 	// We draw the clipped line segment along the longer axis first, and
@@ -1421,7 +1418,7 @@ void pixbuf_draw_shadow(GdkPixbuf *pb, GdkRectangle clip,
 	GdkRectangle f;
 	if (gdk_rectangle_intersect(&contracted_rect, &pb_rect, &f))
 		{
-		pixbuf_draw_rect_fill(pb, f, r, g, b, a);
+		pixbuf_draw_rect_fill(pb, f, {r, g, b, a});
 		}
 
 	if (border < 1) return;

@@ -104,8 +104,8 @@ constexpr gint PAN_GRID_ALPHA = 20;
 /* popup info box */
 constexpr gint PAN_POPUP_BORDER = 1;
 constexpr guint8 PAN_POPUP_ALPHA = 255;
-constexpr PanColor PAN_POPUP_COLOR{255, 255, 225, PAN_POPUP_ALPHA};
-constexpr PanColor PAN_POPUP_BORDER_COLOR{0, 0, 0, PAN_POPUP_ALPHA};
+constexpr GqColor PAN_POPUP_COLOR{255, 255, 225, PAN_POPUP_ALPHA};
+constexpr GqColor PAN_POPUP_BORDER_COLOR{0, 0, 0, PAN_POPUP_ALPHA};
 
 void pan_cache_data_free(PanCacheData *pc)
 {
@@ -396,7 +396,7 @@ static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
 
 		r.x -= x;
 		r.y -= y;
-		pixbuf_draw_rect_fill(pixbuf, r, PAN_GRID_COLOR);
+		pixbuf_draw_rect_fill(pixbuf, r, {PAN_GRID_COLOR});
 	};
 
 	pan_grid_rect = request_rect;
@@ -1691,8 +1691,8 @@ static void pan_window_image_scroll_notify_cb(PixbufRenderer *pr, gpointer data)
 
 	if (pr->scale == 0.0) return;
 
-	pixbuf_renderer_get_visible_rect(pr, &rect);
-	pixbuf_renderer_get_image_size(pr, &width, &height);
+	pixbuf_renderer_get_visible_rect(pr, rect);
+	pixbuf_renderer_get_image_size(pr, width, height);
 
 	adj = gtk_range_get_adjustment(GTK_RANGE(pw->scrollbar_h));
 	gtk_adjustment_set_page_size(adj, rect.width);
