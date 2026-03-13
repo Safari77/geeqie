@@ -670,7 +670,7 @@ static void file_util_progress_cancel_cb(GenericDialog *, gpointer data)
 	if (ud->progress_button_stop)
 		gtk_widget_set_sensitive(ud->progress_button_stop, FALSE);
 	if (ud->progress_label)
-		gtk_label_set_text(GTK_LABEL(ud->progress_label), _("Cancelling..."));
+		gtk_label_set_text(GTK_LABEL(ud->progress_label), _("Cancelling…"));
 }
 
 static void file_util_progress_enable_close(UtilityData *ud)
@@ -728,7 +728,7 @@ static void file_util_progress_window_new(UtilityData *ud)
 	gtk_widget_set_sensitive(ud->progress_button_close, FALSE);
 
 	/* Status label */
-	ud->progress_label = gtk_label_new(_("Starting..."));
+	ud->progress_label = gtk_label_new(_("Starting…"));
 	gtk_label_set_xalign(GTK_LABEL(ud->progress_label), 0.0);
 	gtk_label_set_ellipsize(GTK_LABEL(ud->progress_label), PANGO_ELLIPSIZE_MIDDLE);
 	gq_gtk_box_pack_start(GTK_BOX(ud->progress_gd->vbox), ud->progress_label, FALSE, FALSE, 5);

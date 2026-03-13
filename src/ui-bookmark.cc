@@ -339,7 +339,7 @@ static void bookmark_menu_popup(BookMarkData *bm, GtkWidget *button, bool local)
 	bm->active_button = button;
 
 	menu = popup_menu_short_lived();
-	menu_item_add_icon_sensitive(menu, _("_Properties..."), PIXBUF_INLINE_ICON_PROPERTIES, bm->editable,
+	menu_item_add_icon_sensitive(menu, _("_Properties…"), PIXBUF_INLINE_ICON_PROPERTIES, bm->editable,
 		      G_CALLBACK(bookmark_menu_prop_cb), bm);
 	menu_item_add_icon_sensitive(menu, _("Move _up"), GQ_ICON_GO_UP, bm->editable,
 	                             G_CALLBACK(bookmark_menu_move_cb<-1>), bm);
@@ -785,7 +785,7 @@ void bookmark_add_dialog(const gchar *title, GtkWidget *list)
 	fcdd.action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
 	fcdd.accept_text = _("Open");
 	fcdd.data = list;
-	fcdd.entry_text = _("Optional name...");
+	fcdd.entry_text = _("Optional name…");
 	fcdd.entry_tooltip =  _("Optional alias name for the shortcut.\nThis may be amended or added from the Sort Manager pane.\nIf none given, the basename of the folder is used");
 	fcdd.filename = layout_get_path(get_current_layout());
 	fcdd.response_callback = G_CALLBACK(bookmark_add_response_cb);

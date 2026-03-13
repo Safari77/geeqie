@@ -555,9 +555,9 @@ static void search_progress_update(SearchData *sd, gboolean search, gdouble thum
 		const gchar *message;
 
 		if (search && (sd->search_folder_list || sd->search_file_list))
-			message = _("Searching...");
+			message = _("Searching…");
 		else if (thumbs >= 0.0)
-			message = _("Loading thumbs...");
+			message = _("Loading thumbs…");
 		else
 			message = "";
 
@@ -1185,14 +1185,14 @@ static GtkWidget *search_result_menu(SearchData *sd, gboolean on_row, gboolean e
 	submenu_add_collections(menu, on_row,
 	                        G_CALLBACK(search_pop_menu_collections_cb), sd);
 
-	menu_item_add_icon_sensitive(menu, _("Print..."), GQ_ICON_PRINT, on_row,
+	menu_item_add_icon_sensitive(menu, _("Print…"), GQ_ICON_PRINT, on_row,
 				      G_CALLBACK(sr_menu_print_cb), sd);
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, on_row,
+	menu_item_add_icon_sensitive(menu, _("_Copy…"), GQ_ICON_COPY, on_row,
 				      G_CALLBACK(sr_menu_copy_cb), sd);
-	menu_item_add_sensitive(menu, _("_Move..."), on_row,
+	menu_item_add_sensitive(menu, _("_Move…"), on_row,
 				G_CALLBACK(sr_menu_move_cb), sd);
-	menu_item_add_sensitive(menu, _("_Rename..."), on_row,
+	menu_item_add_sensitive(menu, _("_Rename…"), on_row,
 				G_CALLBACK(sr_menu_rename_cb), sd);
 	menu_item_add_sensitive(menu, _("_Copy path"), on_row,
 	                        G_CALLBACK(sr_menu_copy_path_cb<TRUE>), sd);
@@ -1201,11 +1201,11 @@ static GtkWidget *search_result_menu(SearchData *sd, gboolean on_row, gboolean e
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
-	                                 _("Move selection to Trash...") : _("Move selection to Trash"),
+	                                 _("Move selection to Trash…") : _("Move selection to Trash"),
 	                             GQ_ICON_DELETE, on_row,
 	                             G_CALLBACK(sr_menu_delete_cb<TRUE>), sd);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
-	                                 _("_Delete selection...") : _("_Delete selection"),
+	                                 _("_Delete selection…") : _("_Delete selection"),
 	                             GQ_ICON_DELETE_SHRED, on_row,
 	                             G_CALLBACK(sr_menu_delete_cb<FALSE>), sd);
 
@@ -3228,7 +3228,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	gq_gtk_box_pack_start(GTK_BOX(sd->ui.box_collection), sd->ui.entry_collection, TRUE, TRUE, 0);
 	gtk_widget_show(sd->ui.entry_collection);
 
-	GtkWidget *button_fd = gtk_button_new_with_label("...");
+	GtkWidget *button_fd = gtk_button_new_with_label("…");
 	g_signal_connect(G_OBJECT(button_fd), "clicked", G_CALLBACK(select_collection_clicked_cb), sd);
 	gq_gtk_box_pack_start(GTK_BOX(sd->ui.box_collection), button_fd, FALSE, FALSE, 0);
 	gtk_widget_show(button_fd);

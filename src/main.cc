@@ -1011,7 +1011,7 @@ Version: Geeqie "), VERSION, nullptr);
 
 	g_application_add_main_option_entries(G_APPLICATION(app), command_line_options);
 
-	g_application_set_option_context_parameter_string (G_APPLICATION(app), "[path...]");
+	g_application_set_option_context_parameter_string (G_APPLICATION(app), "[path…]");
 
 	g_autofree gchar *version_string = g_strconcat(
 _("Geeqie is an image viewer.\n \

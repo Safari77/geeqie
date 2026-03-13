@@ -224,7 +224,7 @@ Use `printf` rather than `echo` except for plain text.
 There are several versions of `mktemp`. Using the following definition helps portability (note that `template` is not optional):
 
 ```sh
-mktemp [-d] [-q] template ...
+mktemp [-d] [-q] template …
 ```
 
 and use for example this style:

@@ -307,7 +307,7 @@ gboolean ImageLoaderTiff::write(const guchar *buf, gsize &chunk_size, gsize coun
 
 #if G_BYTE_ORDER == G_BIG_ENDIAN
 		/* Turns out that the packing used by TIFFRGBAImage depends on
-		 * the host byte order...
+		 * the host byte order…
 		 */
 		{
 		guchar *ptr = pixels;

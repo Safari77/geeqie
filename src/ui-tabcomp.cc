@@ -752,7 +752,7 @@ void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboo
 	hbox = gtk_widget_get_parent(parent);
 	if (!GTK_IS_BOX(hbox)) return;
 
-	td->fd_button = gtk_button_new_with_label("...");
+	td->fd_button = gtk_button_new_with_label("…");
 	g_signal_connect(G_OBJECT(td->fd_button), "size_allocate",
 			 G_CALLBACK(tab_completion_button_size_allocate), parent);
 	g_signal_connect(G_OBJECT(td->fd_button), "clicked",

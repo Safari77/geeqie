@@ -774,11 +774,11 @@ GtkWidget *vf_pop_menu(ViewFile *vf)
 	menu_item_add_icon_sensitive(menu, _("Open archive"), GQ_ICON_OPEN, active & class_archive, G_CALLBACK(vf_pop_menu_open_archive_cb), vf);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, active,
+	menu_item_add_icon_sensitive(menu, _("_Copy…"), GQ_ICON_COPY, active,
 				      G_CALLBACK(vf_pop_menu_copy_cb), vf);
-	menu_item_add_sensitive(menu, _("_Move..."), active,
+	menu_item_add_sensitive(menu, _("_Move…"), active,
 				G_CALLBACK(vf_pop_menu_move_cb), vf);
-	menu_item_add_sensitive(menu, _("_Rename..."), active,
+	menu_item_add_sensitive(menu, _("_Rename…"), active,
 				G_CALLBACK(vf_pop_menu_rename_cb), vf);
 	menu_item_add_sensitive(menu, _("_Copy to clipboard"), active,
 	                        G_CALLBACK(vf_pop_menu_copy_path_cb<TRUE>), vf);
@@ -788,11 +788,11 @@ GtkWidget *vf_pop_menu(ViewFile *vf)
 				G_CALLBACK(vf_pop_menu_cut_path_cb), vf);
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
-	                                 _("Move selection to Trash...") : _("Move selection to Trash"),
+	                                 _("Move selection to Trash…") : _("Move selection to Trash"),
 	                             GQ_ICON_DELETE, active,
 	                             G_CALLBACK(vf_pop_menu_delete_cb<TRUE>), vf);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
-	                                 _("_Delete selection...") : _("_Delete selection"),
+	                                 _("_Delete selection…") : _("_Delete selection"),
 	                             GQ_ICON_DELETE_SHRED, active,
 	                             G_CALLBACK(vf_pop_menu_delete_cb<FALSE>), vf);
 	menu_item_add_divider(menu);
@@ -803,7 +803,7 @@ GtkWidget *vf_pop_menu(ViewFile *vf)
 	                        G_CALLBACK(vf_pop_menu_disable_grouping_cb<TRUE>), vf);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Find duplicates..."), GQ_ICON_FIND, active,
+	menu_item_add_icon_sensitive(menu, _("_Find duplicates…"), GQ_ICON_FIND, active,
 				G_CALLBACK(vf_pop_menu_duplicates_cb), vf);
 	menu_item_add_divider(menu);
 
@@ -1458,7 +1458,7 @@ static void vf_thumb_do(ViewFile *vf, FileData *fd)
 	if (!fd) return;
 
 	vf_set_thumb_fd(vf, fd);
-	vf_thumb_status(vf, vf_thumb_progress(vf), _("Loading thumbs..."));
+	vf_thumb_status(vf, vf_thumb_progress(vf), _("Loading thumbs…"));
 }
 
 void vf_thumb_cleanup(ViewFile *vf)
@@ -1567,7 +1567,7 @@ void vf_thumb_update(ViewFile *vf)
 
 	if (vf->type == FILEVIEW_LIST && !VFLIST(vf)->thumbs_enabled) return;
 
-	vf_thumb_status(vf, 0.0, _("Loading thumbs..."));
+	vf_thumb_status(vf, 0.0, _("Loading thumbs…"));
 	vf->thumbs_running = TRUE;
 
 	if (thumb_format_changed)
@@ -1838,7 +1838,7 @@ static gboolean vf_read_metadata_in_idle_cb(gpointer data)
 	auto vf = static_cast<ViewFile *>(data);
 	GList *work;
 
-	vf_thumb_status(vf, vf_read_metadata_in_idle_progress(vf), _("Loading meta..."));
+	vf_thumb_status(vf, vf_read_metadata_in_idle_progress(vf), _("Loading meta…"));
 
 	work = vf->list;
 
@@ -1876,7 +1876,7 @@ static void vf_read_metadata_in_idle_finished_cb(gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
 
-	vf_thumb_status(vf, 0.0, _("Loading meta..."));
+	vf_thumb_status(vf, 0.0, _("Loading meta…"));
 	vf->read_metadata_in_idle_id = 0;
 }
 

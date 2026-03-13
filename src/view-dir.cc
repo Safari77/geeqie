@@ -704,17 +704,17 @@ GtkWidget *vd_pop_menu(ViewDir *vd, FileData *fd)
 				G_CALLBACK(vd_pop_menu_slide_rec_cb), vd);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("Find _duplicates..."), GQ_ICON_FIND, active,
+	menu_item_add_icon_sensitive(menu, _("Find _duplicates…"), GQ_ICON_FIND, active,
 	                             G_CALLBACK(vd_pop_menu_dupe_cb<FALSE>), vd);
-	menu_item_add_icon_sensitive(menu, _("Find duplicates recursive..."), GQ_ICON_FIND, active,
+	menu_item_add_icon_sensitive(menu, _("Find duplicates recursive…"), GQ_ICON_FIND, active,
 	                             G_CALLBACK(vd_pop_menu_dupe_cb<TRUE>), vd);
 
 	menu_item_add_divider(menu);
 
-	menu_item_add_sensitive(menu, _("_New folder..."), new_folder_active,
+	menu_item_add_sensitive(menu, _("_New folder…"), new_folder_active,
 				G_CALLBACK(vd_pop_menu_new_cb), vd);
 
-	menu_item_add_sensitive(menu, _("_Rename..."), rename_delete_active,
+	menu_item_add_sensitive(menu, _("_Rename…"), rename_delete_active,
 				G_CALLBACK(vd_pop_menu_rename_cb), vd);
 
 	menu_item_add(menu, _("_Copy to clipboard"),
@@ -726,7 +726,7 @@ GtkWidget *vd_pop_menu(ViewDir *vd, FileData *fd)
 	menu_item_add(menu, _("_Cut to clipboard"),
 		      G_CALLBACK(vd_pop_menu_cut_path_cb), vd);
 
-	menu_item_add_icon_sensitive(menu, _("_Delete..."), GQ_ICON_DELETE, rename_delete_active,
+	menu_item_add_icon_sensitive(menu, _("_Delete…"), GQ_ICON_DELETE, rename_delete_active,
 				      G_CALLBACK(vd_pop_menu_delete_cb), vd);
 	menu_item_add_divider(menu);
 

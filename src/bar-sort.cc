@@ -163,7 +163,7 @@ static void bar_sort_undo_set(SortData *sd, GList *src_list, const gchar *dest)
 
 	if (src_list)
 		{
-		/* we should create the undo_dest_list to use it later... */
+		/* we should create the undo_dest_list to use it later… */
 		g_list_free_full(sd->undo_dest_list, g_free);
 		sd->undo_dest_list=nullptr;
 

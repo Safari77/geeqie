@@ -773,7 +773,7 @@ void layout_status_update_progress(LayoutWindow *lw, gdouble val, const gchar *t
 
 	/* Give priority to the loading meta data message
 	 */
-	if(!g_strcmp0(text, "Loading thumbs..."))
+	if(!g_strcmp0(text, "Loading thumbs…"))
 		{
 		if (meta)
 			{

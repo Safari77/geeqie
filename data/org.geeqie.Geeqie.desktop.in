@@ -6,7 +6,7 @@ Exec=geeqie %F
 Icon=geeqie
 Type=Application
 Terminal=false
-# Startup notification disabled, since the remote -r switch may not open a new window...
+# Startup notification disabled, since the remote -r switch may not open a new window…
 StartupNotify=true
 StartupWMClass=geeqie
 NotShowIn=X-Geeqie;

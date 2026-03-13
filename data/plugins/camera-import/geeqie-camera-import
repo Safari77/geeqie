@@ -99,7 +99,7 @@ dest_files_sorted=$(mktemp "${TMPDIR:-/tmp}/geeqie.XXXXXXXXXX")
 
 (
 	gphoto2 --port "$port" --list-files 2> /tmp/geeqie-camera-import.log | awk -W posix 'BEGIN {LINT = "fatal"} /#/ {print $2}' | sort > "$src_files_sorted"
-) | zenity --progress --auto-close --auto-kill --title="Geeqie camera import" --text="Searching for files to download..." --pulsate --window-icon=/usr/local/share/icons/hicolor/scalable/apps/geeqie.svg
+) | zenity --progress --auto-close --auto-kill --title="Geeqie camera import" --text="Searching for files to download…" --pulsate --window-icon=/usr/local/share/icons/hicolor/scalable/apps/geeqie.svg
 
 error=$(grep -i error /tmp/geeqie-camera-import.log)
 
@@ -161,7 +161,7 @@ do
 	latest_file=$(tail -n 1 /tmp/geeqie-camera-import-files)
 	if [ -z "$latest_file" ]
 	then
-		latest_file="Skipping existing files, if any..."
+		latest_file="Skipping existing files, if any…"
 	fi
 	printf '#Downloading: total: %s existing: %s\n%s' "$files_to_load existing" "$existing_file_count" "$latest_file" > "$zen_pipe"
 

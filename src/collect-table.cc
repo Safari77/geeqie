@@ -278,7 +278,7 @@ static void collection_table_update_extras(CollectTable *ct, gboolean loading, g
 	if (!ct->extra_label) return;
 
 	if (loading)
-		text = _("Loading thumbs...");
+		text = _("Loading thumbs…");
 	else
 		text = " ";
 
@@ -986,7 +986,7 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 
 	menu_item_add_icon(menu, _("Append from file selection"), GQ_ICON_ADD,
 			G_CALLBACK(collection_table_popup_add_file_selection_cb), ct);
-	menu_item_add_icon(menu, _("Append from collection..."), GQ_ICON_OPEN,
+	menu_item_add_icon(menu, _("Append from collection…"), GQ_ICON_OPEN,
 			G_CALLBACK(collection_table_popup_add_collection_cb), ct);
 	menu_item_add_divider(menu);
 
@@ -1009,11 +1009,11 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 	                 G_CALLBACK(collection_table_popup_edit_cb), ct);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, over_icon,
+	menu_item_add_icon_sensitive(menu, _("_Copy…"), GQ_ICON_COPY, over_icon,
 			G_CALLBACK(collection_table_popup_copy_cb), ct);
-	menu_item_add_sensitive(menu, _("_Move..."), over_icon,
+	menu_item_add_sensitive(menu, _("_Move…"), over_icon,
 			G_CALLBACK(collection_table_popup_move_cb), ct);
-	menu_item_add_sensitive(menu, _("_Rename..."), over_icon,
+	menu_item_add_sensitive(menu, _("_Rename…"), over_icon,
 			G_CALLBACK(collection_table_popup_rename_cb), ct);
 	menu_item_add_sensitive(menu, _("_Copy path"), over_icon,
 	                        G_CALLBACK(collection_table_popup_copy_path_cb<TRUE>), ct);
@@ -1022,11 +1022,11 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
-	                                 _("Move selection to Trash...") : _("Move selection to Trash"),
+	                                 _("Move selection to Trash…") : _("Move selection to Trash"),
 	                             GQ_ICON_DELETE, over_icon,
 	                             G_CALLBACK(collection_table_popup_delete_cb<TRUE>), ct);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
-	                                 _("_Delete selection...") : _("_Delete selection"),
+	                                 _("_Delete selection…") : _("_Delete selection"),
 	                             GQ_ICON_DELETE_SHRED, over_icon,
 	                             G_CALLBACK(collection_table_popup_delete_cb<FALSE>), ct);
 
@@ -1047,12 +1047,12 @@ static GtkWidget *collection_table_popup_menu(CollectTable *ct, gboolean over_ic
 	menu_item_add_divider(menu);
 	menu_item_add_icon(menu, _("_Save collection"), GQ_ICON_SAVE,
 			G_CALLBACK(collection_table_popup_save_cb), ct);
-	menu_item_add_icon(menu, _("Save collection _as..."), GQ_ICON_SAVE_AS,
+	menu_item_add_icon(menu, _("Save collection _as…"), GQ_ICON_SAVE_AS,
 			G_CALLBACK(collection_table_popup_save_as_cb), ct);
 	menu_item_add_divider(menu);
-	menu_item_add_icon(menu, _("_Find duplicates..."), GQ_ICON_FIND,
+	menu_item_add_icon(menu, _("_Find duplicates…"), GQ_ICON_FIND,
 			G_CALLBACK(collection_table_popup_find_dupes_cb), ct);
-	menu_item_add_icon_sensitive(menu, _("Print..."), GQ_ICON_PRINT, over_icon,
+	menu_item_add_icon_sensitive(menu, _("Print…"), GQ_ICON_PRINT, over_icon,
 			G_CALLBACK(collection_table_popup_print_cb), ct);
 
 	return menu;

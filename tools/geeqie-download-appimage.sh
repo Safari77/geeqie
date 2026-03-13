@@ -266,7 +266,7 @@ then
 		mkdir "Geeqie$minimal-latest-$architecture-AppImage"
 		cd "Geeqie$minimal-latest-$architecture-AppImage" || exit 1
 
-		(../Geeqie-latest-x86_64.AppImage --appimage-extract > /dev/null) & spinner "Extracting Geeqie AppImage..."
+		(../Geeqie-latest-x86_64.AppImage --appimage-extract > /dev/null) & spinner "Extracting Geeqie AppImage…"
 
 		printf "\nExtraction complete\n"
 
@@ -297,7 +297,7 @@ then
 		mkdir "Geeqie$minimal-latest-$architecture-AppImage"
 		cd "Geeqie$minimal-latest-$architecture-AppImage" || exit 1
 
-		(../Geeqie-latest-x86_64.AppImage --appimage-extract > /dev/null) & spinner "Extracting Geeqie AppImage..."
+		(../Geeqie-latest-x86_64.AppImage --appimage-extract > /dev/null) & spinner "Extracting Geeqie AppImage…"
 
 		printf "\nExtraction complete\n"
 

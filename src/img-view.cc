@@ -1321,9 +1321,9 @@ static GtkWidget *view_popup_menu(ViewWindow *vw)
 	item = menu_item_add(menu, _("_Go to directory view"), G_CALLBACK(view_set_layout_path_cb), vw);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon(menu, _("_Copy..."), GQ_ICON_COPY, G_CALLBACK(view_copy_cb), vw);
-	menu_item_add(menu, _("_Move..."), G_CALLBACK(view_move_cb), vw);
-	menu_item_add(menu, _("_Rename..."), G_CALLBACK(view_rename_cb), vw);
+	menu_item_add_icon(menu, _("_Copy…"), GQ_ICON_COPY, G_CALLBACK(view_copy_cb), vw);
+	menu_item_add(menu, _("_Move…"), G_CALLBACK(view_move_cb), vw);
+	menu_item_add(menu, _("_Rename…"), G_CALLBACK(view_rename_cb), vw);
 	menu_item_add(menu, _("_Copy path"),
 	              G_CALLBACK(view_copy_path_cb<TRUE>), vw);
 	menu_item_add(menu, _("_Copy path unquoted"),
@@ -1331,11 +1331,11 @@ static GtkWidget *view_popup_menu(ViewWindow *vw)
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon(menu, options->file_ops.confirm_move_to_trash ?
-	                       _("Move to Trash...") : _("Move to Trash"),
+	                       _("Move to Trash…") : _("Move to Trash"),
 	                   GQ_ICON_DELETE,
 	                   G_CALLBACK(view_delete_cb<TRUE>), vw);
 	menu_item_add_icon(menu, options->file_ops.confirm_delete ?
-	                       _("_Delete...") : _("_Delete"),
+	                       _("_Delete…") : _("_Delete"),
 	                   GQ_ICON_DELETE_SHRED,
 	                   G_CALLBACK(view_delete_cb<FALSE>), vw);
 

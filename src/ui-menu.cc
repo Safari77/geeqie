@@ -53,7 +53,7 @@ static void menu_item_add_accelerator(GtkWidget *menu, GtkAccelGroup *accel_grou
 	g_autofree gchar *label_text = nullptr;
 	pango_parse_markup(label, -1, '_', nullptr, &label_text, nullptr, nullptr);
 
-	g_auto(GStrv) label_stripped = g_strsplit(label_text, "...", 2);
+	g_auto(GStrv) label_stripped = g_strsplit(label_text, "…", 2);
 
 	const auto has_text = [text = label_stripped[0]](const HardcodedWindowKey &window_key)
 	{

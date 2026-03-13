@@ -473,23 +473,23 @@ fi
 # Start of Zenity progress section
 zen_pipe=$(mktemp -u "${TMPDIR:-/tmp}/geeqie.XXXXXXXXXX")
 mkfifo "$zen_pipe"
-(tail -f "$zen_pipe" 2> /dev/null) | zenity --progress --title="$title" --text="Installing options..." --auto-close --auto-kill --percentage=0 2> /dev/null &
+(tail -f "$zen_pipe" 2> /dev/null) | zenity --progress --title="$title" --text="Installing options…" --auto-close --auto-kill --percentage=0 2> /dev/null &
 
 printf '%b\n' "2" > "$zen_pipe"
-printf '%b\n' "#Installing essential libraries..." > "$zen_pipe"
+printf '%b\n' "#Installing essential libraries…" > "$zen_pipe"
 
 install_essential "$gtk_version"
 
 printf '%b\n' "4" > "$zen_pipe"
-printf '%b\n' "#Installing options..." > "$zen_pipe"
+printf '%b\n' "#Installing options…" > "$zen_pipe"
 
 install_options
 
 printf '%b\n' "6" > "$zen_pipe"
-printf '%b\n' "#Installing extra loaders..." > "$zen_pipe"
+printf '%b\n' "#Installing extra loaders…" > "$zen_pipe"
 
 printf '%b\n' "10" > "$zen_pipe"
-printf '%b\n' "#Getting new sources from server..." > "$zen_pipe"
+printf '%b\n' "#Getting new sources from server…" > "$zen_pipe"
 
 if [ "$mode" = "install" ]
 then
@@ -515,7 +515,7 @@ else
 fi
 
 printf '%b\n' "20" > "$zen_pipe"
-printf '%b\n' "#Cleaning installed version..." > "$zen_pipe"
+printf '%b\n' "#Cleaning installed version…" > "$zen_pipe"
 
 if [ "$mode" = "install" ]
 then
@@ -525,7 +525,7 @@ else
 fi
 
 printf '%b\n' "30" > "$zen_pipe"
-printf '%b\n' "#Checkout required version..." > "$zen_pipe"
+printf '%b\n' "#Checkout required version…" > "$zen_pipe"
 
 if [ -n "$BACK" ]
 then
@@ -555,19 +555,19 @@ then
 fi
 
 printf '%b\n' "40" > "$zen_pipe"
-printf '%b\n' "#Creating configuration files..." > "$zen_pipe"
+printf '%b\n' "#Creating configuration files…" > "$zen_pipe"
 
 if [ -z "${gtk_version%%GTK3*}" ]
 then
 	meson setup build
 	printf '%b\n' "90 " > "$zen_pipe"
-	printf '%b\n' "#Installing Geeqie..." > "$zen_pipe"
+	printf '%b\n' "#Installing Geeqie…" > "$zen_pipe"
 	ninja -C build install
 else
 	meson setup build
 	meson configure --no-pager build
 	printf '%b\n' "90 " > "$zen_pipe"
-	printf '%b\n' "#Installing Geeqie..." > "$zen_pipe"
+	printf '%b\n' "#Installing Geeqie…" > "$zen_pipe"
 	sudo --askpass meson install -C build
 fi
 
@@ -581,6 +581,6 @@ rm "$zen_pipe"
 do
 	printf '%b\n' "$i"
 	sleep 0.1
-done) | zenity --progress --title="$title" --text="Geeqie installation complete...\n" --auto-close --percentage=0 2> /dev/null
+done) | zenity --progress --title="$title" --text="Geeqie installation complete…\n" --auto-close --percentage=0 2> /dev/null
 
 exit

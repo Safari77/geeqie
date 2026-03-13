@@ -174,7 +174,7 @@ static gboolean cache_maintenance_render_stop_cb(gpointer data)
 {
 	auto *cd = static_cast<CacheOpsData *>(data);
 
-	cache_maintenance_notification(cd->app, _("Creating sim data..."), TRUE);
+	cache_maintenance_notification(cd->app, _("Creating sim data…"), TRUE);
 
 	cache_manager_sim_remote(cd->app, cache_maintenance_path, TRUE, cache_maintenance_sim_stop_cb);
 
@@ -186,7 +186,7 @@ static void cache_maintenance_clean_stop_cb(gpointer data)
 	auto *cm = static_cast<CMData *>(data);
 
 
-	cache_maintenance_notification(cm->app,  _("Creating thumbs..."), TRUE);
+	cache_maintenance_notification(cm->app,  _("Creating thumbs…"), TRUE);
 	cache_manager_render_remote(cm->app, cache_maintenance_path, TRUE, options->thumbnails.cache_into_dirs, cache_maintenance_render_stop_cb);
 }
 
@@ -194,7 +194,7 @@ void cache_maintenance(GtkApplication *app, const gchar *path)
 {
 	cache_maintenance_path = g_strdup(path);
 
-	cache_maintenance_notification(app, _("Cleaning thumbs and sims..."), TRUE);
+	cache_maintenance_notification(app, _("Cleaning thumbs and sims…"), TRUE);
 
 	cache_maintain_home_remote(app, FALSE, FALSE, cache_maintenance_clean_stop_cb);
 }
@@ -349,7 +349,7 @@ static gboolean cache_maintain_home_cb(gpointer data)
 			}
 		else
 			{
-			buf = "...";
+			buf = "…";
 			}
 		gq_gtk_entry_set_text(GTK_ENTRY(cm->entry), buf);
 		}
@@ -383,15 +383,15 @@ static void cache_maintain_home(gboolean metadata, gboolean clear, GtkWidget *pa
 
 	if (metadata)
 		{
-		msg = _("Removing old metadata...");
+		msg = _("Removing old metadata…");
 		}
 	else if (clear)
 		{
-		msg = _("Clearing cached thumbnails...");
+		msg = _("Clearing cached thumbnails…");
 		}
 	else
 		{
-		msg = _("Removing old thumbnails...");
+		msg = _("Removing old thumbnails…");
 		}
 
 	cm->gd = generic_dialog_new(_("Maintenance"),
@@ -975,7 +975,7 @@ static void cache_manager_standard_clean_start(CacheOpsData *cd)
 		gtk_widget_set_sensitive(cd->button_stop, TRUE);
 		gtk_widget_set_sensitive(cd->button_close, FALSE);
 
-		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(cd->progress), _("running..."));
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(cd->progress), _("running…"));
 	}
 
 	const auto get_thumbnails_folder_files = [](const gchar *thumb_folder)
@@ -1029,12 +1029,12 @@ static void cache_manager_standard_process(GtkWidget *widget, gpointer)
 	if (clear)
 		{
 		icon_name = GQ_ICON_DELETE;
-		msg = _("Clearing thumbnails...");
+		msg = _("Clearing thumbnails…");
 		}
 	else
 		{
 		icon_name = GQ_ICON_CLEAR;
-		msg = _("Removing old thumbnails...");
+		msg = _("Removing old thumbnails…");
 		}
 
 	cd->gd = generic_dialog_new(_("Maintenance"),

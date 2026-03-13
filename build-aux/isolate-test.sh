@@ -33,7 +33,7 @@ teardown() {
     if ! rm -rf "$TEST_HOME"; then
         # Could be a race condition; try sleeping and repeating.
         echo >&2
-        echo "First cleanup attempt failed; sleeping and retrying..." >&2
+        echo "First cleanup attempt failed; sleeping and retrying…" >&2
         sleep 2
 
         # Repeat with verbose listing

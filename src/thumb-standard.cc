@@ -580,7 +580,7 @@ static void thumb_loader_std_done_cb(ImageLoader *il, gpointer data)
 	pixbuf = image_loader_get_pixbuf(tl->il);
 	if (!pixbuf)
 		{
-		DEBUG_1("...but no pixbuf");
+		DEBUG_1("…but no pixbuf");
 		thumb_loader_std_error_cb(il, data);
 		return;
 		}

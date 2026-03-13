@@ -312,7 +312,7 @@ void popup_menu_bar(GtkWidget *widget, GCallback expander_height_cb)
 
 		if (expander_height_cb && gtk_expander_get_expanded(GTK_EXPANDER(widget)))
 			{
-			menu_item_add_icon(menu, _("Height..."), GQ_ICON_PREFERENCES,
+			menu_item_add_icon(menu, _("Height…"), GQ_ICON_PREFERENCES,
 			                   G_CALLBACK(expander_height_cb), widget);
 			menu_item_add_divider(menu);
 			}

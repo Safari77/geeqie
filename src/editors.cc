@@ -504,7 +504,7 @@ static void editor_verbose_window_stop(GenericDialog *, gpointer data)
 	auto ed = static_cast<EditorData *>(data);
 	ed->stopping = TRUE;
 	ed->count = 0;
-	editor_verbose_window_progress(ed, _("stopping..."));
+	editor_verbose_window_progress(ed, _("stopping…"));
 }
 
 static void editor_verbose_window_enable_close(EditorVerboseData *vd)
@@ -1107,7 +1107,7 @@ static EditorFlags editor_command_next_start(EditorData *ed)
 			if ((ed->flags & EDITOR_FOR_EACH) && fd)
 				editor_verbose_window_progress(ed, fd->path);
 			else
-				editor_verbose_window_progress(ed, _("running..."));
+				editor_verbose_window_progress(ed, _("running…"));
 			}
 		ed->count++;
 

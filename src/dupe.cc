@@ -1968,7 +1968,7 @@ static void dupe_thumb_step(DupeWindow *dw)
 		return;
 		}
 
-	dupe_window_update_progress(dw, _("Loading thumbs..."),
+	dupe_window_update_progress(dw, _("Loading thumbs…"),
 				    length == 0 ? 0.0 : static_cast<gdouble>(row) / length, FALSE);
 
 	dw->thumb_item = di;
@@ -2131,7 +2131,7 @@ static gboolean create_checksums_dimensions(DupeWindow *dw, GList *list)
 
 				if (!di->md5sum)
 					{
-					dupe_window_update_progress(dw, _("Reading checksums..."),
+					dupe_window_update_progress(dw, _("Reading checksums…"),
 						dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n - 1) / dw->setup_count, FALSE);
 
 					if (options->thumbnails.enable_caching)
@@ -2167,7 +2167,7 @@ static gboolean create_checksums_dimensions(DupeWindow *dw, GList *list)
 				dw->setup_n++;
 				if (di->width == 0 && di->height == 0)
 					{
-					dupe_window_update_progress(dw, _("Reading dimensions..."),
+					dupe_window_update_progress(dw, _("Reading dimensions…"),
 						dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n - 1) / dw->setup_count, FALSE);
 
 					if (options->thumbnails.enable_caching)
@@ -2256,7 +2256,7 @@ static gboolean dupe_check_cb(gpointer data)
 
 				if (!di->simd)
 					{
-					dupe_window_update_progress(dw, _("Reading similarity data..."),
+					dupe_window_update_progress(dw, _("Reading similarity data…"),
 						dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n) / dw->setup_count, FALSE);
 
 					if (options->thumbnails.enable_caching)
@@ -2294,7 +2294,7 @@ static gboolean dupe_check_cb(gpointer data)
 			}
 
 		/* End of setup not done */
-		dupe_window_update_progress(dw, _("Comparing..."), 0.0, FALSE);
+		dupe_window_update_progress(dw, _("Comparing…"), 0.0, FALSE);
 		dw->setup_done = TRUE;
 		dupe_setup_reset(dw);
 		dw->setup_count = g_list_length(dw->list);
@@ -2327,7 +2327,7 @@ static gboolean dupe_check_cb(gpointer data)
 			while (dw->search_matches_sorted)
 				{
 				dw->setup_n++;
-				dupe_window_update_progress(dw, _("Sorting..."), 0.0, FALSE);
+				dupe_window_update_progress(dw, _("Sorting…"), 0.0, FALSE);
 				search_match_list_item = static_cast<DupeSearchMatch *>(dw->search_matches_sorted->data);
 
 				if (!dupe_match_link_exists(search_match_list_item->a, search_match_list_item->b))
@@ -2352,7 +2352,7 @@ static gboolean dupe_check_cb(gpointer data)
 			if (dw->setup_count > 0)
 				{
 				dw->setup_count = 0;
-				dupe_window_update_progress(dw, _("Sorting..."), 1.0, TRUE);
+				dupe_window_update_progress(dw, _("Sorting…"), 1.0, TRUE);
 				return G_SOURCE_CONTINUE;
 				}
 			}
@@ -2379,7 +2379,7 @@ static gboolean dupe_check_cb(gpointer data)
 		{
 		/* This is the similarity comparison */
 		dupe_list_check_match(dw, static_cast<DupeItem *>(dw->working->data), dw->working);
-		dupe_window_update_progress(dw, _("Queuing..."), dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n) / dw->setup_count, FALSE);
+		dupe_window_update_progress(dw, _("Queuing…"), dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n) / dw->setup_count, FALSE);
 		dw->setup_n++;
 		dw->queue_count++;
 
@@ -2391,7 +2391,7 @@ static gboolean dupe_check_cb(gpointer data)
 		 * dupe_array_check() processes the entire list in one go
 		*/
 		dw->working = nullptr;
-		dupe_window_update_progress(dw, _("Comparing..."), 0.0, FALSE);
+		dupe_window_update_progress(dw, _("Comparing…"), 0.0, FALSE);
 		dupe_array_check(dw);
 		}
 
@@ -2439,7 +2439,7 @@ static void dupe_item_remove(DupeWindow *dw, DupeItem *di)
 {
 	if (!di) return;
 
-	/* handle things that may be in progress... */
+	/* handle things that may be in progress… */
 	if (dw->working && dw->working->data == di)
 		{
 		dw->working = dw->working->prev;
@@ -3272,14 +3272,14 @@ static GtkWidget *dupe_menu_popup_main(DupeWindow *dw, DupeItem *di)
 	submenu_add_collections(menu, on_row,
 	                        G_CALLBACK(dupe_pop_menu_collections_cb), dw);
 
-	menu_item_add_icon_sensitive(menu, _("Print..."), GQ_ICON_PRINT, on_row,
+	menu_item_add_icon_sensitive(menu, _("Print…"), GQ_ICON_PRINT, on_row,
 				G_CALLBACK(dupe_menu_print_cb), dw);
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, on_row,
+	menu_item_add_icon_sensitive(menu, _("_Copy…"), GQ_ICON_COPY, on_row,
 				G_CALLBACK(dupe_menu_copy_cb), dw);
-	menu_item_add_sensitive(menu, _("_Move..."), on_row,
+	menu_item_add_sensitive(menu, _("_Move…"), on_row,
 				G_CALLBACK(dupe_menu_move_cb), dw);
-	menu_item_add_sensitive(menu, _("_Rename..."), on_row,
+	menu_item_add_sensitive(menu, _("_Rename…"), on_row,
 				G_CALLBACK(dupe_menu_rename_cb), dw);
 	menu_item_add_sensitive(menu, _("_Copy path"), on_row,
 	                        G_CALLBACK(dupe_menu_copy_path_cb<TRUE>), dw);
@@ -3288,11 +3288,11 @@ static GtkWidget *dupe_menu_popup_main(DupeWindow *dw, DupeItem *di)
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
-	                                 _("Move selection to Trash...") : _("Move selection to Trash"),
+	                                 _("Move selection to Trash…") : _("Move selection to Trash"),
 	                             GQ_ICON_DELETE, on_row,
 	                             G_CALLBACK(dupe_menu_delete_cb<TRUE>), dw);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
-	                                 _("_Delete selection...") : _("_Delete selection"),
+	                                 _("_Delete selection…") : _("_Delete selection"),
 	                             GQ_ICON_DELETE_SHRED, on_row,
 	                             G_CALLBACK(dupe_menu_delete_cb<FALSE>), dw);
 

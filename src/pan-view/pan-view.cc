@@ -97,9 +97,9 @@ constexpr gint ZOOM_LABEL_WIDTH = 64;
 
 constexpr gint PAN_GRID_SIZE = 60;
 constexpr gint PAN_GRID_ALPHA = 20;
-#define PAN_GRID_COLOR 0, 0, 0, PAN_GRID_ALPHA
+constexpr GqColor PAN_GRID_COLOR{ 0, 0, 0, PAN_GRID_ALPHA };
 
-#define PAN_BACKGROUND_COLOR 150, 150, 150, 255
+constexpr GqColor PAN_BACKGROUND_COLOR{ 150, 150, 150, 255 };
 
 /* popup info box */
 constexpr gint PAN_POPUP_BORDER = 1;
@@ -385,9 +385,7 @@ static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
 	const GdkRectangle request_rect{x, y, width, height};
 	GdkRectangle pan_grid_rect;
 
-	pixbuf_set_rect_fill(pixbuf,
-			     0, 0, width, height,
-			     PAN_BACKGROUND_COLOR);
+	pixbuf_set_rect_fill(pixbuf, 0, 0, width, height, PAN_BACKGROUND_COLOR);
 
 	const auto draw_rect_if_intersect = [pixbuf, &request_rect, x, y](GdkRectangle pan_grid_rect)
 	{
@@ -396,7 +394,7 @@ static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
 
 		r.x -= x;
 		r.y -= y;
-		pixbuf_draw_rect_fill(pixbuf, r, {PAN_GRID_COLOR});
+		pixbuf_draw_rect_fill(pixbuf, r, PAN_GRID_COLOR);
 	};
 
 	pan_grid_rect = request_rect;
@@ -1076,7 +1074,7 @@ static gint pan_layout_update_idle_cb(gpointer data)
 			pan_cache_fill(pw, pw->dir_fd);
 			if (pw->cache_todo)
 				{
-				pan_window_message(pw, _("Reading image data..."));
+				pan_window_message(pw, _("Reading image data…"));
 				return G_SOURCE_CONTINUE;
 				}
 			}
@@ -1086,11 +1084,11 @@ static gint pan_layout_update_idle_cb(gpointer data)
 			pw->cache_tick++;
 			if (pw->cache_count == pw->cache_total)
 				{
-				pan_window_message(pw, _("Sorting..."));
+				pan_window_message(pw, _("Sorting…"));
 				}
 			else if (pw->cache_tick > 9)
 				{
-				g_autofree gchar *buf = g_strdup_printf("%s %d / %d", _("Reading image data..."),
+				g_autofree gchar *buf = g_strdup_printf("%s %d / %d", _("Reading image data…"),
 				                                        pw->cache_count, pw->cache_total);
 				pan_window_message(pw, buf);
 
@@ -1156,7 +1154,7 @@ static void pan_layout_update_idle(PanWindow *pw)
 
 void pan_layout_update(PanWindow *pw)
 {
-	pan_window_message(pw, _("Sorting images..."));
+	pan_window_message(pw, _("Sorting images…"));
 	pan_layout_update_idle(pw);
 }
 
@@ -2311,11 +2309,11 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
 			G_CALLBACK(pan_go_to_original_cb), pw);
 
 	menu_item_add_divider(menu);
-	menu_item_add_icon_sensitive(menu, _("_Copy..."), GQ_ICON_COPY, active,
+	menu_item_add_icon_sensitive(menu, _("_Copy…"), GQ_ICON_COPY, active,
 				      G_CALLBACK(pan_copy_cb), pw);
-	menu_item_add_sensitive(menu, _("_Move..."), active,
+	menu_item_add_sensitive(menu, _("_Move…"), active,
 				G_CALLBACK(pan_move_cb), pw);
-	menu_item_add_sensitive(menu, _("_Rename..."), active,
+	menu_item_add_sensitive(menu, _("_Rename…"), active,
 				G_CALLBACK(pan_rename_cb), pw);
 	menu_item_add_sensitive(menu, _("_Copy to clipboard"), active,
 	                        G_CALLBACK(pan_copy_path_cb<TRUE>), pw);
@@ -2324,11 +2322,11 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
 
 	menu_item_add_divider(menu);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_move_to_trash ?
-	                                 _("Move to Trash...") : _("Move to Trash"),
+	                                 _("Move to Trash…") : _("Move to Trash"),
 	                             GQ_ICON_DELETE, active,
 	                             G_CALLBACK(pan_delete_cb<TRUE>), pw);
 	menu_item_add_icon_sensitive(menu, options->file_ops.confirm_delete ?
-	                                 _("_Delete...") : _("_Delete"),
+	                                 _("_Delete…") : _("_Delete"),
 	                             GQ_ICON_DELETE_SHRED, active,
 	                             G_CALLBACK(pan_delete_cb<FALSE>), pw);
 

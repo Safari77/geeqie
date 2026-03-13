@@ -802,11 +802,11 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw)
 
 	menu_item_add_divider(menu);
 
-	item = menu_item_add_icon(menu, _("_Copy..."), GQ_ICON_COPY, G_CALLBACK(li_pop_menu_copy_cb), lw);
+	item = menu_item_add_icon(menu, _("_Copy…"), GQ_ICON_COPY, G_CALLBACK(li_pop_menu_copy_cb), lw);
 	gtk_widget_set_sensitive(item, has_path);
-	item = menu_item_add(menu, _("_Move..."), G_CALLBACK(li_pop_menu_move_cb), lw);
+	item = menu_item_add(menu, _("_Move…"), G_CALLBACK(li_pop_menu_move_cb), lw);
 	gtk_widget_set_sensitive(item, has_path);
-	item = menu_item_add(menu, _("_Rename..."), G_CALLBACK(li_pop_menu_rename_cb), lw);
+	item = menu_item_add(menu, _("_Rename…"), G_CALLBACK(li_pop_menu_rename_cb), lw);
 	gtk_widget_set_sensitive(item, has_path);
 	item = menu_item_add(menu, _("_Copy to clipboard"),
 	                     G_CALLBACK(li_pop_menu_copy_path_cb<TRUE>), lw);
@@ -818,12 +818,12 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw)
 	menu_item_add_divider(menu);
 
 	item = menu_item_add_icon(menu, options->file_ops.confirm_move_to_trash ?
-	                              _("Move to Trash...") : _("Move to Trash"),
+	                              _("Move to Trash…") : _("Move to Trash"),
 	                          GQ_ICON_DELETE,
 	                          G_CALLBACK(li_pop_menu_delete_cb<TRUE>), lw);
 	gtk_widget_set_sensitive(item, has_path);
 	item = menu_item_add_icon(menu, options->file_ops.confirm_delete ?
-	                              _("_Delete...") : _("_Delete"),
+	                              _("_Delete…") : _("_Delete"),
 	                          GQ_ICON_DELETE_SHRED,
 	                          G_CALLBACK(li_pop_menu_delete_cb<FALSE>), lw);
 	gtk_widget_set_sensitive(item, has_path);
