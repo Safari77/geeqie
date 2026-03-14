@@ -114,11 +114,19 @@ gboolean pixbuf_clip_region(const GdkPixbuf *pb, GdkRectangle clip, GdkRectangle
 	return gdk_rectangle_intersect(&pb_rect, &clip, &r);
 }
 
-void pixel_set_color(guchar *pp, GqColor color)
+void pixel_mix_color(guchar *pp, GqColor color)
 {
 	pp[0] = (color.r * color.a + pp[0] * (256 - color.a)) >> 8;
 	pp[1] = (color.g * color.a + pp[1] * (256 - color.a)) >> 8;
 	pp[2] = (color.b * color.a + pp[2] * (256 - color.a)) >> 8;
+}
+
+void pixel_set_color(guchar *pp, GqColor color, gboolean set_alpha)
+{
+	pp[0] = color.r;
+	pp[1] = color.g;
+	pp[2] = color.b;
+	if (set_alpha) pp[3] = color.a;
 }
 
 /*
@@ -145,7 +153,7 @@ void pixbuf_draw_rect_fill(guchar *p_pix, gint prs, gboolean has_alpha,
 			{
 			color.a = get_alpha(x, y);
 
-			pixel_set_color(pp, color);
+			pixel_mix_color(pp, color);
 			pp += p_step;
 			}
 		}
@@ -756,10 +764,8 @@ void pixbuf_set_rect_fill(GdkPixbuf *pb,
 		pp = p_pix + (y + i) * prs + (x * p_step);
 		for (j = 0; j < w; j++)
 			{
-			*pp = color.r; pp++;
-			*pp = color.g; pp++;
-			*pp = color.b; pp++;
-			if (has_alpha) { *pp = color.a; pp++; }
+			pixel_set_color(pp, color, has_alpha);
+			pp += p_step;
 			}
 		}
 }
@@ -802,27 +808,19 @@ void pixbuf_set_rect(GdkPixbuf *pb,
  * @brief Sets the specified pixel of the pixbuf to the specified color.
  * @param pb The `GdkPixbuf` to paint into.
  * @param x,y Coordinates of the pixel to set.
- * @param r,g,b,a Color and alpha.
+ * @param color Color and alpha.
  */
-void pixbuf_pixel_set(GdkPixbuf *pb, gint x, gint y, gint r, gint g, gint b, gint a)
+void pixbuf_pixel_set(GdkPixbuf *pb, gint x, gint y, GqColor color)
 {
-	guchar *buf;
-	gboolean has_alpha;
-	gint rowstride;
-	guchar *p;
-
 	if (x < 0 || x >= gdk_pixbuf_get_width(pb) ||
 	    y < 0 || y >= gdk_pixbuf_get_height(pb)) return;
 
-	buf = gdk_pixbuf_get_pixels(pb);
-	has_alpha = gdk_pixbuf_get_has_alpha(pb);
-	rowstride = gdk_pixbuf_get_rowstride(pb);
+	guchar *buf = gdk_pixbuf_get_pixels(pb);
+	const gboolean has_alpha = gdk_pixbuf_get_has_alpha(pb);
+	const gint rowstride = gdk_pixbuf_get_rowstride(pb);
 
-	p = buf + (y * rowstride) + (x * (has_alpha ? 4 : 3));
-	*p = r; p++;
-	*p = g; p++;
-	*p = b; p++;
-	if (has_alpha) *p = a;
+	guchar *p = buf + (y * rowstride) + (x * (has_alpha ? 4 : 3));
+	pixel_set_color(p, color, has_alpha);
 }
 
 
@@ -833,70 +831,45 @@ void pixbuf_pixel_set(GdkPixbuf *pb, gint x, gint y, gint r, gint g, gint b, gin
  */
 
 static void pixbuf_copy_font(GdkPixbuf *src, gint sx, gint sy,
-			     GdkPixbuf *dest, gint dx, gint dy,
-			     gint w, gint h,
-			     guint8 r, guint8 g, guint8 b, guint8 a)
+                             GdkPixbuf *dest, gint dx, gint dy,
+                             gint w, gint h, GqColor color)
 {
-	gint sw;
-	gint sh;
-	gint srs;
-	gboolean s_alpha;
-	gint s_step;
-	guchar *s_pix;
-	gint dw;
-	gint dh;
-	gint drs;
-	gboolean d_alpha;
-	gint d_step;
-	guchar *d_pix;
+	if (!src || !dest || sx < 0 || sy < 0 || dx < 0 || dy < 0) return;
 
-	guchar *sp;
-	guchar *dp;
-	gint i;
-	gint j;
+	if (sx + w > gdk_pixbuf_get_width(src)) return;
+	if (sy + h > gdk_pixbuf_get_height(src)) return;
 
-	if (!src || !dest) return;
+	if (dx + w > gdk_pixbuf_get_width(dest)) return;
+	if (dy + h > gdk_pixbuf_get_height(dest)) return;
 
-	sw = gdk_pixbuf_get_width(src);
-	sh = gdk_pixbuf_get_height(src);
+	const gboolean s_alpha = gdk_pixbuf_get_has_alpha(src);
+	const gboolean d_alpha = gdk_pixbuf_get_has_alpha(dest);
+	const gint srs = gdk_pixbuf_get_rowstride(src);
+	const gint drs = gdk_pixbuf_get_rowstride(dest);
+	guchar *s_pix = gdk_pixbuf_get_pixels(src);
+	guchar *d_pix = gdk_pixbuf_get_pixels(dest);
 
-	if (sx < 0 || sx + w > sw) return;
-	if (sy < 0 || sy + h > sh) return;
+	const gint s_step = s_alpha ? 4 : 3;
+	const gint d_step = d_alpha ? 4 : 3;
 
-	dw = gdk_pixbuf_get_width(dest);
-	dh = gdk_pixbuf_get_height(dest);
-
-	if (dx < 0 || dx + w > dw) return;
-	if (dy < 0 || dy + h > dh) return;
-
-	s_alpha = gdk_pixbuf_get_has_alpha(src);
-	d_alpha = gdk_pixbuf_get_has_alpha(dest);
-	srs = gdk_pixbuf_get_rowstride(src);
-	drs = gdk_pixbuf_get_rowstride(dest);
-	s_pix = gdk_pixbuf_get_pixels(src);
-	d_pix = gdk_pixbuf_get_pixels(dest);
-
-	s_step = (s_alpha) ? 4 : 3;
-	d_step = (d_alpha) ? 4 : 3;
-
-	for (i = 0; i < h; i++)
+	for (gint i = 0; i < h; i++)
 		{
-		sp = s_pix + (sy + i) * srs + sx * s_step;
-		dp = d_pix + (dy + i) * drs + dx * d_step;
-		for (j = 0; j < w; j++)
+		guchar *sp = s_pix + (sy + i) * srs + sx * s_step;
+		guchar *dp = d_pix + (dy + i) * drs + dx * d_step;
+		for (gint j = 0; j < w; j++)
 			{
 			if (*sp)
 				{
 				guint8 asub;
 
-				asub = a * sp[0] / 255;
-				dp[0] = (r * asub + dp[0] * (256-asub)) >> 8;
-				asub = a * sp[1] / 255;
-				dp[1] = (g * asub + dp[1] * (256-asub)) >> 8;
-				asub = a * sp[2] / 255;
-				dp[2] = (b * asub + dp[2] * (256-asub)) >> 8;
+				asub = color.a * sp[0] / 255;
+				dp[0] = (color.r * asub + dp[0] * (256 - asub)) >> 8;
+				asub = color.a * sp[1] / 255;
+				dp[1] = (color.g * asub + dp[1] * (256 - asub)) >> 8;
+				asub = color.a * sp[2] / 255;
+				dp[2] = (color.b * asub + dp[2] * (256 - asub)) >> 8;
 
-				if (d_alpha) dp[3] = std::max<guchar>(dp[3], a * ((sp[0] + sp[1] + sp[2]) / 3) / 255);
+				if (d_alpha) dp[3] = std::max<guchar>(dp[3], color.a * ((sp[0] + sp[1] + sp[2]) / 3) / 255);
 				}
 
 			sp += s_step;
@@ -963,8 +936,7 @@ void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
 	if (x + w > dw)	w = dw - x;
 	if (y + h > dh) h = dh - y;
 
-	pixbuf_copy_font(buffer, sx, sy, pixbuf, x, y, w, h,
-	                 color.r, color.g, color.b, color.a);
+	pixbuf_copy_font(buffer, sx, sy, pixbuf, x, y, w, h, color);
 
 	g_object_unref(buffer);
 	cairo_surface_destroy(source);
@@ -1083,7 +1055,7 @@ void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
 
 		while (x1 < x2)
 			{
-			pixel_set_color(pp, color);
+			pixel_mix_color(pp, color);
 			pp += p_step;
 
 			x1++;
@@ -1268,7 +1240,7 @@ void pixbuf_draw_line(GdkPixbuf *pb, GdkRectangle clip,
 		    y < pb_rect.y || y >= pb_rect.y + pb_rect.height) return;
 
 		guchar *pp = p_pix + (y * prs) + (x * p_step);
-		pixel_set_color(pp, color);
+		pixel_mix_color(pp, color);
 	};
 
 	// We draw the clipped line segment along the longer axis first, and
@@ -1547,6 +1519,7 @@ void pixbuf_desaturate_rect(GdkPixbuf *pb,
 	p_pix = gdk_pixbuf_get_pixels(pb);
 
 	const gint p_step = has_alpha ? 4 : 3;
+	constexpr GqColor full_red{ 255, 0, 0, 0 };
 
 	for (i = 0; i < h; i++)
 		{
@@ -1555,9 +1528,7 @@ void pixbuf_desaturate_rect(GdkPixbuf *pb,
 			{
 			if (pp[0] == 255 || pp[1] == 255 || pp[2] == 255 || pp[0] == 0 || pp[1] == 0 || pp[2] == 0)
 				{
-				pp[0] = 255;
-				pp[1] = 0;
-				pp[2] = 0;
+				pixel_set_color(pp, full_red, FALSE);
 				}
 			pp += p_step;
 			}
