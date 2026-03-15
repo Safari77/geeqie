@@ -2803,10 +2803,11 @@ std::optional<GqColor> pixbuf_renderer_get_pixel_colors(PixbufRenderer *pr, GqPo
 	color.g = p_pix[1];
 	color.b = p_pix[2];
 
-	if (p_alpha)
-		{
+	if (p_alpha) {
 		color.a = p_pix[3];
-		}
+	} else {
+		color.a = 255;
+	}
 
 	return color;
 }
