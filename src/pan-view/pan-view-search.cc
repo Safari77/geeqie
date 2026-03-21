@@ -94,84 +94,55 @@ static void pan_search_status(PanWindow *pw, const gchar *text)
 	gtk_label_set_text(GTK_LABEL(pw->search_ui->search_label), (text) ? text : "");
 }
 
-static gint pan_search_by_path(PanWindow *pw, const gchar *path)
+static bool pan_search_list(PanWindow *pw, GList *list, const gchar *desc)
 {
-	PanItem *pi;
-	GList *list;
-	GList *found;
-	PanItemType type;
+	if (!list) return false;
 
-	type = (pw->size > PAN_IMAGE_SIZE_THUMB_LARGE) ? PAN_ITEM_IMAGE : PAN_ITEM_THUMB;
-
-	list = pan_item_find_by_path(pw, type, path, FALSE, FALSE);
-	if (!list) return FALSE;
-
-	found = g_list_find(list, pw->click_pi);
+	GList *found = g_list_find(list, pw->click_pi);
 	if (found && found->next)
 		{
 		found = found->next;
-		pi = static_cast<PanItem *>(found->data);
 		}
 	else
 		{
-		pi = static_cast<PanItem *>(list->data);
+		found = list;
 		}
+
+	auto *pi = static_cast<PanItem *>(found->data);
 
 	pan_info_update(pw, pi);
 	image_scroll_to_point(pw->imd, pi->x + (pi->width / 2), pi->y + (pi->height / 2), 0.5, 0.5);
 
-	g_autofree gchar *buf = g_strdup_printf("%s ( %d / %u )",
-	                                        (path[0] == G_DIR_SEPARATOR) ? _("path found") : _("filename found"),
+	g_autofree gchar *buf = g_strdup_printf("%s ( %d / %u )", desc,
 	                                        g_list_index(list, pi) + 1,
 	                                        g_list_length(list));
 	pan_search_status(pw, buf);
 
-	g_list_free(list);
-
-	return TRUE;
+	return true;
 }
 
-static gboolean pan_search_by_partial(PanWindow *pw, const gchar *text)
+static bool pan_search_by_path(PanWindow *pw, const gchar *path)
 {
-	PanItem *pi;
-	GList *list;
-	GList *found;
-	PanItemType type;
+	const PanItemType type = get_pan_item_type(pw->size);
 
-	type = (pw->size > PAN_IMAGE_SIZE_THUMB_LARGE) ? PAN_ITEM_IMAGE : PAN_ITEM_THUMB;
+	g_autoptr(GList) list = pan_item_find_by_path(pw, type, path, FALSE, FALSE);
 
-	list = pan_item_find_by_path(pw, type, text, TRUE, FALSE);
+	return pan_search_list(pw, list, (path[0] == G_DIR_SEPARATOR) ? _("path found") : _("filename found"));
+}
+
+static bool pan_search_by_partial(PanWindow *pw, const gchar *text)
+{
+	const PanItemType type = get_pan_item_type(pw->size);
+
+	g_autoptr(GList) list = pan_item_find_by_path(pw, type, text, TRUE, FALSE);
 	if (!list) list = pan_item_find_by_path(pw, type, text, FALSE, TRUE);
 	if (!list)
 		{
 		g_autofree gchar *needle = g_utf8_strdown(text, -1);
 		list = pan_item_find_by_path(pw, type, needle, TRUE, TRUE);
 		}
-	if (!list) return FALSE;
 
-	found = g_list_find(list, pw->click_pi);
-	if (found && found->next)
-		{
-		found = found->next;
-		pi = static_cast<PanItem *>(found->data);
-		}
-	else
-		{
-		pi = static_cast<PanItem *>(list->data);
-		}
-
-	pan_info_update(pw, pi);
-	image_scroll_to_point(pw->imd, pi->x + (pi->width / 2), pi->y + (pi->height / 2), 0.5, 0.5);
-
-	g_autofree gchar *buf = g_strdup_printf("%s ( %d / %u )",
-	                                        _("partial match"),
-	                                        g_list_index(list, pi) + 1,
-	                                        g_list_length(list));
-	pan_search_status(pw, buf);
-
-	g_list_free(list);
-
-	return TRUE;
+	return pan_search_list(pw, list, _("partial match"));
 }
 
 static gboolean valid_date_separator(gchar c)
@@ -180,8 +151,8 @@ static gboolean valid_date_separator(gchar c)
 }
 
 static GList *pan_search_by_date_val(PanWindow *pw, PanItemType type,
-				     gint year, gint month, gint day,
-				     const gchar *key)
+                                     gint year, gint month, gint day,
+                                     const std::string &key)
 {
 	GList *list = nullptr;
 	GList *work;
@@ -194,8 +165,7 @@ static GList *pan_search_by_date_val(PanWindow *pw, PanItemType type,
 		pi = static_cast<PanItem *>(work->data);
 		work = work->prev;
 
-		if (pi->fd && (pi->type == type || type == PAN_ITEM_NONE) &&
-		    ((!key && !pi->key) || (key && pi->key && strcmp(key, pi->key) == 0)))
+		if (pi->fd && pi->is_type(type) && pi->key == key)
 			{
 			struct tm tl;
 
@@ -307,10 +277,9 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 		}
 	else
 		{
-		PanItemType type;
+		const PanItemType type = get_pan_item_type(pw->size);
 
-		type = (pw->size > PAN_IMAGE_SIZE_THUMB_LARGE) ? PAN_ITEM_IMAGE : PAN_ITEM_THUMB;
-		list = pan_search_by_date_val(pw, type, year, month, day, nullptr);
+		list = pan_search_by_date_val(pw, type, year, month, day, {});
 		}
 
 	if (list)
@@ -329,7 +298,7 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 
 	pw->search_pi = pi;
 
-	if (pw->layout == PAN_LAYOUT_CALENDAR && pi && pi->type == PAN_ITEM_BOX)
+	if (pw->layout == PAN_LAYOUT_CALENDAR && pi && pi->is_type(PAN_ITEM_BOX))
 		{
 		pan_info_update(pw, nullptr);
 		pan_calendar_update(pw, pi);

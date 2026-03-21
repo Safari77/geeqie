@@ -22,6 +22,8 @@
 #ifndef PAN_VIEW_PAN_TYPES_H
 #define PAN_VIEW_PAN_TYPES_H
 
+#include <string>
+
 #include <gtk/gtk.h>
 
 #include "cache-loader.h"
@@ -53,16 +55,16 @@ struct ThumbLoader;
 #define PAN_SHADOW_OFFSET 6
 #define PAN_SHADOW_FADE 5
 #define PAN_SHADOW_RGB 0, 0, 0
-constexpr guint8 PAN_SHADOW_ALPHA = 64;
-constexpr GqColor PAN_SHADOW_COLOR{ PAN_SHADOW_RGB, PAN_SHADOW_ALPHA };
+inline constexpr guint8 PAN_SHADOW_ALPHA = 64;
+inline constexpr GqColor PAN_SHADOW_COLOR{ PAN_SHADOW_RGB, PAN_SHADOW_ALPHA };
 
-constexpr GqColor PAN_BOX_COLOR{ 255, 255, 255, 100 };
+inline constexpr GqColor PAN_BOX_COLOR{ 255, 255, 255, 100 };
 #define PAN_BOX_BORDER 20
 
 #define PAN_BOX_OUTLINE_THICKNESS 4
-constexpr GqColor PAN_BOX_OUTLINE_COLOR{ 0, 0, 0, 128 };
+inline constexpr GqColor PAN_BOX_OUTLINE_COLOR{ 0, 0, 0, 128 };
 
-constexpr GqColor PAN_TEXT_COLOR{ 0, 0, 0, 255 };
+inline constexpr GqColor PAN_TEXT_COLOR{ 0, 0, 0, 255 };
 
 
 enum PanLayoutType {
@@ -89,7 +91,7 @@ enum PanImageSize {
 };
 
 enum PanItemType {
-	PAN_ITEM_NONE,
+	PAN_ITEM_ANY,
 	PAN_ITEM_THUMB,
 	PAN_ITEM_BOX,
 	PAN_ITEM_TRIANGLE,
@@ -101,6 +103,7 @@ enum PanTextAttrType {
 	PAN_TEXT_ATTR_NONE = 0,
 	PAN_TEXT_ATTR_BOLD = 1 << 0,
 	PAN_TEXT_ATTR_HEADING = 1 << 1,
+	PAN_TEXT_ATTR_BOLD_HEADING = PAN_TEXT_ATTR_BOLD | PAN_TEXT_ATTR_HEADING,
 	PAN_TEXT_ATTR_MARKUP = 1 << 2
 };
 
@@ -119,12 +122,15 @@ enum PanBorderType {
 
 
 struct PanItem {
+	bool is_type(PanItemType type) const;
+	void set_key(const std::string &key);
+
 	PanItemType type;
 	gint x;
 	gint y;
 	gint width;
 	gint height;
-	gchar *key;
+	std::string key;
 
 	FileData *fd;
 

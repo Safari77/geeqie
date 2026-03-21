@@ -308,7 +308,7 @@ static gboolean pan_queue_step(PanWindow *pw)
 	thumb_loader_free(pw->tl);
 	pw->tl = nullptr;
 
-	if (pi->type == PAN_ITEM_IMAGE)
+	if (pi->is_type(PAN_ITEM_IMAGE))
 		{
 		pw->il = image_loader_new(pi->fd);
 
@@ -325,7 +325,7 @@ static gboolean pan_queue_step(PanWindow *pw)
 		image_loader_free(pw->il);
 		pw->il = nullptr;
 		}
-	else if (pi->type == PAN_ITEM_THUMB)
+	else if (pi->is_type(PAN_ITEM_THUMB))
 		{
 		pw->tl = thumb_loader_new(pw->thumb_size, pw->thumb_size);
 
@@ -357,8 +357,7 @@ static gboolean pan_queue_step(PanWindow *pw)
 static void pan_queue_add(PanWindow *pw, PanItem *pi)
 {
 	if (!pi || pi->queued || pi->pixbuf) return;
-	if (pw->size <= PAN_IMAGE_SIZE_THUMB_NONE &&
-	    (!pi->key || strcmp(pi->key, "info") != 0) )
+	if (pw->size <= PAN_IMAGE_SIZE_THUMB_NONE && pi->key != "info")
 		{
 		return;
 		}
@@ -440,7 +439,6 @@ static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
 			case PAN_ITEM_IMAGE:
 				queue = pan_item_image_draw(pw, pi, pixbuf, pr, x, y, width, height);
 				break;
-			case PAN_ITEM_NONE:
 			default:
 				break;
 			}
@@ -520,9 +518,7 @@ static void pan_window_message(PanWindow *pw, const gchar *text)
 			pi = static_cast<PanItem *>(work->data);
 			work = work->next;
 
-			if (pi->fd &&
-			    pi->type == PAN_ITEM_BOX &&
-			    pi->key && strcmp(pi->key, "dot") == 0)
+			if (pi->fd && pi->is_type(PAN_ITEM_BOX) && pi->key == "dot")
 				{
 				size += pi->fd->size;
 				count++;
@@ -539,7 +535,7 @@ static void pan_window_message(PanWindow *pw, const gchar *text)
 			work = work->next;
 
 			if (pi->fd &&
-			    (pi->type == PAN_ITEM_THUMB || pi->type == PAN_ITEM_IMAGE))
+			    (pi->is_type(PAN_ITEM_THUMB) || pi->is_type(PAN_ITEM_IMAGE)))
 				{
 				size += pi->fd->size;
 				count++;
@@ -1447,7 +1443,7 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 	if (pw->click_pi == pi) return;
 	if (pi && !pi->fd) pi = nullptr;
 
-	while ((p = pan_item_find_by_key(pw, PAN_ITEM_NONE, "info"))) pan_item_remove(pw, p);
+	while ((p = pan_item_find_by_key(pw, PAN_ITEM_ANY, "info"))) pan_item_remove(pw, p);
 	pw->click_pi = pi;
 
 	if (!pi) return;
@@ -1456,10 +1452,10 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 
 	pbox = pan_item_box_new(pw, nullptr, pi->x + pi->width + 4, pi->y, 10, 10,
 				PAN_POPUP_BORDER, PAN_POPUP_COLOR, PAN_POPUP_BORDER_COLOR);
-	pan_item_set_key(pbox, "info");
+	pbox->set_key("info");
 
 	GqPoint c1{pi->x + pi->width - 8, pi->y + 8};
-	if (pi->type == PAN_ITEM_THUMB && pi->pixbuf)
+	if (pi->is_type(PAN_ITEM_THUMB) && pi->pixbuf)
 		{
 		gint w = gdk_pixbuf_get_width(pi->pixbuf);
 		gint h = gdk_pixbuf_get_height(pi->pixbuf);
@@ -1475,7 +1471,7 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 	                     c1, c2, c3,
 	                     PAN_POPUP_COLOR,
 	                     PAN_BORDER_1 | PAN_BORDER_3, PAN_POPUP_BORDER_COLOR);
-	pan_item_set_key(p, "info");
+	p->set_key("info");
 	pan_item_added(pw, p);
 
 	pan_info_calc_text_alignment(pw, pbox, pi->fd);
@@ -1517,11 +1513,11 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 
 			pbox = pan_item_box_new(pw, nullptr, pbox->x, pbox->y + pbox->height + 8, 10, 10,
 						PAN_POPUP_BORDER, PAN_POPUP_COLOR, PAN_POPUP_BORDER_COLOR);
-			pan_item_set_key(pbox, "info");
+			pbox->set_key("info");
 
 			p = pan_item_image_new(pw, file_data_new_group(pi->fd->path),
 					       pbox->x + PREF_PAD_BORDER, pbox->y + PREF_PAD_BORDER, iw, ih);
-			pan_item_set_key(p, "info");
+			p->set_key("info");
 			pan_item_size_by_item(pbox, p, PREF_PAD_BORDER);
 
 			pan_item_box_shadow(pbox, PAN_SHADOW_OFFSET * 2, PAN_SHADOW_FADE * 2);
@@ -1561,8 +1557,7 @@ static void button_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer data)
 		return;
 		}
 
-	pi = pan_item_find_by_coord(pw, (pw->size > PAN_IMAGE_SIZE_THUMB_LARGE) ? PAN_ITEM_IMAGE : PAN_ITEM_THUMB,
-				    rx, ry, nullptr);
+	pi = pan_item_find_by_coord(pw, get_pan_item_type(pw->size), rx, ry, nullptr);
 
 	switch (event->button)
 		{
