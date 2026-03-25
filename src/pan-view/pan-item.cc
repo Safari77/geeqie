@@ -121,23 +121,18 @@ void pan_item_remove(PanWindow *pw, PanItem *pi)
 	pan_item_free(pi);
 }
 
-void pan_item_size_by_item(PanItem *pi, PanItem *child, gint border)
-{
-	if (!pi || !child) return;
-
-	if (pi->x + pi->width < child->x + child->width + border)
-		pi->width = child->x + child->width + border - pi->x;
-
-	if (pi->y + pi->height < child->y + child->height + border)
-		pi->height = child->y + child->height + border - pi->y;
-}
-
-void pan_item_size_coordinates(PanItem *pi, gint border, gint &w, gint &h)
+void PanItem::set_size_by_item(const PanItem *pi, gint border)
 {
 	if (!pi) return;
 
-	w = std::max(w, pi->x + pi->width + border);
-	h = std::max(h, pi->y + pi->height + border);
+	width = std::max(width, pi->x + pi->width + border - x);
+	height = std::max(height, pi->y + pi->height + border - y);
+}
+
+void PanItem::adjust_size(gint border, gint &w, gint &h) const
+{
+	w = std::max(w, x + width + border);
+	h = std::max(h, y + height + border);
 }
 
 
@@ -550,36 +545,24 @@ gboolean pan_item_image_draw(PanWindow *, PanItem *pi, GdkPixbuf *pixbuf, Pixbuf
 
 PanItem *pan_item_find_by_key(PanWindow *pw, PanItemType type, const gchar *key)
 {
-	GList *work;
-
 	if (!key) return nullptr;
 
-	work = g_list_last(pw->list);
-	while (work)
-		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		if (pi->is_type(type) && pi->key == key)
+	const auto pan_item_find_by_key_l = [type, key](GList *list) -> PanItem *
+	{
+		for (GList *work = g_list_last(list); work; work = work->prev)
 			{
-			return pi;
-			}
-		work = work->prev;
-		}
-	work = g_list_last(pw->list_static);
-	while (work)
-		{
-		PanItem *pi;
+			auto *pi = static_cast<PanItem *>(work->data);
 
-		pi = static_cast<PanItem *>(work->data);
-		if (pi->is_type(type) && pi->key == key)
-			{
-			return pi;
+			if (pi->is_type(type) && pi->key == key) return pi;
 			}
-		work = work->prev;
-		}
 
-	return nullptr;
+		return nullptr;
+	};
+
+	PanItem *pi = pan_item_find_by_key_l(pw->list);
+	if (!pi) pi = pan_item_find_by_key_l(pw->list_static);
+
+	return pi;
 }
 
 /* when ignore_case and partial are TRUE, path should be converted to lower case */
@@ -641,46 +624,41 @@ GList *pan_item_find_by_path(PanWindow *pw, PanItemType type, const gchar *path,
 	return g_list_reverse(list);
 }
 
-GList *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
-			   gboolean ignore_case, gboolean partial)
+PanItem *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
+                             gboolean ignore_case, gboolean partial)
 {
 	if (!fd) return nullptr;
-	return pan_item_find_by_path(pw, type, fd->path, ignore_case, partial);
+
+	g_autoptr(GList) list = pan_item_find_by_path(pw, type, fd->path, ignore_case, partial);
+	return list ? static_cast<PanItem *>(list->data) : nullptr;
 }
 
-
-static PanItem *pan_item_find_by_coord_l(GList *list, PanItemType type, gint x, gint y, const gchar *key)
-{
-	GList *work;
-
-	work = list;
-	while (work)
-		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		if (pi->is_type(type) &&
-		    x >= pi->x && x < pi->x + pi->width &&
-		    y >= pi->y && y < pi->y + pi->height &&
-		    (!key || pi->key == key))
-			{
-			return pi;
-			}
-		work = work->next;
-		}
-
-	return nullptr;
-}
 
 PanItem *pan_item_find_by_coord(PanWindow *pw, PanItemType type,
 				gint x, gint y, const gchar *key)
 {
-	PanItem *pi;
+	const auto pan_item_find_by_coord_l = [type, x, y, key](GList *list) -> PanItem *
+	{
+		for (GList *work = list; work; work = work->next)
+			{
+			auto *pi = static_cast<PanItem *>(work->data);
 
-	pi = pan_item_find_by_coord_l(pw->list, type, x, y, key);
-	if (pi) return pi;
+			if (pi->is_type(type) &&
+			    x >= pi->x && x < pi->x + pi->width &&
+			    y >= pi->y && y < pi->y + pi->height &&
+			    (!key || pi->key == key))
+				{
+				return pi;
+				}
+			}
 
-	return pan_item_find_by_coord_l(pw->list_static, type, x, y, key);
+		return nullptr;
+	};
+
+	PanItem *pi = pan_item_find_by_coord_l(pw->list);
+	if (!pi) pi = pan_item_find_by_coord_l(pw->list_static);
+
+	return pi;
 }
 
 
@@ -738,7 +716,7 @@ void PanTextAlignment::calc(PanItem *box)
 			{
 			pi_label->x = x;
 			pi_label->y = y;
-			pan_item_size_by_item(box, pi_label, PREF_PAD_BORDER);
+			box->set_size_by_item(pi_label, PREF_PAD_BORDER);
 			height = pi_label->height;
 			}
 
@@ -746,7 +724,7 @@ void PanTextAlignment::calc(PanItem *box)
 			{
 			pi_text->x = x + label_column_width + PREF_PAD_SPACE;
 			pi_text->y = y;
-			pan_item_size_by_item(box, pi_text, PREF_PAD_BORDER);
+			box->set_size_by_item(pi_text, PREF_PAD_BORDER);
 			height = std::max(height, pi_text->height);
 			}
 

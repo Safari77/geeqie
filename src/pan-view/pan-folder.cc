@@ -287,7 +287,7 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 			y_height = 0;
 			}
 
-		pan_item_size_by_item(pi_box, pi, PAN_BOX_BORDER);
+		pi_box->set_size_by_item(pi, PAN_BOX_BORDER);
 		}
 
 	group = g_new0(FlowerGroup, 1);
@@ -334,21 +334,18 @@ void pan_flower_compute(PanWindow *pw, FileData *dir_fd,
                         gint &scroll_x, gint &scroll_y)
 {
 	FlowerGroup *group;
-	GList *list;
 
 	group = pan_flower_group(pw, dir_fd, 0, 0);
 	pan_flower_build(pw, group, nullptr);
 
 	pan_flower_size(pw, width, height);
 
-	list = pan_item_find_by_fd(pw, PAN_ITEM_BOX, dir_fd, FALSE, FALSE);
-	if (list)
+	PanItem *pi = pan_item_find_by_fd(pw, PAN_ITEM_BOX, dir_fd, FALSE, FALSE);
+	if (pi)
 		{
-		auto pi = static_cast<PanItem *>(list->data);
 		scroll_x = pi->x + pi->width / 2;
 		scroll_y = pi->y + pi->height / 2;
 		}
-	g_list_free(list);
 }
 
 static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
@@ -408,7 +405,7 @@ static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
 			y_height = pw->thumb_size;
 			}
 
-		pan_item_size_by_item(pi_box, pi, PAN_BOX_BORDER);
+		pi_box->set_size_by_item(pi, PAN_BOX_BORDER);
 		}
 
 	if (f) y = pi_box->y + pi_box->height;
@@ -431,11 +428,11 @@ static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
 
 	file_data_list_free(d);
 
-	pan_item_size_by_item(parent, pi_box, PAN_BOX_BORDER);
+	if (parent) parent->set_size_by_item(pi_box, PAN_BOX_BORDER);
 
 	y = std::max(y, pi_box->y + pi_box->height + PAN_BOX_BORDER);
 
-	pan_item_size_coordinates(pi_box, PAN_BOX_BORDER, width, height);
+	pi_box->adjust_size(PAN_BOX_BORDER, width, height);
 }
 
 void pan_folder_tree_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &height)

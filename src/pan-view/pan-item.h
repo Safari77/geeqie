@@ -42,16 +42,12 @@ void pan_item_free(PanItem *pi);
 void pan_item_added(PanWindow *pw, PanItem *pi);
 void pan_item_remove(PanWindow *pw, PanItem *pi);
 
-// Determine sizes
-void pan_item_size_by_item(PanItem *pi, PanItem *child, gint border);
-void pan_item_size_coordinates(PanItem *pi, gint border, gint &w, gint &h);
-
 // Find items
 PanItem *pan_item_find_by_key(PanWindow *pw, PanItemType type, const gchar *key);
 GList *pan_item_find_by_path(PanWindow *pw, PanItemType type, const gchar *path,
 			     gboolean ignore_case, gboolean partial);
-GList *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
-			   gboolean ignore_case, gboolean partial);
+PanItem *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
+                             gboolean ignore_case, gboolean partial);
 PanItem *pan_item_find_by_coord(PanWindow *pw, PanItemType type,
 				gint x, gint y, const gchar *key);
 
