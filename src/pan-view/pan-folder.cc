@@ -235,7 +235,7 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 	f = filelist_sort(f, {SORT_NAME, TRUE, TRUE});
 	d = filelist_sort(d, {SORT_NAME, TRUE, TRUE});
 
-	pan_filter_fd_list(&f, pw->filter_ui->filter_elements, pw->filter_ui->filter_classes);
+	f = pan_filter_fd_list(f, pw->filter_ui);
 
 	pi_box = pan_item_text_new(pw, x, y, dir_fd->path, PAN_TEXT_ATTR_NONE,
 	                           PAN_BORDER_3, PAN_TEXT_COLOR);
@@ -329,18 +329,17 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 	return group;
 }
 
-void pan_flower_compute(PanWindow *pw, FileData *dir_fd,
-                        gint &width, gint &height,
+void pan_flower_compute(PanWindow *pw, gint &width, gint &height,
                         gint &scroll_x, gint &scroll_y)
 {
 	FlowerGroup *group;
 
-	group = pan_flower_group(pw, dir_fd, 0, 0);
+	group = pan_flower_group(pw, pw->dir_fd, 0, 0);
 	pan_flower_build(pw, group, nullptr);
 
 	pan_flower_size(pw, width, height);
 
-	PanItem *pi = pan_item_find_by_fd(pw, PAN_ITEM_BOX, dir_fd, FALSE, FALSE);
+	PanItem *pi = pan_item_find_by_fd(pw, PAN_ITEM_BOX, pw->dir_fd, FALSE, FALSE);
 	if (pi)
 		{
 		scroll_x = pi->x + pi->width / 2;
@@ -365,7 +364,7 @@ static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
 	f = filelist_sort(f, {SORT_NAME, TRUE, TRUE});
 	d = filelist_sort(d, {SORT_NAME, TRUE, TRUE});
 
-	pan_filter_fd_list(&f, pw->filter_ui->filter_elements, pw->filter_ui->filter_classes);
+	f = pan_filter_fd_list(f, pw->filter_ui);
 
 	x = PAN_BOX_BORDER + (level * std::max(PAN_BOX_BORDER, pw->thumb_gap));
 
@@ -435,7 +434,7 @@ static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
 	pi_box->adjust_size(PAN_BOX_BORDER, width, height);
 }
 
-void pan_folder_tree_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &height)
+void pan_folder_tree_compute(PanWindow *pw, gint &width, gint &height)
 {
 	gint x;
 	gint y;
@@ -445,6 +444,6 @@ void pan_folder_tree_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint 
 	width = PAN_BOX_BORDER * 2;
 	height = PAN_BOX_BORDER * 2;
 
-	pan_folder_tree_path(pw, dir_fd, x, y, 0, nullptr, width, height);
+	pan_folder_tree_path(pw, pw->dir_fd, x, y, 0, nullptr, width, height);
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

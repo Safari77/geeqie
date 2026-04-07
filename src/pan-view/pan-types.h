@@ -22,7 +22,7 @@
 #ifndef PAN_VIEW_PAN_TYPES_H
 #define PAN_VIEW_PAN_TYPES_H
 
-#include <string>
+#include <list>
 
 #include <gtk/gtk.h>
 
@@ -99,6 +99,14 @@ enum PanItemType {
 	PAN_ITEM_IMAGE
 };
 
+enum class PanKey {
+	None,
+	Day,
+	DayBubble,
+	Dot,
+	Info,
+};
+
 enum PanTextAttrType {
 	PAN_TEXT_ATTR_NONE = 0,
 	PAN_TEXT_ATTR_BOLD = 1 << 0,
@@ -123,7 +131,7 @@ enum PanBorderType {
 
 struct PanItem {
 	bool is_type(PanItemType type) const;
-	void set_key(const std::string &key);
+	void set_key(PanKey key);
 
 	// Determine sizes
 	void set_size_by_item(const PanItem *pi, gint border);
@@ -134,7 +142,7 @@ struct PanItem {
 	gint y;
 	gint width;
 	gint height;
-	std::string key;
+	PanKey key;
 
 	FileData *fd;
 
@@ -153,6 +161,8 @@ struct PanItem {
 
 	gboolean queued;
 };
+
+using PanItemList = std::list<PanItem *>;
 
 struct PanWindow
 {

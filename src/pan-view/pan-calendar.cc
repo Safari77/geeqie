@@ -40,7 +40,6 @@
 #include "pan-item.h"
 #include "pan-types.h"
 #include "pan-util.h"
-#include "pan-view-filter.h"
 #include "pan-view.h"
 
 namespace
@@ -132,43 +131,24 @@ void pan_calendar_update(PanWindow *pw, PanItem *pi_day)
 {
 	PanItem *pbox;
 	PanItem *pi;
-	GList *list;
-	GList *work;
 	gint x;
 	gint y;
-	gint grid;
-	gint column;
 
-	while ((pi = pan_item_find_by_key(pw, PAN_ITEM_ANY, "day_bubble"))) pan_item_remove(pw, pi);
+	while ((pi = pan_item_find_by_key(pw, PAN_ITEM_ANY, PanKey::DayBubble))) pan_item_remove(pw, pi);
 
-	if (!pi_day || !pi_day->is_type(PAN_ITEM_BOX) || pi_day->key != "day") return;
+	g_return_if_fail(pi_day && pi_day->is_type(PAN_ITEM_BOX) && pi_day->key == PanKey::Day);
 
-	list = pan_layout_intersect(pw, pi_day->x, pi_day->y, pi_day->width, pi_day->height);
+	PanItemList list = pan_layout_intersect(pw, pi_day->x, pi_day->y, pi_day->width, pi_day->height);
+	list.remove_if([](const PanItem *dot){ return !dot->is_type(PAN_ITEM_BOX) || !dot->fd || dot->key != PanKey::Dot; });
 
-	work = list;
-	while (work)
-		{
-		PanItem *dot;
-		GList *node;
-
-		dot = static_cast<PanItem *>(work->data);
-		node = work;
-		work = work->next;
-
-		if (!dot->is_type(PAN_ITEM_BOX) || !dot->fd || dot->key != "dot")
-			{
-			list = g_list_delete_link(list, node);
-			}
-		}
-
-	grid = static_cast<gint>(sqrt(g_list_length(list)) + 0.5);
+	const auto grid = static_cast<gint>(sqrt(list.size()) + 0.5);
 
 	x = pi_day->x + pi_day->width + 4;
 	y = pi_day->y;
 
 	pbox = pan_item_box_new(pw, nullptr, x, y, PAN_BOX_BORDER, PAN_BOX_BORDER,
 				PAN_CAL_POPUP_BORDER, PAN_CAL_POPUP_COLOR, PAN_CAL_POPUP_BORDER_COLOR);
-	pbox->set_key("day_bubble");
+	pbox->set_key(PanKey::DayBubble);
 
 	if (pi_day->fd)
 		{
@@ -177,48 +157,37 @@ void pan_calendar_update(PanWindow *pw, PanItem *pi_day)
 		g_autofree gchar *buf = pan_date_value_string(pi_day->fd->date, PAN_DATE_LENGTH_WEEK);
 		plabel = pan_item_text_new(pw, x, y, buf, PAN_TEXT_ATTR_BOLD_HEADING,
 		                           PAN_BORDER_3, PAN_CAL_POPUP_TEXT_COLOR);
-		plabel->set_key("day_bubble");
+		plabel->set_key(PanKey::DayBubble);
 
 		pbox->set_size_by_item(plabel, 0);
 
 		y += plabel->height;
 		}
 
-	if (list)
+	if (!list.empty())
 		{
-		column = 0;
+		gint column = 0;
 
 		x += PAN_BOX_BORDER;
 		y += PAN_BOX_BORDER;
 
-		work = list;
-		while (work)
+		for (PanItem *dot : list)
 			{
-			PanItem *dot;
+			PanItem *pimg = pan_item_thumb_new(pw, file_data_ref(dot->fd), x, y);
+			pimg->set_key(PanKey::DayBubble);
 
-			dot = static_cast<PanItem *>(work->data);
-			work = work->next;
+			pbox->set_size_by_item(pimg, PAN_BOX_BORDER);
 
-			if (dot->fd)
+			column++;
+			if (column < grid)
 				{
-				PanItem *pimg;
-
-				pimg = pan_item_thumb_new(pw, file_data_ref(dot->fd), x, y);
-				pimg->set_key("day_bubble");
-
-				pbox->set_size_by_item(pimg, PAN_BOX_BORDER);
-
-				column++;
-				if (column < grid)
-					{
-					x += pw->thumb_size + pw->thumb_gap;
-					}
-				else
-					{
-					column = 0;
-					x = pbox->x + PAN_BOX_BORDER;
-					y += pw->thumb_size + pw->thumb_gap;
-					}
+				x += pw->thumb_size + pw->thumb_gap;
+				}
+			else
+				{
+				column = 0;
+				x = pbox->x + PAN_BOX_BORDER;
+				y += pw->thumb_size + pw->thumb_gap;
 				}
 			}
 		}
@@ -231,7 +200,7 @@ void pan_calendar_update(PanWindow *pw, PanItem *pi_day)
 	                      c1, c2, c3,
 	                      PAN_CAL_POPUP_COLOR,
 	                      PAN_BORDER_1 | PAN_BORDER_3, PAN_CAL_POPUP_BORDER_COLOR);
-	pi->set_key("day_bubble");
+	pi->set_key(PanKey::DayBubble);
 	pan_item_added(pw, pi);
 
 	pan_item_box_shadow(pbox, PAN_SHADOW_OFFSET * 2, PAN_SHADOW_FADE * 2);
@@ -240,9 +209,8 @@ void pan_calendar_update(PanWindow *pw, PanItem *pi_day)
 	pan_layout_resize(pw);
 }
 
-void pan_calendar_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &height)
+void pan_calendar_compute(PanWindow *pw, gint &width, gint &height)
 {
-	GList *list;
 	GList *work;
 	gint x;
 	gint y;
@@ -256,8 +224,7 @@ void pan_calendar_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &he
 	gint end_month = 0;
 	gint day_of_week;
 
-	list = pan_list_tree(dir_fd, {SORT_NONE, TRUE, TRUE}, pw->ignore_symlinks);
-	pan_filter_fd_list(&list, pw->filter_ui->filter_elements, pw->filter_ui->filter_classes);
+	g_autoptr(GList) list = pan_list_tree_filtered(pw, SORT_NONE);
 
 	if (pw->cache_list && pw->exif_date_enable)
 		{
@@ -386,7 +353,7 @@ void pan_calendar_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &he
 			fd->date = dt;
 			pi_day = pan_item_box_new(pw, fd, x, y, PAN_CAL_DAY_WIDTH, PAN_CAL_DAY_HEIGHT,
 						  PAN_CAL_DAY_BORDER, PAN_CAL_DAY_COLOR, PAN_CAL_DAY_BORDER_COLOR);
-			pi_day->set_key("day");
+			pi_day->set_key(PanKey::Day);
 
 			dx = x + PAN_CAL_DOT_GAP * 2;
 			dy = y + PAN_CAL_DOT_GAP * 2;
@@ -400,7 +367,7 @@ void pan_calendar_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &he
 						      0,
 						      PAN_CAL_DOT_COLOR,
 						      {0, 0, 0, 0});
-				pi->set_key("dot");
+				pi->set_key(PanKey::Dot);
 
 				dx += PAN_CAL_DOT_SIZE + PAN_CAL_DOT_GAP;
 				if (dx + PAN_CAL_DOT_SIZE > pi_day->x + pi_day->width - PAN_CAL_DOT_GAP * 2)
@@ -473,7 +440,5 @@ void pan_calendar_compute(PanWindow *pw, FileData *dir_fd, gint &width, gint &he
 
 	width += grid;
 	height = std::max(height, grid + (PAN_BOX_BORDER * 2 * 2));
-
-	g_list_free(list);
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

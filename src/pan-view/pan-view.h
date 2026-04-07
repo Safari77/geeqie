@@ -25,12 +25,10 @@
 #include <glib.h>
 
 #include "filedata.h"
-
-struct PanItem;
-struct PanWindow;
+#include "pan-types.h"
 
 void pan_layout_update(PanWindow *pw);
-GList *pan_layout_intersect(PanWindow *pw, gint x, gint y, gint width, gint height);
+PanItemList pan_layout_intersect(PanWindow *pw, gint x, gint y, gint width, gint height);
 void pan_layout_resize(PanWindow *pw);
 
 GList *pan_cache_sort(GList *list, FileData::FileList::SortSettings settings);
@@ -38,6 +36,9 @@ void pan_cache_sync_date(PanWindow *pw, GList *list);
 void pan_cache_get_image_size(PanWindow *pw, const FileData *fd, gint &w, gint &h);
 
 void pan_info_update(PanWindow *pw, PanItem *pi);
+
+FileDataList *pan_list_tree(PanWindow *pw, SortType method);
+FileDataList *pan_list_tree_filtered(PanWindow *pw, SortType method);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

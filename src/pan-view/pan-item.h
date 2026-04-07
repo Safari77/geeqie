@@ -22,8 +22,6 @@
 #ifndef PAN_VIEW_PAN_ITEM_H
 #define PAN_VIEW_PAN_ITEM_H
 
-#include <list>
-#include <string>
 #include <vector>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -44,14 +42,13 @@ void pan_item_added(PanWindow *pw, PanItem *pi);
 void pan_item_remove(PanWindow *pw, PanItem *pi);
 
 // Find items
-PanItem *pan_item_find_by_key(PanWindow *pw, PanItemType type, const gchar *key);
-using PanItemList = std::list<PanItem *>;
+PanItem *pan_item_find_by_key(PanWindow *pw, PanItemType type, PanKey key);
 PanItemList pan_item_find_by_path(PanWindow *pw, PanItemType type, const gchar *path,
                                   gboolean ignore_case, gboolean partial);
 PanItem *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
                              gboolean ignore_case, gboolean partial);
 PanItem *pan_item_find_by_coord(PanWindow *pw, PanItemType type,
-				gint x, gint y, const gchar *key);
+                                gint x, gint y, PanKey key);
 
 // Item box type
 PanItem *pan_item_box_new(PanWindow *pw, FileData *fd, gint x, gint y, gint width, gint height,
@@ -88,7 +85,7 @@ gboolean pan_item_image_draw(PanWindow *pw, PanItem *pi, GdkPixbuf *pixbuf, Pixb
 class PanTextAlignment
 {
 public:
-	PanTextAlignment(PanWindow *pw, gint x, gint y, std::string key);
+	PanTextAlignment(PanWindow *pw, gint x, gint y, PanKey key);
 
 	void add(const gchar *label, const gchar *text);
 	void calc(PanItem *box);
@@ -106,7 +103,7 @@ private:
 
 	gint x;
 	gint y;
-	std::string key;
+	PanKey key;
 };
 
 #endif
