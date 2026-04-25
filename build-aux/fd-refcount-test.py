@@ -21,6 +21,7 @@
 
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -78,31 +79,39 @@ class GeeqieTestError(Exception):
 
 def main(argv) -> int:
     geeqie_exe = argv[1]
-    test_image_path = pathlib.Path(argv[2])
+    test_image_dir = pathlib.Path(argv[2])
+    if not test_image_dir.is_dir():
+        raise RuntimeError(
+                f"test_image_dir is not an existing directory: {test_image_dir}")
 
-    if not test_image_path.exists():
-        raise RuntimeError(f"Test image path {test_image_path} does not exist")
+    # First off, we set up our directory structure, which will be an
+    # otherwise-empty directory, containing a symlink to (test_image_dir).
+    # During the test, geeqie will start in the container dir, then will switch
+    # to the (test_image_dir) symlink, then will switch back to the container
+    # dir.
+    #
+    # The expectation is that all FDs will be unreffed and freed by the time
+    # geeqie exits.
 
-    # To avoid geeqie's behavior being potentially altered by other files in the
-    # same parent directory as test_image_path, we symlink test_image_path to
-    # an other-wise-empty container directory and access it from there.
+    # TODO: Validate whether or not Geeqie showed any leaked FDs.
+
     container_dir = pathlib.Path.home() / "container_dir"
     container_dir.mkdir()
-    symlink_image_file = container_dir / test_image_path.name
-    symlink_image_file.symlink_to(test_image_path)
+    symlink_images_dir = container_dir / "images_dir"
+    symlink_images_dir.symlink_to(test_image_dir)
 
-    if not symlink_image_file.exists():
-        raise RuntimeError("symlinking image file failed")
+    if not symlink_images_dir.is_dir():
+        raise RuntimeError("symlinking images dir failed")
 
     # All geeqie commands start with this.
     geeqie_cmd_prefix = ["xvfb-run", "--auto-servernum", geeqie_exe]
 
-    # Start geeqie and have it open the provided test image path.
+    # Start geeqie and have it start in the container directory
     # TODO(xsdg): Note that killing the `xvfb-run` script will not forward that
     # signal to the geeqie process.  See
     # <https://unix.stackexchange.com/questions/291804/howto-terminate-xvfb-run-properly>.
     # So we should modify or replace xvfb-run to allow us to kill an errant geeqie process.
-    geeqie_proc = subprocess.Popen(args=[*geeqie_cmd_prefix, f"--file={symlink_image_file}"])
+    geeqie_proc = subprocess.Popen(args=[*geeqie_cmd_prefix, f"--file={container_dir}"])
 
     # try/finally to ensure we clean up geeqie_proc
     try:
@@ -120,14 +129,35 @@ def main(argv) -> int:
         if geeqie_proc.poll() is not None:
             raise GeeqieTestError("2-second post-init check", geeqie_proc)
 
-        file_info_result = subprocess.run(
-                args=[*geeqie_cmd_prefix, "--get-file-info"],
-                capture_output=True, text=True, timeout=MAX_REMOTE_CMD_TIME_S)
+        # Run commands (checking for crashes between each command)
+        commands = ["--get-file-info",
+                    f"--file={symlink_images_dir}",
+                    "--get-file-info",
+                    f"--file={container_dir}",
+                    "--get-file-info",
+                    f"--file={symlink_images_dir}",
+                    "--get-file-info",
+                    "--action=Up",
+                    "--get-file-info",
+                   ]
+        cmd_results = []
+        expected_file_info = {
+                0: re.compile(r"^$"),
+                2: re.compile(r"Class: \S"),
+                4: re.compile(r"^$"),
+                6: re.compile(r"Class: \S"),
+                8: re.compile(r"^$")
+        }
 
-        # Check if Geeqie crashed (which would cause xvfb-run to terminate)
-        time.sleep(1)
-        if geeqie_proc.poll() is not None:
-            raise GeeqieTestError("remote command processing", geeqie_proc)
+        for command in commands:
+            cmd_results.append(subprocess.run(
+                    args=[*geeqie_cmd_prefix, command],
+                    capture_output=True, text=True, timeout=MAX_REMOTE_CMD_TIME_S))
+
+            # Check if Geeqie crashed (which would cause xvfb-run to terminate)
+            time.sleep(1)
+            if geeqie_proc.poll() is not None:
+                raise GeeqieTestError(f"remote command processing: {command}", geeqie_proc)
 
         # Request shutdown
         subprocess.run(args=[*geeqie_cmd_prefix, "--quit"],
@@ -141,9 +171,14 @@ def main(argv) -> int:
             # Re-raise as shutdown error.
             raise GeeqieTestError("shutdown", geeqie_proc)
 
-        # Check if file was recognized correctly or not
-        if "Class: Unknown" in file_info_result.stdout:
-            raise GeeqieTestError("file was not loaded correctly", geeqie_proc=None)
+        # Validate results.
+        for exp_idx, exp_pat in expected_file_info.items():
+            result = cmd_results[exp_idx]
+            if not exp_pat.match(result.stdout):
+                raise GeeqieTestError(
+                        f"Unexpected output for command '{result.args[-1]}': "
+                        f"{repr(result.stdout)} did not match {repr(exp_pat)}",
+                        geeqie_proc=None)
 
     except subprocess.TimeoutExpired as e:
         # This means one of the remote commands failed.  Re-raise as test error,
@@ -171,22 +206,8 @@ def main(argv) -> int:
 
 if __name__ == "__main__":
     try:
-        exit_code = main(sys.argv)
-        if exit_code not in [0, 1]:
-            # This is so that Geeqie crashes in expected-failure cases will
-            # still trigger a non-passing result.  This is following the
-            # protocol that Meson describes here:
-            # https://mesonbuild.com/Unit-tests.html#skipped-tests-and-hard-errors
-            #
-            # We can replace this with expected_exitcode once we bump our meson
-            # dependency to 1.11.0 .
-            exit_code = 99
-
-        exit(exit_code)
+        exit(main(sys.argv))
 
     except GeeqieTestError as e:
         traceback.print_exception(e)
-        if e.exit_code not in [0, 1]:
-            # See comment above.
-            exit(99)
         exit(e.exit_code)

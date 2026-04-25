@@ -43,6 +43,11 @@ struct HistMap;
 #define DEBUG_FILEDATA
 #endif
 
+#ifdef FD_VERBOSE_DEBUG
+#include <sstream>
+#include <vector>
+#endif
+
 #define FD_MAGICK 0x12345678u
 
 enum ChangeError {
@@ -156,6 +161,34 @@ class GlobalFileDataContext
 	FileDataContext context_;
 };
 
+#ifdef FD_VERBOSE_DEBUG
+struct FileDataDebugInfo {
+	std::vector<std::string> ref_unref_history;
+
+	void record_ref(const gchar *file, gint line, gint refcount) {
+		std::stringstream record;
+		record << "r -> ";
+		record << refcount;
+		record << " @ ";
+		record << file;
+		record << ":";
+		record << line;
+		ref_unref_history.push_back(record.str());
+	};
+
+	void record_unref(const gchar *file, gint line, gint refcount) {
+		std::stringstream record;
+		record << "u -> ";
+		record << refcount;
+		record << " @ ";
+		record << file;
+		record << ":";
+		record << line;
+		ref_unref_history.push_back(record.str());
+	};
+};
+#endif
+
 class FileData {
 private:
 	FileData() = delete;
@@ -230,6 +263,10 @@ public:
 	static gchar *text_from_size(gint64 size);
 	static gchar *text_from_size_abrev(gint64 size);
 	static const gchar *text_from_time(time_t t);
+
+	#ifdef FD_VERBOSE_DEBUG
+	FileDataDebugInfo debug_info;
+	#endif
 
 	/**
 	 * @headerfile file_data_new_group

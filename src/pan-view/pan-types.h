@@ -34,6 +34,7 @@ struct FullScreenData;
 struct ImageWindow;
 struct PanViewFilterUi;
 struct PanViewSearchUi;
+struct PixbufRenderer;
 struct ThumbLoader;
 
 /* thumbnail sizes and spacing */
@@ -64,6 +65,7 @@ inline constexpr GqColor PAN_BOX_COLOR{ 255, 255, 255, 100 };
 #define PAN_BOX_OUTLINE_THICKNESS 4
 inline constexpr GqColor PAN_BOX_OUTLINE_COLOR{ 0, 0, 0, 128 };
 
+inline constexpr gint PAN_TEXT_BORDER = 4;
 inline constexpr GqColor PAN_TEXT_COLOR{ 0, 0, 0, 255 };
 
 
@@ -107,27 +109,6 @@ enum class PanKey {
 	Info,
 };
 
-enum PanTextAttrType {
-	PAN_TEXT_ATTR_NONE = 0,
-	PAN_TEXT_ATTR_BOLD = 1 << 0,
-	PAN_TEXT_ATTR_HEADING = 1 << 1,
-	PAN_TEXT_ATTR_BOLD_HEADING = PAN_TEXT_ATTR_BOLD | PAN_TEXT_ATTR_HEADING,
-	PAN_TEXT_ATTR_MARKUP = 1 << 2
-};
-
-enum PanBorderType {
-	PAN_BORDER_NONE = 0,
-	PAN_BORDER_1 = 1 << 0,
-	PAN_BORDER_2 = 1 << 1,
-	PAN_BORDER_3 = 1 << 2,
-	PAN_BORDER_4 = 1 << 3
-};
-
-#define PAN_BORDER_TOP		PAN_BORDER_1
-#define PAN_BORDER_RIGHT		PAN_BORDER_2
-#define PAN_BORDER_BOTTOM	PAN_BORDER_3
-#define PAN_BORDER_LEFT		PAN_BORDER_4
-
 
 struct PanItem {
 	bool is_type(PanItemType type) const;
@@ -136,6 +117,9 @@ struct PanItem {
 	// Determine sizes
 	void set_size_by_item(const PanItem *pi, gint border);
 	void adjust_size(gint border, gint &w, gint &h) const;
+
+	bool draw(GdkPixbuf *pixbuf, GdkRectangle request_rect,
+	          PanImageSize size, PixbufRenderer *pr) const;
 
 	PanItemType type;
 	gint x;
@@ -149,13 +133,10 @@ struct PanItem {
 	GdkPixbuf *pixbuf;
 	gint refcount;
 
-	gchar *text;
-	PanTextAttrType text_attr;
-
 	GqColor color;
 
-	GqColor color2;
 	gint border;
+	GqColor border_color;
 
 	gpointer data;
 

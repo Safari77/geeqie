@@ -1101,7 +1101,7 @@ static gboolean vf_file_filter_rating_cb(GtkWidget *widget, gpointer data)
 			}
 		}
 
-	options->rating_filter = state ? (options->rating_filter | (1u << i)) : (options->rating_filter & ~(1u << i));
+	options->rating_filter = state ? (options->rating_filter | (1U << i)) : (options->rating_filter & ~(1U << i));
 
 	vf_refresh(vf);
 
@@ -1207,7 +1207,7 @@ static GtkWidget *rating_filter_menu(ViewFile *vf)
 	for (int i = 0; i < FORMAT_RATING_COUNT; i++)
 		{
 		GtkWidget *menu_item = gtk_check_menu_item_new_with_label(format_rating_list[i]);
-		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item), (options->rating_filter & (1u << i)));
+		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item), (options->rating_filter & (1U << i)));
 		g_signal_connect(G_OBJECT(menu_item), "toggled", G_CALLBACK(vf_file_filter_rating_cb), vf);
 		gtk_menu_shell_append(GTK_MENU_SHELL (menu), menu_item);
 		gtk_widget_show(menu_item);

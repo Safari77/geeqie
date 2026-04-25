@@ -76,15 +76,9 @@ static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 		pi->x -= x1;
 		pi->y -= y1;
 
-		if (pi->is_type(PAN_ITEM_TRIANGLE) && pi->data)
+		if (pi->is_type(PAN_ITEM_TRIANGLE))
 			{
-			auto *coord = static_cast<GqPoint *>(pi->data);
-
-			for (gint i = 0; i < 3; ++i)
-				{
-				coord[i].x -= x1;
-				coord[i].y -= y1;
-				}
+			pan_item_tri_shift(pi, x1, y1);
 			}
 		}
 
@@ -181,10 +175,9 @@ static void pan_flower_build(PanWindow *pw, FlowerGroup *group, FlowerGroup *par
 		GqPoint cp{parent->x + (parent->width / 2), parent->y + (parent->height / 2)};
 		GqPoint cg{group->x + (group->width / 2), group->y + (group->height / 2)};
 
-		pan_item_tri_new(pw,
-		                 cp, cg, {cg.x + 5, cg.y + 5},
+		pan_item_tri_new(pw, cp, cg, {cg.x + 5, cg.y + 5},
 		                 {255, 40, 40, 128},
-		                 PAN_BORDER_1 | PAN_BORDER_3, {255, 0, 0, 128});
+		                 PAN_BORDER_1_3, {255, 0, 0, 128});
 		}
 
 	pw->list = g_list_concat(group->items, pw->list);
@@ -238,15 +231,13 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 	f = pan_filter_fd_list(f, pw->filter_ui);
 
 	pi_box = pan_item_text_new(pw, x, y, dir_fd->path, PAN_TEXT_ATTR_NONE,
-	                           PAN_BORDER_3, PAN_TEXT_COLOR);
+	                           PAN_TEXT_BORDER, PAN_TEXT_COLOR);
 
 	y += pi_box->height;
 
 	pi_box = pan_item_box_new(pw, file_data_ref(dir_fd),
-	                          x, y,
-	                          PAN_BOX_BORDER * 2, PAN_BOX_BORDER * 2,
-	                          PAN_BOX_OUTLINE_THICKNESS,
-	                          PAN_BOX_COLOR, PAN_BOX_OUTLINE_COLOR);
+	                          x, y, PAN_BOX_BORDER * 2, PAN_BOX_BORDER * 2, PAN_BOX_COLOR,
+	                          PAN_BOX_OUTLINE_THICKNESS, PAN_BOX_OUTLINE_COLOR);
 
 	x += PAN_BOX_BORDER;
 	y += PAN_BOX_BORDER;
@@ -369,15 +360,13 @@ static void pan_folder_tree_path(PanWindow *pw, FileData *dir_fd,
 	x = PAN_BOX_BORDER + (level * std::max(PAN_BOX_BORDER, pw->thumb_gap));
 
 	pi_box = pan_item_text_new(pw, x, y, dir_fd->path, PAN_TEXT_ATTR_NONE,
-	                           PAN_BORDER_3, PAN_TEXT_COLOR);
+	                           PAN_TEXT_BORDER, PAN_TEXT_COLOR);
 
 	y += pi_box->height;
 
 	pi_box = pan_item_box_new(pw, file_data_ref(dir_fd),
-	                          x, y,
-	                          PAN_BOX_BORDER, PAN_BOX_BORDER,
-	                          PAN_BOX_OUTLINE_THICKNESS,
-	                          PAN_BOX_COLOR, PAN_BOX_OUTLINE_COLOR);
+	                          x, y, PAN_BOX_BORDER, PAN_BOX_BORDER, PAN_BOX_COLOR,
+	                          PAN_BOX_OUTLINE_THICKNESS, PAN_BOX_OUTLINE_COLOR);
 
 	x += PAN_BOX_BORDER;
 	y += PAN_BOX_BORDER;

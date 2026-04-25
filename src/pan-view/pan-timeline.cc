@@ -53,16 +53,7 @@ void pan_timeline_compute(PanWindow *pw, gint &width, gint &height)
 	gint y_height;
 
 	g_autoptr(GList) list = pan_list_tree_filtered(pw, SORT_NONE);
-
-	if (pw->cache_list && pw->exif_date_enable)
-		{
-		pw->cache_list = pan_cache_sort(pw->cache_list, {SORT_NAME, TRUE, TRUE});
-		list = filelist_sort(list, {SORT_NAME, TRUE, TRUE});
-		pan_cache_sync_date(pw, list);
-		}
-
-	pw->cache_list = pan_cache_sort(pw->cache_list, {SORT_TIME, TRUE, TRUE});
-	list = filelist_sort(list, {SORT_TIME, TRUE, TRUE});
+	list = pan_cache_sync_list(pw, list);
 
 	width = PAN_BOX_BORDER * 2;
 	height = PAN_BOX_BORDER * 2;
@@ -109,13 +100,11 @@ void pan_timeline_compute(PanWindow *pw, gint &width, gint &height)
 
 				g_autofree gchar *month_buf = pan_date_value_string(fd->date, PAN_DATE_LENGTH_MONTH);
 				pi = pan_item_text_new(pw, x, y, month_buf, PAN_TEXT_ATTR_BOLD_HEADING,
-				                       PAN_BORDER_3, PAN_TEXT_COLOR);
+				                       PAN_TEXT_BORDER, PAN_TEXT_COLOR);
 				y += pi->height;
 
-				pi_month = pan_item_box_new(pw, file_data_ref(fd),
-				                            x, y, 0, 0,
-				                            PAN_BOX_OUTLINE_THICKNESS,
-				                            PAN_BOX_COLOR, PAN_BOX_OUTLINE_COLOR);
+				pi_month = pan_item_box_new(pw, file_data_ref(fd), x, y, 0, 0, PAN_BOX_COLOR,
+				                            PAN_BOX_OUTLINE_THICKNESS, PAN_BOX_OUTLINE_COLOR);
 
 				x += PAN_BOX_BORDER;
 				y += PAN_BOX_BORDER;
@@ -147,13 +136,12 @@ void pan_timeline_compute(PanWindow *pw, gint &width, gint &height)
 
 			g_autofree gchar *week_buf = pan_date_value_string(fd->date, PAN_DATE_LENGTH_WEEK);
 			pi = pan_item_text_new(pw, x, y, week_buf, PAN_TEXT_ATTR_NONE,
-			                       PAN_BORDER_3, PAN_TEXT_COLOR);
+			                       PAN_TEXT_BORDER, PAN_TEXT_COLOR);
 
 			y += pi->height;
 
-			pi_day = pan_item_box_new(pw, file_data_ref(fd), x, y, 0, 0,
-			                          PAN_BOX_OUTLINE_THICKNESS,
-			                          PAN_BOX_COLOR, PAN_BOX_OUTLINE_COLOR);
+			pi_day = pan_item_box_new(pw, file_data_ref(fd), x, y, 0, 0, PAN_BOX_COLOR,
+			                          PAN_BOX_OUTLINE_THICKNESS, PAN_BOX_OUTLINE_COLOR);
 
 			x += PAN_BOX_BORDER;
 			y += PAN_BOX_BORDER;

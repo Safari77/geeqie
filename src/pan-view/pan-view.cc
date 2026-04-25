@@ -225,7 +225,6 @@ static void pan_queue_thumb_done_cb(ThumbLoader *tl, gpointer data)
 static void pan_queue_image_done_cb(ImageLoader *il, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
-	GdkPixbuf *rotated = nullptr;
 
 	if (pw->queue_pi)
 		{
@@ -239,6 +238,8 @@ static void pan_queue_image_done_cb(ImageLoader *il, gpointer data)
 
 		if (pi->pixbuf) g_object_unref(pi->pixbuf);
 		pi->pixbuf = image_loader_get_pixbuf(pw->il);
+
+		if (pi->pixbuf) g_object_ref(pi->pixbuf);
 
 		if (pi->pixbuf && options->image.exif_rotate_enable)
 			{
@@ -256,23 +257,18 @@ static void pan_queue_image_done_cb(ImageLoader *il, gpointer data)
 
 			if (il->fd->exif_orientation != EXIF_ORIENTATION_TOP_LEFT)
 				{
-				rotated = pixbuf_apply_orientation(pi->pixbuf, il->fd->exif_orientation);
-				pi->pixbuf = rotated;
+				g_autoptr(GdkPixbuf) rotated = pixbuf_apply_orientation(pi->pixbuf, il->fd->exif_orientation);
+				std::swap(pi->pixbuf, rotated);
 				}
 			}
-
-		if (pi->pixbuf) g_object_ref(pi->pixbuf);
 
 		if (pi->pixbuf && pw->size != PAN_IMAGE_SIZE_100 &&
 		    (gdk_pixbuf_get_width(pi->pixbuf) > pi->width ||
 		     gdk_pixbuf_get_height(pi->pixbuf) > pi->height))
 			{
-			GdkPixbuf *tmp;
-
-			tmp = pi->pixbuf;
-			pi->pixbuf = gdk_pixbuf_scale_simple(tmp, pi->width, pi->height,
-							     static_cast<GdkInterpType>(options->image.zoom_quality));
-			g_object_unref(tmp);
+			g_autoptr(GdkPixbuf) scaled = gdk_pixbuf_scale_simple(pi->pixbuf, pi->width, pi->height,
+			                                                      options->image.zoom_quality);
+			std::swap(pi->pixbuf, scaled);
 			}
 
 		rc = pi->refcount;
@@ -412,31 +408,9 @@ static gboolean pan_window_request_tile_cb(PanWindow *pw, PixbufRenderer *pr,
 
 	for (PanItem *pi : list)
 		{
-		gboolean queue = FALSE;
-
 		pi->refcount++;
 
-		switch (pi->type)
-			{
-			case PAN_ITEM_BOX:
-				queue = pan_item_box_draw(pw, pi, pixbuf, pr, x, y, width, height);
-				break;
-			case PAN_ITEM_TRIANGLE:
-				queue = pan_item_tri_draw(pw, pi, pixbuf, pr, x, y, width, height);
-				break;
-			case PAN_ITEM_TEXT:
-				queue = pan_item_text_draw(pw, pi, pixbuf, pr, x, y, width, height);
-				break;
-			case PAN_ITEM_THUMB:
-				queue = pan_item_thumb_draw(pw, pi, pixbuf, pr, x, y, width, height);
-				break;
-			case PAN_ITEM_IMAGE:
-				queue = pan_item_image_draw(pw, pi, pixbuf, pr, x, y, width, height);
-				break;
-			default:
-				break;
-			}
-
+		bool queue = pi->draw(pixbuf, {x, y, width, height}, pw->size, pr);
 		if (queue) pan_queue_add(pw, pi);
 		}
 
@@ -478,54 +452,9 @@ static void pan_window_dispose_tile_cb(PanWindow *pw, gint x, gint y, gint width
 
 static void pan_window_message(PanWindow *pw, const gchar *text)
 {
-	GList *work;
-	gint count = 0;
-	gint64 size = 0;
+	g_return_if_fail(text != nullptr);
 
-	if (text)
-		{
-		gtk_label_set_text(GTK_LABEL(pw->label_message), text);
-		return;
-		}
-
-	work = pw->list_static;
-	if (pw->layout == PAN_LAYOUT_CALENDAR)
-		{
-		while (work)
-			{
-			PanItem *pi;
-
-			pi = static_cast<PanItem *>(work->data);
-			work = work->next;
-
-			if (pi->fd && pi->is_type(PAN_ITEM_BOX) && pi->key == PanKey::Dot)
-				{
-				size += pi->fd->size;
-				count++;
-				}
-			}
-		}
-	else
-		{
-		while (work)
-			{
-			PanItem *pi;
-
-			pi = static_cast<PanItem *>(work->data);
-			work = work->next;
-
-			if (pi->fd &&
-			    (pi->is_type(PAN_ITEM_THUMB) || pi->is_type(PAN_ITEM_IMAGE)))
-				{
-				size += pi->fd->size;
-				count++;
-				}
-			}
-		}
-
-	g_autofree gchar *ss = text_from_size_abrev(size);
-	g_autofree gchar *buf = g_strdup_printf(_("%d images, %s"), count, ss);
-	gtk_label_set_text(GTK_LABEL(pw->label_message), buf);
+	gtk_label_set_text(GTK_LABEL(pw->label_message), text);
 }
 
 static void pan_warning_folder(const gchar *path, GtkWidget *parent)
@@ -584,9 +513,9 @@ static gint pan_cache_sort_file_cb(gconstpointer a, gconstpointer b, gpointer da
 	return filelist_sort_compare_filedata(pca->fd, pcb->fd, settings);
 }
 
-GList *pan_cache_sort(GList *list, FileData::FileList::SortSettings settings)
+static void pan_cache_sort(PanWindow *pw, FileData::FileList::SortSettings settings)
 {
-	return g_list_sort_with_data(list, pan_cache_sort_file_cb, &settings);
+	pw->cache_list = g_list_sort_with_data(pw->cache_list, pan_cache_sort_file_cb, &settings);
 }
 
 static void pan_cache_free(PanWindow *pw)
@@ -666,7 +595,7 @@ static gboolean pan_cache_step(PanWindow *pw)
 }
 
 /* This sync date function is optimized for lists with a common sort */
-void pan_cache_sync_date(PanWindow *pw, GList *list)
+static void pan_cache_sync_date(const PanWindow *pw, GList *list)
 {
 	static const auto pan_cache_data_compare_fd = [](gconstpointer data, gconstpointer user_data)
 	{
@@ -695,9 +624,27 @@ void pan_cache_sync_date(PanWindow *pw, GList *list)
 		}
 }
 
-void pan_cache_get_image_size(PanWindow *pw, const FileData *fd, gint &w, gint &h)
+GList *pan_cache_sync_list(PanWindow *pw, GList *list)
 {
-	if (!fd) return;
+	if (pw->cache_list)
+		{
+		if (pw->exif_date_enable)
+			{
+			pan_cache_sort(pw, {SORT_NAME, TRUE, TRUE});
+			list = filelist_sort(list, {SORT_NAME, TRUE, TRUE});
+
+			pan_cache_sync_date(pw, list);
+			}
+
+		pan_cache_sort(pw, {SORT_TIME, TRUE, TRUE});
+		}
+
+	return filelist_sort(list, {SORT_TIME, TRUE, TRUE});
+}
+
+std::optional<GqSize> pan_cache_get_image_size(PanWindow *pw, const FileData *fd)
+{
+	if (!fd) return {};
 
 	const auto pan_cache_data_cd_dimensions_compare_fd = [](gconstpointer data, gconstpointer user_data)
 	{
@@ -706,15 +653,16 @@ void pan_cache_get_image_size(PanWindow *pw, const FileData *fd, gint &w, gint &
 	};
 
 	GList *work = g_list_find_custom(pw->cache_list, fd, pan_cache_data_cd_dimensions_compare_fd);
-	if (!work) return;
+	if (!work) return {};
 
 	auto *pc = static_cast<PanCacheData *>(work->data);
 
-	w = std::max(1, pc->cd->width * pw->image_size / 100);
-	h = std::max(1, pc->cd->height * pw->image_size / 100);
+	GqSize size{ pc->cd->width, pc->cd->height };
 
 	pw->cache_list = g_list_remove(pw->cache_list, pc);
 	pan_cache_data_free(pc);
+
+	return size;
 }
 
 /*
@@ -1098,7 +1046,27 @@ static gint pan_layout_update_idle_cb(gpointer data)
 		pixbuf_renderer_scroll_to_point(PIXBUF_RENDERER(pw->imd->pr), scroll_x, scroll_y, align, align);
 		}
 
-	pan_window_message(pw, nullptr);
+	const auto filter = (pw->layout == PAN_LAYOUT_CALENDAR) ?
+	        [](const PanItem *pi){ return pi->is_type(PAN_ITEM_BOX) && pi->key == PanKey::Dot; } :
+	        [](const PanItem *pi){ return pi->is_type(PAN_ITEM_THUMB) || pi->is_type(PAN_ITEM_IMAGE); };
+
+	gint count = 0;
+	gint64 size = 0;
+
+	for (GList *work = pw->list_static; work; work = work->next)
+		{
+		auto *pi = static_cast<PanItem *>(work->data);
+
+		if (pi->fd && filter(pi))
+			{
+			size += pi->fd->size;
+			count++;
+			}
+		}
+
+	g_autofree gchar *ss = text_from_size_abrev(size);
+	g_autofree gchar *buf = g_strdup_printf(_("%d images, %s"), count, ss);
+	pan_window_message(pw, buf);
 
 	pw->idle_id = 0;
 	return G_SOURCE_REMOVE;
@@ -1415,7 +1383,7 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 	DEBUG_1("info set to %s", pi->fd->path);
 
 	pbox = pan_item_box_new(pw, nullptr, pi->x + pi->width + 4, pi->y, 10, 10,
-				PAN_POPUP_BORDER, PAN_POPUP_COLOR, PAN_POPUP_BORDER_COLOR);
+	                        PAN_POPUP_COLOR, PAN_POPUP_BORDER, PAN_POPUP_BORDER_COLOR);
 	pbox->set_key(PanKey::Info);
 
 	GqPoint c1{pi->x + pi->width - 8, pi->y + 8};
@@ -1431,10 +1399,8 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 	GqPoint c2{pbox->x + 1, pbox->y + 36};
 	GqPoint c3{pbox->x + 1, pbox->y + 12};
 
-	p = pan_item_tri_new(pw,
-	                     c1, c2, c3,
-	                     PAN_POPUP_COLOR,
-	                     PAN_BORDER_1 | PAN_BORDER_3, PAN_POPUP_BORDER_COLOR);
+	p = pan_item_tri_new(pw, c1, c2, c3, PAN_POPUP_COLOR,
+	                     PAN_BORDER_1_3, PAN_POPUP_BORDER_COLOR);
 	p->set_key(PanKey::Info);
 	pan_item_added(pw, p);
 
@@ -1476,7 +1442,7 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 			ih = std::max(1, ih * scale / 100);
 
 			pbox = pan_item_box_new(pw, nullptr, pbox->x, pbox->y + pbox->height + 8, 10, 10,
-						PAN_POPUP_BORDER, PAN_POPUP_COLOR, PAN_POPUP_BORDER_COLOR);
+			                        PAN_POPUP_COLOR, PAN_POPUP_BORDER, PAN_POPUP_BORDER_COLOR);
 			pbox->set_key(PanKey::Info);
 
 			p = pan_item_image_new(pw, file_data_new_group(pi->fd->path),
