@@ -93,11 +93,10 @@ enum PanImageSize {
 };
 
 enum PanItemType {
-	PAN_ITEM_ANY,
-	PAN_ITEM_THUMB,
 	PAN_ITEM_BOX,
 	PAN_ITEM_TRIANGLE,
 	PAN_ITEM_TEXT,
+	PAN_ITEM_THUMB,
 	PAN_ITEM_IMAGE
 };
 
@@ -178,9 +177,9 @@ struct PanWindow
 
 	gboolean ignore_symlinks;
 
-	GList *list;
-	GList *list_static;
-	GList *list_grid;
+	PanItemList list;
+	PanItemList list_static;
+	GList *list_grid;  /**< List of #PanGrid. */
 
 	GList *cache_list; // element type is PanCacheData
 	GList *cache_todo;
@@ -192,7 +191,7 @@ struct PanWindow
 	ImageLoader *il;
 	ThumbLoader *tl;
 	PanItem *queue_pi;
-	GList *queue;
+	PanItemList queue;
 
 	PanItem *click_pi;
 	PanItem *search_pi;

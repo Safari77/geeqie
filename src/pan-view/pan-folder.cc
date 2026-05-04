@@ -35,7 +35,6 @@
 
 static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 {
-	GList *work;
 	gint x1;
 	gint y1;
 	gint x2;
@@ -46,14 +45,8 @@ static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 	x2 = 0;
 	y2 = 0;
 
-	work = pw->list;
-	while (work)
+	for (const PanItem *pi : pw->list)
 		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		work = work->next;
-
 		x1 = std::min(x1, pi->x);
 		y1 = std::min(y1, pi->y);
 		x2 = std::max(x2, pi->x + pi->width);
@@ -65,14 +58,8 @@ static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 	x2 += PAN_BOX_BORDER;
 	y2 += PAN_BOX_BORDER;
 
-	work = pw->list;
-	while (work)
+	for (PanItem *pi : pw->list)
 		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		work = work->next;
-
 		pi->x -= x1;
 		pi->y -= y1;
 
@@ -87,8 +74,8 @@ static void pan_flower_size(PanWindow *pw, gint &width, gint &height)
 }
 
 struct FlowerGroup {
-	GList *items;
-	GList *children;
+	PanItemList items;
+	std::list<FlowerGroup *> children;
 	gint x;
 	gint y;
 	gint width;
@@ -101,16 +88,8 @@ struct FlowerGroup {
 
 static void pan_flower_move(FlowerGroup *group, gint x, gint y)
 {
-	GList *work;
-
-	work = group->items;
-	while (work)
+	for (PanItem *pi : group->items)
 		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		work = work->next;
-
 		pi->x += x;
 		pi->y += y;
 		}
@@ -119,59 +98,32 @@ static void pan_flower_move(FlowerGroup *group, gint x, gint y)
 	group->y += y;
 }
 
-static void pan_flower_position(FlowerGroup *group, FlowerGroup *parent,
-							     gint *result_x, gint *result_y)
+static gdouble pan_flower_position(const FlowerGroup *group, const FlowerGroup *parent,
+                                   gint &x, gint &y)
 {
-	gint x;
-	gint y;
-	gint radius;
-	gdouble a;
-
-	radius = parent->circumference / (2*G_PI);
-	radius = std::max(radius, (parent->diameter / 2) + (group->diameter / 2));
-
-	a = 2*G_PI * group->diameter / parent->circumference;
+	const auto radius = std::max<gint>(parent->circumference / (2*G_PI),
+	                                   (parent->diameter / 2) + (group->diameter / 2));
+	const gdouble a = 2*G_PI * group->diameter / parent->circumference;
 
 	x = static_cast<gint>(static_cast<gdouble>(radius) * cos(parent->angle + (a / 2)));
 	y = static_cast<gint>(static_cast<gdouble>(radius) * sin(parent->angle + (a / 2)));
 
-	parent->angle += a;
+	x += parent->x + (parent->width / 2) - (group->width / 2);
+	y += parent->y + (parent->height / 2) - (group->height / 2);
 
-	x += parent->x;
-	y += parent->y;
-
-	x += parent->width / 2;
-	y += parent->height / 2;
-
-	x -= group->width / 2;
-	y -= group->height / 2;
-
-	*result_x = x;
-	*result_y = y;
+	return a;
 }
 
 static void pan_flower_build(PanWindow *pw, FlowerGroup *group, FlowerGroup *parent)
 {
-	GList *work;
-	gint x;
-	gint y;
-
-	if (!group) return;
-
-	if (parent && parent->children)
-		{
-		pan_flower_position(group, parent, &x, &y);
-		}
-	else
-		{
-		x = 0;
-		y = 0;
-		}
-
-	pan_flower_move(group, x, y);
-
 	if (parent)
 		{
+		gint x;
+		gint y;
+		parent->angle += pan_flower_position(group, parent, x, y);
+
+		pan_flower_move(group, x, y);
+
 		GqPoint cp{parent->x + (parent->width / 2), parent->y + (parent->height / 2)};
 		GqPoint cg{group->x + (group->width / 2), group->y + (group->height / 2)};
 
@@ -180,41 +132,26 @@ static void pan_flower_build(PanWindow *pw, FlowerGroup *group, FlowerGroup *par
 		                 PAN_BORDER_1_3, {255, 0, 0, 128});
 		}
 
-	pw->list = g_list_concat(group->items, pw->list);
-	group->items = nullptr;
+	pw->list.splice(pw->list.cbegin(), group->items);
 
 	group->circumference = 0;
-	work = group->children;
-	while (work)
+	for (const FlowerGroup *child : group->children)
 		{
-		FlowerGroup *child;
-
-		child = static_cast<FlowerGroup *>(work->data);
-		work = work->next;
-
 		group->circumference += child->diameter;
 		}
 
-	work = g_list_last(group->children);
-	while (work)
+	for (FlowerGroup *child : group->children)
 		{
-		FlowerGroup *child;
-
-		child = static_cast<FlowerGroup *>(work->data);
-		work = work->prev;
-
 		pan_flower_build(pw, child, group);
 		}
 
-	g_list_free(group->children);
-	g_free(group);
+	delete group;
 }
 
 static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gint y)
 {
-	FlowerGroup *group;
-	GList *f;
-	GList *d;
+	g_autoptr(GList) f = nullptr;
+	g_autoptr(FileDataList) d = nullptr;
 	GList *work;
 	PanItem *pi_box;
 	gint x_start;
@@ -281,15 +218,12 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 		pi_box->set_size_by_item(pi, PAN_BOX_BORDER);
 		}
 
-	group = g_new0(FlowerGroup, 1);
-	group->items = pw->list;
-	pw->list = nullptr;
+	auto group = std::make_unique<FlowerGroup>();
+	group->items.splice(group->items.cend(), pw->list);
 
 	group->width = pi_box->width;
 	group->height = pi_box->y + pi_box->height;
 	group->diameter = static_cast<gint>(hypot(group->width, group->height));
-
-	group->children = nullptr;
 
 	work = d;
 	while (work)
@@ -303,30 +237,27 @@ static FlowerGroup *pan_flower_group(PanWindow *pw, FileData *dir_fd, gint x, gi
 		if (!pan_is_ignored(fd->path, pw->ignore_symlinks))
 			{
 			child = pan_flower_group(pw, fd, 0, 0);
-			if (child) group->children = g_list_prepend(group->children, child);
+			if (child) group->children.push_back(child);
 			}
 		}
 
-	if (!f && !group->children)
+	if (!f && group->children.empty())
 		{
-		g_list_free_full(group->items, reinterpret_cast<GDestroyNotify>(pan_item_free));
-		g_free(group);
-		group = nullptr;
+		pan_item_list_clear(group->items);
+		return nullptr;
 		}
 
-	g_list_free(f);
-	file_data_list_free(d);
-
-	return group;
+	return group.release();
 }
 
 void pan_flower_compute(PanWindow *pw, gint &width, gint &height,
                         gint &scroll_x, gint &scroll_y)
 {
-	FlowerGroup *group;
-
-	group = pan_flower_group(pw, pw->dir_fd, 0, 0);
-	pan_flower_build(pw, group, nullptr);
+	FlowerGroup *group = pan_flower_group(pw, pw->dir_fd, 0, 0);
+	if (group)
+		{
+		pan_flower_build(pw, group, nullptr);
+		}
 
 	pan_flower_size(pw, width, height);
 

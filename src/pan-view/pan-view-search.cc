@@ -149,21 +149,14 @@ static gboolean valid_date_separator(gchar c)
 	return (c == '/' || c == '-' || c == ' ' || c == '.' || c == ',');
 }
 
-static GList *pan_search_by_date_val(PanWindow *pw, PanItemType type,
-                                     gint year, gint month, gint day,
-                                     PanKey key)
+static PanItemList pan_search_by_date_val(const PanWindow *pw,
+                                          PanItemType type, PanKey key,
+                                          gint year, gint month, gint day)
 {
-	GList *list = nullptr;
-	GList *work;
+	PanItemList list;
 
-	work = g_list_last(pw->list_static);
-	while (work)
+	for (PanItem *pi : pw->list_static)
 		{
-		PanItem *pi;
-
-		pi = static_cast<PanItem *>(work->data);
-		work = work->prev;
-
 		if (pi->fd && pi->is_type(type) && pi->key == key)
 			{
 			struct tm tl;
@@ -176,37 +169,34 @@ static GList *pan_search_by_date_val(PanWindow *pw, PanItemType type,
 				if (match && month >= 0) match = (tl.tm_mon == month - 1);
 				if (match && day > 0) match = (tl.tm_mday == day);
 
-				if (match) list = g_list_prepend(list, pi);
+				if (match) list.push_front(pi);
 				}
 			}
 		}
 
-	return g_list_reverse(list);
+	return list;
 }
 
-static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
+static bool pan_parse_date(const gchar *text, gint &year, gint &month, gint &day)
 {
 	PanItem *pi = nullptr;
 	GList *list = nullptr;
 	GList *found;
-	gint year;
-	gint month = -1;
-	gint day = -1;
 	gchar *mptr;
 	struct tm lt;
 	time_t t;
 
-	if (!text) return FALSE;
+	if (!text) return false;
 
 	const gchar *ptr = text;
 	while (*ptr != '\0')
 		{
-		if (!g_unichar_isdigit(*ptr) && !valid_date_separator(*ptr)) return FALSE;
+		if (!g_unichar_isdigit(*ptr) && !valid_date_separator(*ptr)) return false;
 		ptr++;
 		}
 
 	t = time(nullptr);
-	if (t == -1) return FALSE;
+	if (t == -1) return false;
 	if (!localtime_r(&t, &lt))
 		return FALSE;
 
@@ -218,7 +208,7 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 	else
 		{
 		year = static_cast<gint>(strtol(text, &mptr, 10));
-		if (mptr == text) return FALSE;
+		if (mptr == text) return false;
 		}
 
 	if (*mptr != '\0' && valid_date_separator(*mptr))
@@ -263,55 +253,22 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 			year+= 2000;
 		}
 
-	if (year < 1970 ||
-	    month < -1 || month == 0 || month > 12 ||
-	    day < -1 || day == 0 || day > 31) return FALSE;
+	return year >= 1970
+	    && month >= -1 && month != 0 && month <= 12
+	    && day >= -1 && day != 0 && day <= 31;
+}
 
-	t = pan_date_to_time(year, month, day);
+static gboolean pan_search_by_date(PanWindow *pw, const gchar *text,
+                                   PanItemType type, PanKey key)
+{
+	gint year;
+	gint month = -1;
+	gint day = -1;
+
+	if (!pan_parse_date(text, year, month, day)) return FALSE;
+
+	const time_t t = pan_date_to_time(year, month, day);
 	if (t < 0) return FALSE;
-
-	if (pw->layout == PAN_LAYOUT_CALENDAR)
-		{
-		list = pan_search_by_date_val(pw, PAN_ITEM_BOX, year, month, day, PanKey::Day);
-		}
-	else
-		{
-		const PanItemType type = get_pan_item_type(pw->size);
-
-		list = pan_search_by_date_val(pw, type, year, month, day, PanKey::None);
-		}
-
-	if (list)
-		{
-		found = g_list_find(list, pw->search_pi);
-		if (found && found->next)
-			{
-			found = found->next;
-			pi = static_cast<PanItem *>(found->data);
-			}
-		else
-			{
-			pi = static_cast<PanItem *>(list->data);
-			}
-		}
-
-	pw->search_pi = pi;
-
-	if (pw->layout == PAN_LAYOUT_CALENDAR && pi && pi->is_type(PAN_ITEM_BOX))
-		{
-		pan_info_update(pw, nullptr);
-		pan_calendar_update(pw, pi);
-		image_scroll_to_point(pw->imd,
-				      pi->x + (pi->width / 2),
-				      pi->y + (pi->height / 2), 0.5, 0.5);
-		}
-	else if (pi)
-		{
-		pan_info_update(pw, pi);
-		image_scroll_to_point(pw->imd,
-				      pi->x - (PAN_BOX_BORDER * 5 / 2),
-				      pi->y, 0.0, 0.5);
-		}
 
 	g_autofree gchar *buf = nullptr;
 	if (month > 0)
@@ -329,21 +286,53 @@ static gboolean pan_search_by_date(PanWindow *pw, const gchar *text)
 		}
 
 	g_autofree gchar *buf_count = nullptr;
-	if (pi)
+
+	PanItemList list = pan_search_by_date_val(pw, type, key, year, month, day);
+	if (!list.empty())
 		{
-		buf_count = g_strdup_printf("( %d / %u )",
-		                            g_list_index(list, pi) + 1,
-		                            g_list_length(list));
+		auto found = std::find(list.cbegin(), list.cend(), pw->search_pi);
+		if (found != list.cend() && std::next(found) != list.cend())
+			{
+			found = std::next(found);
+			}
+		else
+			{
+			found = list.cbegin();
+			}
+
+		PanItem *pi = *found;
+
+		pw->search_pi = pi;
+
+		if (pw->layout == PAN_LAYOUT_CALENDAR)
+			{
+			pan_info_update(pw, nullptr);
+			pan_calendar_update(pw, pi);
+			image_scroll_to_point(pw->imd,
+			                      pi->x + (pi->width / 2),
+			                      pi->y + (pi->height / 2), 0.5, 0.5);
+			}
+		else
+			{
+			pan_info_update(pw, pi);
+			image_scroll_to_point(pw->imd,
+			                      pi->x - (PAN_BOX_BORDER * 5 / 2),
+			                      pi->y, 0.0, 0.5);
+			}
+
+		buf_count = g_strdup_printf("( %td / %zu )",
+		                            std::distance(list.cbegin(), found) + 1,
+		                            list.size());
 		}
 	else
 		{
+		pw->search_pi = nullptr;
+
 		buf_count = g_strdup_printf("(%s)", _("no match"));
 		}
 
 	g_autofree gchar *message = g_strdup_printf("%s %s %s", _("Date:"), buf, buf_count);
 	pan_search_status(pw, message);
-
-	g_list_free(list);
 
 	return TRUE;
 }
@@ -356,9 +345,14 @@ static void pan_search_activate_cb(PanWindow *pw, const gchar *text)
 
 	if (pan_search_by_path(pw, text)) return;
 
-	if ((pw->layout == PAN_LAYOUT_TIMELINE ||
-	     pw->layout == PAN_LAYOUT_CALENDAR) &&
-	    pan_search_by_date(pw, text))
+	if (pw->layout == PAN_LAYOUT_TIMELINE &&
+	    pan_search_by_date(pw, text, get_pan_item_type(pw->size), PanKey::None))
+		{
+		return;
+		}
+
+	if (pw->layout == PAN_LAYOUT_CALENDAR &&
+	    pan_search_by_date(pw, text, PAN_ITEM_BOX, PanKey::Day))
 		{
 		return;
 		}

@@ -92,7 +92,7 @@ static PanItem *pan_item_new(PanItemType type, gint x, gint y, gint width, gint 
 	return pi;
 }
 
-void pan_item_free(PanItem *pi)
+static void pan_item_free(PanItem *pi)
 {
 	if (!pi) return;
 
@@ -110,7 +110,7 @@ void pan_item_free(PanItem *pi)
 
 bool PanItem::is_type(PanItemType type) const
 {
-	return type == PAN_ITEM_ANY || this->type == type;
+	return this->type == type;
 }
 
 void PanItem::set_key(PanKey key)
@@ -124,16 +124,14 @@ void pan_item_added(PanWindow *pw, PanItem *pi)
 	image_area_changed(pw->imd, pi->x, pi->y, pi->width, pi->height);
 }
 
-void pan_item_remove(PanWindow *pw, PanItem *pi)
+static void pan_item_remove(PanWindow *pw, PanItem *pi)
 {
-	if (!pi) return;
-
 	if (pw->click_pi == pi) pw->click_pi = nullptr;
 	if (pw->queue_pi == pi)	pw->queue_pi = nullptr;
 	if (pw->search_pi == pi) pw->search_pi = nullptr;
-	pw->queue = g_list_remove(pw->queue, pi);
+	pw->queue.remove(pi);
 
-	pw->list = g_list_remove(pw->list, pi);
+	pw->list.remove(pi);
 	image_area_changed(pw->imd, pi->x, pi->y, pi->width, pi->height);
 	pan_item_free(pi);
 }
@@ -152,6 +150,11 @@ void PanItem::adjust_size(gint border, gint &w, gint &h) const
 	h = std::max(h, y + height + border);
 }
 
+void pan_item_list_clear(PanItemList &list)
+{
+	for (PanItem *pi : list) pan_item_free(pi);
+	list.clear();
+}
 
 /*
  *-----------------------------------------------------------------------------
@@ -169,7 +172,7 @@ PanItem *pan_item_box_new(PanWindow *pw, FileData *fd, gint x, gint y, gint widt
 	pi->border = border_size;
 	pi->border_color = border_color;
 
-	pw->list = g_list_prepend(pw->list, pi);
+	pw->list.push_front(pi);
 
 	return pi;
 }
@@ -280,7 +283,7 @@ PanItem *pan_item_tri_new(PanWindow *pw,
 	pi->border_color = border_color;
 	pi->data = data;
 
-	pw->list = g_list_prepend(pw->list, pi);
+	pw->list.push_front(pi);
 
 	return pi;
 }
@@ -374,7 +377,7 @@ PanItem *pan_item_text_new(PanWindow *pw, gint x, gint y, const gchar *text,
 	pi->border = border_size;
 	pi->data = data;
 
-	pw->list = g_list_prepend(pw->list, pi);
+	pw->list.push_front(pi);
 
 	return pi;
 }
@@ -408,7 +411,7 @@ PanItem *pan_item_thumb_new(PanWindow *pw, FileData *fd, gint x, gint y)
 
 	pi->fd = fd;
 
-	pw->list = g_list_prepend(pw->list, pi);
+	pw->list.push_front(pi);
 
 	return pi;
 }
@@ -513,7 +516,7 @@ PanItem *pan_item_image_new(PanWindow *pw, FileData *fd, gint x, gint y, gint w,
 
 	pi->fd = fd;
 
-	pw->list = g_list_prepend(pw->list, pi);
+	pw->list.push_front(pi);
 
 	return pi;
 }
@@ -577,26 +580,25 @@ bool PanItem::draw(GdkPixbuf *pixbuf, GdkRectangle request_rect,
  *-----------------------------------------------------------------------------
  */
 
-PanItem *pan_item_find_by_key(PanWindow *pw, PanItemType type, PanKey key)
+void pan_item_remove_by_key(PanWindow *pw, PanKey key)
 {
-	g_return_val_if_fail(key != PanKey::None, nullptr);
+	g_return_if_fail(key != PanKey::None);
 
-	const auto pan_item_find_by_key_l = [type, key](GList *list) -> PanItem *
+	const auto pan_item_find_by_key_l = [key](PanItemList &list) -> PanItem *
 	{
-		for (GList *work = g_list_last(list); work; work = work->prev)
+		for (auto work = list.crbegin(); work != list.crend(); ++work)
 			{
-			auto *pi = static_cast<PanItem *>(work->data);
+			PanItem *pi = *work;
 
-			if (pi->is_type(type) && pi->key == key) return pi;
+			if (pi->key == key) return pi;
 			}
 
 		return nullptr;
 	};
 
-	PanItem *pi = pan_item_find_by_key_l(pw->list);
-	if (!pi) pi = pan_item_find_by_key_l(pw->list_static);
-
-	return pi;
+	PanItem *pi;
+	while ((pi = pan_item_find_by_key_l(pw->list))) pan_item_remove(pw, pi);
+	while ((pi = pan_item_find_by_key_l(pw->list_static))) pan_item_remove(pw, pi);
 }
 
 /* when ignore_case and partial are TRUE, path should be converted to lower case */
@@ -643,12 +645,10 @@ PanItemList pan_item_find_by_path(PanWindow *pw, PanItemType type, const gchar *
 	if (partial && path[0] == G_DIR_SEPARATOR) return {};
 
 	// Prepend items from search_list to list in reverse order
-	const auto pan_item_find_by_path_l = [type, path, ignore_case, partial](PanItemList &list, const GList *search_list)
+	const auto pan_item_find_by_path_l = [type, path, ignore_case, partial](PanItemList &list, const PanItemList &search_list)
 	{
-		for (const GList *work = search_list; work; work = work->next)
+		for (PanItem *pi : search_list)
 			{
-			auto *pi = static_cast<PanItem *>(work->data);
-
 			if (pi->is_type(type) && pi->fd &&
 			    pan_item_match_path(pi, path, ignore_case, partial))
 				{
@@ -677,28 +677,21 @@ PanItem *pan_item_find_by_fd(PanWindow *pw, PanItemType type, FileData *fd,
 PanItem *pan_item_find_by_coord(PanWindow *pw, PanItemType type,
                                 gint x, gint y, PanKey key)
 {
-	const auto pan_item_find_by_coord_l = [type, x, y, key](GList *list) -> PanItem *
+	const auto has_coord = [type, x, y, key](const PanItem *pi)
 	{
-		for (GList *work = list; work; work = work->next)
-			{
-			auto *pi = static_cast<PanItem *>(work->data);
-
-			if (pi->is_type(type) &&
-			    x >= pi->x && x < pi->x + pi->width &&
-			    y >= pi->y && y < pi->y + pi->height &&
-			    (key == PanKey::None || pi->key == key))
-				{
-				return pi;
-				}
-			}
-
-		return nullptr;
+		return pi->is_type(type)
+		    && x >= pi->x && x < pi->x + pi->width
+		    && y >= pi->y && y < pi->y + pi->height
+		    && (key == PanKey::None || pi->key == key);
 	};
 
-	PanItem *pi = pan_item_find_by_coord_l(pw->list);
-	if (!pi) pi = pan_item_find_by_coord_l(pw->list_static);
+	auto it = std::find_if(pw->list.cbegin(), pw->list.cend(), has_coord);
+	if (it != pw->list.cend()) return *it;
 
-	return pi;
+	it = std::find_if(pw->list_static.cbegin(), pw->list_static.cend(), has_coord);
+	if (it != pw->list_static.cend()) return *it;
+
+	return nullptr;
 }
 
 
