@@ -67,7 +67,7 @@ struct CachePathParts
 {
 	CachePathParts(CacheType cache_type)
 	{
-		if (cache_type == CACHE_TYPE_METADATA || cache_type == CACHE_TYPE_XMP_METADATA)
+		if (cache_type == CacheType::METADATA || cache_type == CacheType::XMP_METADATA)
 			{
 			rc = get_metadata_cache_dir();
 			local = GQ_CACHE_LOCAL_METADATA;
@@ -82,16 +82,16 @@ struct CachePathParts
 
 		switch (cache_type)
 			{
-			case CACHE_TYPE_THUMB:
+			case CacheType::THUMB:
 				ext = GQ_CACHE_EXT_THUMB;
 				break;
-			case CACHE_TYPE_SIM:
+			case CacheType::SIM:
 				ext = GQ_CACHE_EXT_SIM;
 				break;
-			case CACHE_TYPE_METADATA:
+			case CacheType::METADATA:
 				ext = GQ_CACHE_EXT_METADATA;
 				break;
-			case CACHE_TYPE_XMP_METADATA:
+			case CacheType::XMP_METADATA:
 				ext = GQ_CACHE_EXT_XMP_METADATA;
 				break;
 			}
@@ -161,21 +161,24 @@ gchar *cache_get_location(CacheType type, const gchar *source, gint include_name
 
 CacheData *cache_sim_data_new()
 {
-	CacheData *cd;
-
-	cd = g_new0(CacheData, 1);
+	auto *cd = new CacheData();
 	cd->date = -1;
 
 	return cd;
 }
 
+CacheData *cache_sim_data_new(const gchar *path)
+{
+	std::unique_ptr<CacheData> cd(cache_sim_data_new());
+
+	if (!cd->load(path)) return nullptr;
+
+	return cd.release();
+}
+
 void cache_sim_data_free(CacheData *cd)
 {
-	if (!cd) return;
-
-	g_free(cd->path);
-	image_sim_free(cd->sim);
-	g_free(cd);
+	delete cd;
 }
 
 /*
@@ -184,85 +187,78 @@ void cache_sim_data_free(CacheData *cd)
  *-------------------------------------------------------------------
  */
 
-static gboolean cache_sim_write_dimensions(GString *gstring, const CacheData *cd)
+bool CacheData::write_dimensions(GString *gstring) const
 {
-	if (!cd || !cd->dimensions) return FALSE;
+	if (!have_dimensions) return false;
 
-	g_string_append_printf(gstring, "Dimensions=[%d x %d]\n", cd->width, cd->height);
+	g_string_append_printf(gstring, "Dimensions=[%d x %d]\n", dimensions.width, dimensions.height);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean cache_sim_write_date(GString *gstring, const CacheData *cd)
+bool CacheData::write_date(GString *gstring) const
 {
-	if (!cd || !cd->have_date) return FALSE;
+	if (!have_date) return false;
 
-	g_string_append_printf(gstring, "Date=[%ld]\n", cd->date);
+	g_string_append_printf(gstring, "Date=[%ld]\n", date);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean cache_sim_write_md5sum(GString *gstring, const CacheData *cd)
+bool CacheData::write_md5sum(GString *gstring) const
 {
-	if (!cd || !cd->have_md5sum) return FALSE;
+	if (!have_md5sum) return false;
 
-	g_autofree gchar *text = md5_digest_to_text(cd->md5sum);
+	g_autofree gchar *text = md5_digest_to_text(md5sum);
 
 	g_string_append_printf(gstring, "MD5sum=[%s]\n", text);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean cache_sim_write_similarity(GString *gstring, const CacheData *cd)
+bool CacheData::write_similarity(GString *gstring) const
 {
-	guint x;
-	guint y;
-	guint8 buf[3 * 32];
-
-	if (!cd || !cd->similarity || !cd->sim || !cd->sim->filled) return FALSE;
+	if (!have_similarity || !sim || !sim->filled) return false;
 
 	g_string_append(gstring, "SimilarityGrid[32 x 32]=");
 
-	for (y = 0; y < 32; y++)
+	guint8 buf[3 * 32];
+	for (guint y = 0; y < 32; y++)
 		{
 		guint s = y * 32;
-		guint8 *avg_r = &cd->sim->avg_r[s];
-		guint8 *avg_g = &cd->sim->avg_g[s];
-		guint8 *avg_b = &cd->sim->avg_b[s];
 		guint n = 0;
 
-		for (x = 0; x < 32; x++)
+		for (guint x = 0; x < 32; x++)
 			{
-			buf[n++] = avg_r[x];
-			buf[n++] = avg_g[x];
-			buf[n++] = avg_b[x];
+			buf[n++] = sim->avg_r[s + x];
+			buf[n++] = sim->avg_g[s + x];
+			buf[n++] = sim->avg_b[s + x];
 			}
 
 		g_string_append_len(gstring, (const gchar *)buf, sizeof(buf));
 		}
 
-
 	g_string_append(gstring, "\n");
 
-	return TRUE;
+	return true;
 }
 
-gboolean cache_sim_data_save(CacheData *cd)
+bool CacheData::save(const gchar *path) const
 {
-	if (!cd || !cd->path) return FALSE;
+	if (!path) return false;
 
-	g_autofree gchar *pathl = path_from_utf8(cd->path);
+	g_autofree gchar *pathl = path_from_utf8(path);
 
 	g_autoptr(GString) gstring = g_string_new("SIMcache\n#" PACKAGE " " VERSION "\n");
 
-	cache_sim_write_dimensions(gstring, cd);
-	cache_sim_write_date(gstring, cd);
-	cache_sim_write_md5sum(gstring, cd);
-	cache_sim_write_similarity(gstring, cd);
+	write_dimensions(gstring);
+	write_date(gstring);
+	write_md5sum(gstring);
+	write_similarity(gstring);
 
 	secure_save(pathl, gstring->str, gstring->len);
 
-	return TRUE;
+	return true;
 }
 
 /*
@@ -275,282 +271,198 @@ static gboolean cache_sim_read_skipline(FILE *f, gint s)
 {
 	if (!f) return FALSE;
 
-	if (fseek(f, 0 - s, SEEK_CUR) == 0)
+	if (fseek(f, 0 - s, SEEK_CUR) != 0) return FALSE;
+
+	gchar b;
+	while (fread(&b, sizeof(b), 1, f) == 1)
 		{
-		gchar b;
-		while (fread(&b, sizeof(b), 1, f) == 1)
-			{
-			if (b == '\n') return TRUE;
-			}
-		return TRUE;
+		if (b == '\n') break;
 		}
 
-	return FALSE;
+	return TRUE;
 }
 
-static gboolean cache_sim_read_comment(FILE *f, const gchar *buf, gint s, CacheData *cd)
+static gboolean cache_sim_read_comment(FILE *f, const gchar *buf, gint s)
 {
-	if (!f || !buf || !cd) return FALSE;
+	if (!f || !buf) return FALSE;
 
 	if (s < 1 || buf[0] != '#') return FALSE;
 
 	return cache_sim_read_skipline(f, s - 1);
 }
 
-static gboolean cache_sim_read_dimensions(FILE *f, gchar *buf, gint s, CacheData *cd)
+static bool cache_sim_read_buf(FILE *f, gint s, gchar *buf, gsize buf_size)
 {
-	if (!f || !buf || !cd) return FALSE;
+	if (fseek(f, - s, SEEK_CUR) != 0) return false;
 
-	if (s < 10 || strncmp("Dimensions", buf, 10) != 0) return FALSE;
-
-	if (fseek(f, - s, SEEK_CUR) == 0)
+	gchar b = 'X';
+	while (b != '[')
 		{
-		gchar b;
-		gchar buf[1024];
-		gsize p = 0;
-		gint w;
-		gint h;
-
-		b = 'X';
-		while (b != '[')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			}
-		while (b != ']' && p < sizeof(buf) - 1)
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			buf[p] = b;
-			p++;
-			}
-
-		while (b != '\n')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) break;
-			}
-
-		buf[p] = '\0';
-		if (sscanf(buf, "%d x %d", &w, &h) != 2) return FALSE;
-
-		cd->width = w;
-		cd->height = h;
-		cd->dimensions = TRUE;
-
-		return TRUE;
+		if (fread(&b, sizeof(b), 1, f) != 1) return false;
 		}
 
-	return FALSE;
-}
-
-static gboolean cache_sim_read_date(FILE *f, gchar *buf, gint s, CacheData *cd)
-{
-	if (!f || !buf || !cd) return FALSE;
-
-	if (s < 4 || strncmp("Date", buf, 4) != 0) return FALSE;
-
-	if (fseek(f, - s, SEEK_CUR) == 0)
+	gsize p = 0;
+	while (b != ']' && p < buf_size - 1)
 		{
-		gchar b;
-		gchar buf[1024];
-		gsize p = 0;
-
-		b = 'X';
-		while (b != '[')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			}
-		while (b != ']' && p < sizeof(buf) - 1)
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			buf[p] = b;
-			p++;
-			}
-
-		while (b != '\n')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) break;
-			}
-
-		buf[p] = '\0';
-		cd->date = strtol(buf, nullptr, 10);
-
-		cd->have_date = TRUE;
-
-		return TRUE;
+		if (fread(&b, sizeof(b), 1, f) != 1) return false;
+		buf[p] = b;
+		p++;
 		}
 
-	return FALSE;
-}
-
-static gboolean cache_sim_read_md5sum(FILE *f, gchar *buf, gint s, CacheData *cd)
-{
-	if (!f || !buf || !cd) return FALSE;
-
-	if (s < 8 || strncmp("MD5sum", buf, 6) != 0) return FALSE;
-
-	if (fseek(f, - s, SEEK_CUR) == 0)
+	while (b != '\n')
 		{
-		gchar b;
-		gchar buf[64];
-		gsize p = 0;
-
-		b = 'X';
-		while (b != '[')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			}
-		while (b != ']' && p < sizeof(buf) - 1)
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			buf[p] = b;
-			p++;
-			}
-		while (b != '\n')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) break;
-			}
-
-		buf[p] = '\0';
-		cd->have_md5sum = md5_digest_from_text(buf, cd->md5sum);
-
-		return TRUE;
+		if (fread(&b, sizeof(b), 1, f) != 1) break;
 		}
 
-	return FALSE;
+	buf[p] = '\0';
+
+	return true;
 }
 
-static gboolean cache_sim_read_similarity(FILE *f, gchar *buf, gint s, CacheData *cd)
+bool CacheData::read_dimensions(FILE *f, const gchar *buffer, gint s)
 {
-	if (!f || !buf || !cd) return FALSE;
+	if (!f || !buffer) return false;
 
-	if (s < 11 || strncmp("Similarity", buf, 10) != 0) return FALSE;
+	if (s < 10 || strncmp("Dimensions", buffer, 10) != 0) return false;
 
-	if (strncmp("Grid[32 x 32]", buf + 10, 13) != 0) return FALSE;
+	gchar buf[1024];
+	if (!cache_sim_read_buf(f, s, buf, sizeof(buf))) return false;
 
-	if (fseek(f, - s, SEEK_CUR) == 0)
+	GqSize dimensions;
+	if (sscanf(buf, "%d x %d", &dimensions.width, &dimensions.height) != 2) return false;
+
+	set_dimensions(dimensions);
+
+	return true;
+}
+
+bool CacheData::read_date(FILE *f, const gchar *buffer, gint s)
+{
+	if (!f || !buffer) return false;
+
+	if (s < 4 || strncmp("Date", buffer, 4) != 0) return false;
+
+	gchar buf[1024];
+	if (!cache_sim_read_buf(f, s, buf, sizeof(buf))) return false;
+
+	date = strtol(buf, nullptr, 10);
+	have_date = TRUE;
+
+	return true;
+}
+
+bool CacheData::read_md5sum(FILE *f, const gchar *buffer, gint s)
+{
+	if (!f || !buffer) return false;
+
+	if (s < 8 || strncmp("MD5sum", buffer, 6) != 0) return false;
+
+	gchar buf[64];
+	if (!cache_sim_read_buf(f, s, buf, sizeof(buf))) return false;
+
+	have_md5sum = md5_digest_from_text(buf, md5sum);
+
+	return true;
+}
+
+bool CacheData::read_similarity(FILE *f, const gchar *buffer, gint s)
+{
+	if (!f || !buffer) return false;
+
+	if (s < 11 || strncmp("Similarity", buffer, 10) != 0) return false;
+
+	if (strncmp("Grid[32 x 32]", buffer + 10, 13) != 0) return false;
+
+	if (fseek(f, - s, SEEK_CUR) != 0) return false;
+
+	gchar b = 'X';
+	while (b != '=')
 		{
-		gchar b;
-		guint8 pixel_buf[3];
-		ImageSimilarityData *sd;
-		gint x;
-		gint y;
-
-		b = 'X';
-		while (b != '=')
-			{
-			if (fread(&b, sizeof(b), 1, f) != 1) return FALSE;
-			}
-
-		if (cd->sim)
-			{
-			/* use current sim that may already contain data we will not touch here */
-			sd = cd->sim;
-			cd->sim = nullptr;
-			cd->similarity = FALSE;
-			}
-		else
-			{
-			sd = image_sim_new();
-			}
-
-		for (y = 0; y < 32; y++)
-			{
-			gint s = y * 32;
-			for (x = 0; x < 32; x++)
-				{
-				if (fread(&pixel_buf, sizeof(pixel_buf), 1, f) != 1)
-					{
-					image_sim_free(sd);
-					return FALSE;
-					}
-				sd->avg_r[s + x] = pixel_buf[0];
-				sd->avg_g[s + x] = pixel_buf[1];
-				sd->avg_b[s + x] = pixel_buf[2];
-				}
-			}
-
-		if (fread(&b, sizeof(b), 1, f) == 1)
-			{
-			if (b != '\n') fseek(f, -1, SEEK_CUR);
-			}
-
-		cd->sim = sd;
-		cd->sim->filled = TRUE;
-		cd->similarity = TRUE;
-
-		return TRUE;
+		if (fread(&b, sizeof(b), 1, f) != 1) return false;
 		}
 
-	return FALSE;
+	guint8 pixel_buf[3];
+	std::unique_ptr<ImageSimilarityData> sd;
+
+	if (sim)
+		{
+		/* use current sim that may already contain data we will not touch here */
+		sd.swap(sim);
+		have_similarity = FALSE;
+		}
+	else
+		{
+		sd.reset(image_sim_new());
+		}
+
+	for (gint y = 0; y < 32; y++)
+		{
+		gint s = y * 32;
+		for (gint x = 0; x < 32; x++)
+			{
+			if (fread(&pixel_buf, sizeof(pixel_buf), 1, f) != 1) return false;
+
+			sd->avg_r[s + x] = pixel_buf[0];
+			sd->avg_g[s + x] = pixel_buf[1];
+			sd->avg_b[s + x] = pixel_buf[2];
+			}
+		}
+
+	if (fread(&b, sizeof(b), 1, f) == 1)
+		{
+		if (b != '\n') fseek(f, -1, SEEK_CUR);
+		}
+
+	sd->filled = TRUE;
+
+	sim.swap(sd);
+	have_similarity = TRUE;
+
+	return true;
 }
 
-CacheData *cache_sim_data_load(const gchar *path)
+bool CacheData::load(const gchar *path)
 {
-	FILE *f;
-	CacheData *cd = nullptr;
-	gchar buf[32];
-	gint success = CACHE_LOAD_LINE_NOISE;
-
-	if (!path) return nullptr;
+	if (!path) return false;
 
 	g_autofree gchar *pathl = path_from_utf8(path);
-	f = fopen(pathl, "r");
-	if (!f) return nullptr;
+	g_autoptr(FILE) f = fopen(pathl, "r");
+	if (!f) return false;
 
-	cd = cache_sim_data_new();
-	cd->path = g_strdup(path);
-
+	gchar buf[32];
 	if (fread(&buf, sizeof(gchar), 9, f) != 9 ||
 	    strncmp(buf, "SIMcache", 8) != 0)
 		{
-		DEBUG_1("%s is not a cache file", cd->path);
-		success = 0;
+		DEBUG_1("%s is not a cache file", path);
+		return false;
 		}
 
+	gint success = CACHE_LOAD_LINE_NOISE;
 	while (success > 0)
 		{
-		gint s;
-		s = fread(&buf, sizeof(gchar), sizeof(buf), f);
+		const gint s = fread(&buf, sizeof(gchar), sizeof(buf), f);
+		if (s < 1) break;
 
-		if (s < 1)
+		if (!cache_sim_read_comment(f, buf, s) &&
+		    !read_dimensions(f, buf, s) &&
+		    !read_date(f, buf, s) &&
+		    !read_md5sum(f, buf, s) &&
+		    !read_similarity(f, buf, s))
 			{
-			success = 0;
+			if (!cache_sim_read_skipline(f, s)) break;
+
+			success--;
 			}
 		else
 			{
-			if (!cache_sim_read_comment(f, buf, s, cd) &&
-			    !cache_sim_read_dimensions(f, buf, s, cd) &&
-			    !cache_sim_read_date(f, buf, s, cd) &&
-			    !cache_sim_read_md5sum(f, buf, s, cd) &&
-			    !cache_sim_read_similarity(f, buf, s, cd))
-				{
-				if (!cache_sim_read_skipline(f, s))
-					{
-					success = 0;
-					}
-				else
-					{
-					success--;
-					}
-				}
-			else
-				{
-				success = CACHE_LOAD_LINE_NOISE;
-				}
+			success = CACHE_LOAD_LINE_NOISE;
 			}
 		}
 
-	fclose(f);
-
-	if (!cd->dimensions &&
-	    !cd->have_date &&
-	    !cd->have_md5sum &&
-	    !cd->similarity)
-		{
-		cache_sim_data_free(cd);
-		cd = nullptr;
-		}
-
-	return cd;
+	return have_dimensions
+	    || have_date
+	    || have_md5sum
+	    || have_similarity;
 }
 
 /*
@@ -559,40 +471,26 @@ CacheData *cache_sim_data_load(const gchar *path)
  *-------------------------------------------------------------------
  */
 
-void cache_sim_data_set_dimensions(CacheData *cd, gint w, gint h)
+void CacheData::set_dimensions(GqSize dimensions)
 {
-	if (!cd) return;
-
-	cd->width = w;
-	cd->height = h;
-	cd->dimensions = TRUE;
+	this->dimensions = dimensions;
+	have_dimensions = TRUE;
 }
 
-void cache_sim_data_set_md5sum(CacheData *cd, const guchar digest[16])
+void CacheData::set_md5sum(const Md5Digest &digest)
 {
-	gint i;
-
-	if (!cd) return;
-
-	for (i = 0; i < 16; i++)
-		{
-		cd->md5sum[i] = digest[i];
-		}
-	cd->have_md5sum = TRUE;
+	md5sum = digest;
+	have_md5sum = TRUE;
 }
 
-void cache_sim_data_set_similarity(CacheData *cd, ImageSimilarityData *sd)
+void CacheData::set_similarity(const ImageSimilarityData &sd)
 {
-	if (!cd || !sd || !sd->filled) return;
+	if (!sd.filled) return;
 
-	if (!cd->sim) cd->sim = image_sim_new();
+	if (!sim) sim.reset(image_sim_new());
 
-	memcpy(cd->sim->avg_r, sd->avg_r, 1024);
-	memcpy(cd->sim->avg_g, sd->avg_g, 1024);
-	memcpy(cd->sim->avg_b, sd->avg_b, 1024);
-	cd->sim->filled = TRUE;
-
-	cd->similarity = TRUE;
+	*sim = sd;
+	have_similarity = TRUE;
 }
 
 /*

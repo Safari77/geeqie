@@ -24,7 +24,13 @@
 
 #include <sys/types.h>
 
+#include <cstdio>
+#include <memory>
+
 #include <glib.h>
+
+#include "geometry.h"
+#include "md5-util.h"
 
 struct ImageSimilarityData;
 
@@ -40,40 +46,49 @@ struct ImageSimilarityData;
 #define GQ_CACHE_EXT_XMP_METADATA   ".gq.xmp"
 
 
-enum CacheType {
-	CACHE_TYPE_THUMB,
-	CACHE_TYPE_SIM,
-	CACHE_TYPE_METADATA,
-	CACHE_TYPE_XMP_METADATA
+enum class CacheType {
+	THUMB,
+	SIM,
+	METADATA,
+	XMP_METADATA
 };
 
 struct CacheData
 {
-	gchar *path;
-	gint width;
-	gint height;
-	time_t date;
-	guchar md5sum[16];
-	ImageSimilarityData *sim;
+	bool save(const gchar *path) const;
+	bool load(const gchar *path);
 
-	gboolean dimensions;
+	void set_dimensions(GqSize dimensions);
+	void set_md5sum(const Md5Digest &digest);
+	void set_similarity(const ImageSimilarityData &sd);
+
+	GqSize dimensions;
+	time_t date;
+	Md5Digest md5sum;
+	std::unique_ptr<ImageSimilarityData> sim;
+
+	gboolean have_dimensions;
 	gboolean have_date;
 	gboolean have_md5sum;
-	gboolean similarity;
+	gboolean have_similarity;
+
+private:
+	bool write_dimensions(GString *gstring) const;
+	bool write_date(GString *gstring) const;
+	bool write_md5sum(GString *gstring) const;
+	bool write_similarity(GString *gstring) const;
+
+	bool read_dimensions(FILE *f, const gchar *buffer, gint s);
+	bool read_date(FILE *f, const gchar *buffer, gint s);
+	bool read_md5sum(FILE *f, const gchar *buffer, gint s);
+	bool read_similarity(FILE *f, const gchar *buffer, gint s);
 };
 
 gboolean cache_time_valid(const gchar *cache, const gchar *path);
 
-
 CacheData *cache_sim_data_new();
+CacheData *cache_sim_data_new(const gchar *path);
 void cache_sim_data_free(CacheData *cd);
-
-gboolean cache_sim_data_save(CacheData *cd);
-CacheData *cache_sim_data_load(const gchar *path);
-
-void cache_sim_data_set_dimensions(CacheData *cd, gint w, gint h);
-void cache_sim_data_set_md5sum(CacheData *cd, const guchar digest[16]);
-void cache_sim_data_set_similarity(CacheData *cd, ImageSimilarityData *sd);
 
 gchar *cache_create_location(CacheType cache_type, const gchar *source);
 gchar *cache_get_location(CacheType cache_type, const gchar *source);

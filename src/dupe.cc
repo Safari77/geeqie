@@ -477,64 +477,57 @@ static void dupe_item_free(DupeItem *di)
 
 static void dupe_item_read_cache(DupeItem *di)
 {
-	CacheData *cd;
-
 	if (!di) return;
 
-	g_autofree gchar *path = cache_find_location(CACHE_TYPE_SIM, di->fd->path);
+	g_autofree gchar *path = cache_find_location(CacheType::SIM, di->fd->path);
 	if (!path) return;
 
 	if (filetime(di->fd->path) != filetime(path)) return;
 
-	cd = cache_sim_data_load(path);
-	if (!cd) return;
+	CacheData cd{};
+	if (!cd.load(path)) return;
 
-	if (!di->simd && cd->sim)
+	if (!di->simd && cd.sim)
 		{
-		di->simd = cd->sim;
-		cd->sim = nullptr;
+		di->simd = cd.sim.release();
 		}
 
-	if (di->width == 0 && di->height == 0 && cd->dimensions)
+	if (di->width == 0 && di->height == 0 && cd.have_dimensions)
 		{
-		di->width = cd->width;
-		di->height = cd->height;
+		di->width = cd.dimensions.width;
+		di->height = cd.dimensions.height;
 		di->dimensions = (di->width << 16) + di->height;
 		}
 
-	if (!di->md5sum && cd->have_md5sum)
+	if (!di->md5sum && cd.have_md5sum)
 		{
-		di->md5sum = md5_digest_to_text(cd->md5sum);
+		di->md5sum = md5_digest_to_text(cd.md5sum);
 		}
-
-	cache_sim_data_free(cd);
 }
 
 static void dupe_item_write_cache(DupeItem *di)
 {
 	if (!di) return;
 
-	g_autofree gchar *base = cache_create_location(CACHE_TYPE_SIM, di->fd->path);
+	g_autofree gchar *base = cache_create_location(CacheType::SIM, di->fd->path);
 	if (base)
 		{
-		CacheData *cd;
+		CacheData cd{};
 
-		cd = cache_sim_data_new();
-		cd->path = cache_get_location(CACHE_TYPE_SIM, di->fd->path);
+		g_autofree gchar *path = cache_get_location(CacheType::SIM, di->fd->path);
 
-		if (di->width != 0) cache_sim_data_set_dimensions(cd, di->width, di->height);
+		if (di->width != 0) cd.set_dimensions({di->width, di->height});
 		if (di->md5sum)
 			{
-			guchar digest[16];
-			if (md5_digest_from_text(di->md5sum, digest)) cache_sim_data_set_md5sum(cd, digest);
+			Md5Digest digest;
+			if (md5_digest_from_text(di->md5sum, digest)) cd.set_md5sum(digest);
 			}
-		if (di->simd) cache_sim_data_set_similarity(cd, di->simd);
+		if (di->simd) cd.set_similarity(*di->simd);
 
-		if (cache_sim_data_save(cd))
+		if (cd.save(path))
 			{
-			filetime_set(cd->path, filetime(di->fd->path));
+			filetime_set(path, filetime(di->fd->path));
 			}
-		cache_sim_data_free(cd);
 		}
 }
 
@@ -2060,12 +2053,10 @@ static void dupe_loader_done_cb(ImageLoader *il, gpointer data)
 
 		if (!di->simd)
 			{
-			di->simd = image_sim_new_from_pixbuf(pixbuf);
+			di->simd = image_sim_new();
 			}
-		else
-			{
-			image_sim_fill_data(di->simd, pixbuf);
-			}
+
+		di->simd->fill_data(pixbuf);
 
 		if (di->width == 0 && di->height == 0 && pixbuf)
 			{
@@ -4909,7 +4900,7 @@ static GString *export_duplicates_data(DupeWindow *dw, const gchar *sep)
 		g_string_append_printf(output_string, "%d", di->second + 1);
 		output_string = g_string_append(output_string, sep);
 
-		g_autofree gchar *thumb_cache = cache_find_location(CACHE_TYPE_THUMB, di->fd->path);
+		g_autofree gchar *thumb_cache = cache_find_location(CacheType::THUMB, di->fd->path);
 		output_string = g_string_append(output_string, thumb_cache ? thumb_cache : "");
 		output_string = g_string_append(output_string, sep);
 

@@ -56,7 +56,7 @@ static gboolean cache_loader_phase1_process(gpointer data)
 {
 	auto *cl = static_cast<CacheLoader *>(data);
 
-	if (cl->todo_mask & CACHE_LOADER_SIMILARITY && !cl->cd->similarity)
+	if (cl->todo_mask & CACHE_LOADER_SIMILARITY && !cl->cd->have_similarity)
 		{
 		if (!cl->il && !cl->error)
 			{
@@ -81,7 +81,7 @@ static gboolean cache_loader_phase2_process(gpointer data)
 {
 	auto *cl = static_cast<CacheLoader *>(data);
 
-	if (cl->todo_mask & CACHE_LOADER_SIMILARITY && !cl->cd->similarity && cl->il)
+	if (cl->todo_mask & CACHE_LOADER_SIMILARITY && !cl->cd->have_similarity && cl->il)
 		{
 		GdkPixbuf *pixbuf;
 		pixbuf = image_loader_get_pixbuf(cl->il);
@@ -89,21 +89,20 @@ static gboolean cache_loader_phase2_process(gpointer data)
 			{
 			if (!cl->error)
 				{
-				ImageSimilarityData *sim;
+				ImageSimilarityData sim{};
+				sim.fill_data(pixbuf);
 
-				sim = image_sim_new_from_pixbuf(pixbuf);
-				cache_sim_data_set_similarity(cl->cd, sim);
-				image_sim_free(sim);
+				cl->cd->set_similarity(sim);
 
 				cl->todo_mask = static_cast<CacheDataType>(cl->todo_mask & ~CACHE_LOADER_SIMILARITY);
 				cl->done_mask = static_cast<CacheDataType>(cl->done_mask | CACHE_LOADER_SIMILARITY);
 				}
 
 			/* we have the dimensions via pixbuf */
-			if (!cl->cd->dimensions)
+			if (!cl->cd->have_dimensions)
 				{
-				cache_sim_data_set_dimensions(cl->cd, gdk_pixbuf_get_width(pixbuf),
-								      gdk_pixbuf_get_height(pixbuf));
+				cl->cd->set_dimensions({gdk_pixbuf_get_width(pixbuf),
+				                        gdk_pixbuf_get_height(pixbuf)});
 				if (cl->todo_mask & CACHE_LOADER_DIMENSIONS)
 					{
 					cl->todo_mask = static_cast<CacheDataType>(cl->todo_mask & ~CACHE_LOADER_DIMENSIONS);
@@ -117,13 +116,14 @@ static gboolean cache_loader_phase2_process(gpointer data)
 
 		cl->todo_mask = static_cast<CacheDataType>(cl->todo_mask & ~CACHE_LOADER_SIMILARITY);
 		}
-	else if (cl->todo_mask & CACHE_LOADER_DIMENSIONS &&
-		 !cl->cd->dimensions)
+	else if ((cl->todo_mask & CACHE_LOADER_DIMENSIONS) &&
+	         !cl->cd->have_dimensions)
 		{
-		if (!cl->error &&
-		    image_load_dimensions(cl->fd, &cl->cd->width, &cl->cd->height))
+		if (GqSize dimensions;
+		    !cl->error &&
+		    image_load_dimensions(cl->fd, &dimensions.width, &dimensions.height))
 			{
-			cl->cd->dimensions = TRUE;
+			cl->cd->set_dimensions(dimensions);
 			cl->done_mask = static_cast<CacheDataType>(cl->done_mask | CACHE_LOADER_DIMENSIONS);
 			}
 		else
@@ -175,14 +175,13 @@ static gboolean cache_loader_phase2_process(gpointer data)
 		if (options->thumbnails.enable_caching &&
 		    cl->done_mask != CACHE_LOADER_NONE)
 			{
-			g_autofree gchar *base = cache_create_location(CACHE_TYPE_SIM, cl->fd->path);
+			g_autofree gchar *base = cache_create_location(CacheType::SIM, cl->fd->path);
 			if (base)
 				{
-				g_free(cl->cd->path);
-				cl->cd->path = cache_get_location(CACHE_TYPE_SIM, cl->fd->path);
-				if (cache_sim_data_save(cl->cd))
+				g_autofree gchar *path = cache_get_location(CacheType::SIM, cl->fd->path);
+				if (cl->cd->save(path))
 					{
-					filetime_set(cl->cd->path, filetime(cl->fd->path));
+					filetime_set(path, filetime(cl->fd->path));
 					}
 				}
 			}
@@ -213,10 +212,10 @@ CacheLoader *cache_loader_new(FileData *fd, CacheDataType load_mask,
 	cl->done_func = done_func;
 	cl->done_data = done_data;
 
-	g_autofree gchar *found = cache_find_location(CACHE_TYPE_SIM, cl->fd->path);
+	g_autofree gchar *found = cache_find_location(CacheType::SIM, cl->fd->path);
 	if (found && filetime(found) == filetime(cl->fd->path))
 		{
-		cl->cd = cache_sim_data_load(found);
+		cl->cd = cache_sim_data_new(found);
 		}
 
 	if (!cl->cd) cl->cd = cache_sim_data_new();

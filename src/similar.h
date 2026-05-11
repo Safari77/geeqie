@@ -22,14 +22,19 @@
 #ifndef SIMILAR_H
 #define SIMILAR_H
 
+#include <array>
+
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 
 struct ImageSimilarityData
 {
-	guint8 avg_r[1024];
-	guint8 avg_g[1024];
-	guint8 avg_b[1024];
+	void fill_data(GdkPixbuf *pixbuf);
+
+	using Avg = std::array<guint8, 1024>;
+	Avg avg_r;
+	Avg avg_g;
+	Avg avg_b;
 
 	gboolean filled;
 };
@@ -37,9 +42,6 @@ struct ImageSimilarityData
 
 ImageSimilarityData *image_sim_new();
 void image_sim_free(ImageSimilarityData *sd);
-
-void image_sim_fill_data(ImageSimilarityData *sd, GdkPixbuf *pixbuf);
-ImageSimilarityData *image_sim_new_from_pixbuf(GdkPixbuf *pixbuf);
 
 gdouble image_sim_compare(ImageSimilarityData *a, ImageSimilarityData *b);
 gdouble image_sim_compare_fast(ImageSimilarityData *a, ImageSimilarityData *b, gdouble min);

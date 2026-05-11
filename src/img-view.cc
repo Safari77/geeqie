@@ -380,7 +380,7 @@ static void view_step_to_end(ViewWindow *vw, gboolean last)
  *-----------------------------------------------------------------------------
  */
 
-static void view_window_press_cb(GtkWidget *, GdkEventButton *bevent, gpointer data)
+static gboolean view_window_press_cb(GtkWidget *, GdkEventButton *bevent, gpointer data)
 {
 	auto vw = static_cast<ViewWindow *>(data);
 
@@ -395,6 +395,8 @@ static void view_window_press_cb(GtkWidget *, GdkEventButton *bevent, gpointer d
 		default:
 			break;
 		}
+
+	return FALSE;
 }
 
 static gboolean view_window_key_press_cb(GtkWidget * (widget), GdkEventKey *event, gpointer data)
