@@ -692,8 +692,8 @@ static void pan_grid_build(PanWindow *pw, gint width, gint height, gint grid_siz
 	cw = std::max<gint>(ceil(static_cast<gdouble>(width) / col), PAN_TILE_SIZE * 2);
 	ch = std::max<gint>(ceil(static_cast<gdouble>(height) / row), PAN_TILE_SIZE * 2);
 
-	row = row * 2 - 1;
-	col = col * 2 - 1;
+	row = (row * 2) - 1;
+	col = (col * 2) - 1;
 
 	DEBUG_1("intersect speedup grid is %dx%d, based on %d average per grid", col, row, grid_size);
 

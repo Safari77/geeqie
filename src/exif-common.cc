@@ -278,7 +278,7 @@ gchar *exif_build_formatted_ShutterSpeed(ExifData *exif)
 		gdouble n = pow(2.0, exif_rational_to_double(r, true));
 
 		/* Correct exposure time to avoid values like 1/91s (seen on Minolta DImage 7) */
-		if (n > 1.0 && static_cast<gint>(n) - (static_cast<gint>(n/10))*10 == 1) n--;
+		if (n > 1.0 && static_cast<gint>(n) - ((static_cast<gint>(n/10))*10) == 1) n--;
 
 		return g_strdup_printf("%s%.0fs", n > 1.0 ? "1/" : "",
 						  n > 1.0 ? floor(n) : 1.0 / n);

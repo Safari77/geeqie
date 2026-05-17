@@ -679,11 +679,11 @@ static void gqv_cell_renderer_icon_render(GtkCellRenderer *cell,
 		pix_rect.width = gdk_pixbuf_get_width(pixbuf);
 		pix_rect.height = gdk_pixbuf_get_height(pixbuf);
 
-		pix_rect.x = cell_area->x + (cell_area->width - pix_rect.width) / 2;
+		pix_rect.x = cell_area->x + ((cell_area->width - pix_rect.width) / 2);
 
 		if (cellicon->fixed_height > 0)
 			{
-			pix_rect.y = cell_area->y + ypad + (cellicon->fixed_height - pix_rect.height) / 2;
+			pix_rect.y = cell_area->y + ypad + ((cellicon->fixed_height - pix_rect.height) / 2);
 			}
 		else
 			{
@@ -713,7 +713,7 @@ static void gqv_cell_renderer_icon_render(GtkCellRenderer *cell,
 
 		pix_rect.width = text_rect.width;
 		pix_rect.height = text_rect.height;
-		pix_rect.x = cell_area->x + xpad + (cell_rect.width - text_rect.width + 1) / 2;
+		pix_rect.x = cell_area->x + xpad + ((cell_rect.width - text_rect.width + 1) / 2);
 		pix_rect.y = cell_area->y + ypad + (cell_rect.height - text_rect.height);
 
 		if (cellicon->show_marks)
@@ -735,8 +735,8 @@ static void gqv_cell_renderer_icon_render(GtkCellRenderer *cell,
 
 		pix_rect.width = TOGGLE_SPACING * cellicon->num_marks;
 		pix_rect.height = TOGGLE_SPACING;
-		pix_rect.x = cell_area->x + xpad + (cell_rect.width - pix_rect.width + 1) / 2 + (TOGGLE_SPACING - TOGGLE_WIDTH) / 2;
-		pix_rect.y = cell_area->y + ypad + (cell_rect.height - pix_rect.height) + (TOGGLE_SPACING - TOGGLE_WIDTH) / 2;
+		pix_rect.x = cell_area->x + xpad + ((cell_rect.width - pix_rect.width + 1) / 2) + ((TOGGLE_SPACING - TOGGLE_WIDTH) / 2);
+		pix_rect.y = cell_area->y + ypad + (cell_rect.height - pix_rect.height) + ((TOGGLE_SPACING - TOGGLE_WIDTH) / 2);
 
 		if (gdk_rectangle_intersect(cell_area, &pix_rect, nullptr))
 			{
@@ -821,10 +821,10 @@ static gboolean gqv_cell_renderer_icon_activate(GtkCellRenderer      *cell,
 
 		rect.width = TOGGLE_WIDTH;
 		rect.height = TOGGLE_WIDTH;
-		rect.y = cell_area->y + ypad + (cell_rect.height - TOGGLE_SPACING) + (TOGGLE_SPACING - TOGGLE_WIDTH) / 2;
+		rect.y = cell_area->y + ypad + (cell_rect.height - TOGGLE_SPACING) + ((TOGGLE_SPACING - TOGGLE_WIDTH) / 2);
 		for (i = 0; i < cellicon->num_marks; i++)
 			{
-			rect.x = cell_area->x + xpad + (cell_rect.width - TOGGLE_SPACING * cellicon->num_marks + 1) / 2 + i * TOGGLE_SPACING;
+			rect.x = cell_area->x + xpad + ((cell_rect.width - TOGGLE_SPACING * cellicon->num_marks + 1) / 2) + (i * TOGGLE_SPACING);
 
 			if (bevent->x >= rect.x && bevent->x < rect.x + rect.width &&
 			    bevent->y >= rect.y && bevent->y < rect.y + rect.height)

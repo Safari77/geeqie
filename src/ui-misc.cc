@@ -847,7 +847,7 @@ static void button_size_allocate_cb(GtkWidget *button, GtkAllocation *allocation
 		gtk_widget_get_allocation(spin, &spin_allocation);
 		button_allocation.height = spin_requisition.height;
 		button_allocation.y = spin_allocation.y +
-			(spin_allocation.height - spin_requisition.height) / 2;
+			((spin_allocation.height - spin_requisition.height) / 2);
 		gtk_widget_size_allocate(button, &button_allocation);
 		}
 }

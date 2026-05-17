@@ -256,7 +256,7 @@ void ImageSimilarityData::fill_data(GdkPixbuf *pixbuf)
 			g /= xy_inc;
 			b /= xy_inc;
 
-			gint t = ys * 32 + xs;
+			gint t = (ys * 32) + xs;
 			avg_r[t] = r;
 			avg_g[t] = g;
 			avg_b[t] = b;

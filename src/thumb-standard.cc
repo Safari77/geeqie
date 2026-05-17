@@ -839,7 +839,7 @@ static void thumb_loader_std_thumb_file_validate_done_cb(ThumbLoaderStd *, gpoin
 					time_t now;
 
 					now = time(nullptr);
-					if (st.st_atime >= now - static_cast<time_t>(tv->days) * 24 * 60 * 60)
+					if (st.st_atime >= now - (static_cast<time_t>(tv->days) * 24 * 60 * 60))
 						{
 						valid = TRUE;
 						}

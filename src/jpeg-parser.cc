@@ -118,7 +118,7 @@ gint tiff_parse_IFD_table(const guchar *tiff, guint offset, guint size, TiffByte
 	guint count = tiff_byte_get_int16(tiff + offset, bo);
 	offset += 2;
 	/* Entries and next IFD offset must be readable */
-	if (size < offset + count * TIFF_TIFD_SIZE + 4) return -1;
+	if (size < offset + (count * TIFF_TIFD_SIZE) + 4) return -1;
 
 	for (guint i = 0; i < count; i++)
 		{

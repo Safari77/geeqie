@@ -128,7 +128,7 @@ gboolean ImageLoaderZXSCR::write(const guchar *buf, gsize &chunk_size, gsize cou
 				ink = attr & 0x07;
 				paper = ((attr >> 3) & 0x07);
 				}
-			ptr = pixels + (row * 256 + col) * 8 * 3;
+			ptr = pixels + ((row * 256 + col) * 8 * 3);
 
 			for (mrow = 0; mrow < 8; mrow ++)
 				{

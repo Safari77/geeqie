@@ -109,7 +109,7 @@ static guint nikon_tiff_table(guchar *data, const guint len, guint offset, ExifB
 
 	count = exif_byte_get_int16(data + offset, bo);
 	offset += 2;
-	if (len < offset + count * EXIF_TIFD_SIZE + 4) return 0;
+	if (len < offset + (count * EXIF_TIFD_SIZE) + 4) return 0;
 
 	for (i = 0; i < count; i++)
 		{

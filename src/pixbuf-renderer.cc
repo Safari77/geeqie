@@ -1171,7 +1171,7 @@ static gdouble pr_zoom_adjust(const PixbufRenderer *pr, gdouble increment)
 		{
 		if (pr->scale < 1.0)
 			{
-			zoom = 0.0 - 1.0 / pr->scale;
+			zoom = 0.0 - (1.0 / pr->scale);
 			}
 		else
 			{
@@ -1496,13 +1496,13 @@ static void pixbuf_renderer_sync_scroll_center(PixbufRenderer *pr)
 
 	if (pr->width > pr->viewport_width)
 		{
-		src_x = pr->x_scroll + pr->vis_width / 2;
+		src_x = pr->x_scroll + (pr->vis_width / 2);
 		pr->norm_center_x = static_cast<gdouble>(src_x) / pr->width;
 		}
 
 	if (pr->height > pr->viewport_height)
 		{
-		src_y = pr->y_scroll + pr->vis_height / 2;
+		src_y = pr->y_scroll + (pr->vis_height / 2);
 		pr->norm_center_y = static_cast<gdouble>(src_y) / pr->height;
 		}
 }
@@ -1633,22 +1633,22 @@ static gboolean pr_zoom_clamp(PixbufRenderer *pr, gdouble zoom,
 				{
 				scale = static_cast<gdouble>(max_h) / h / pr->aspect_ratio;
 				h = max_h;
-				w = w * scale + 0.5;
+				w = (w * scale) + 0.5;
 				w = std::min(w, max_w);
 				}
 			else
 				{
 				scale = static_cast<gdouble>(max_w) / w;
 				w = max_w;
-				h = h * scale * pr->aspect_ratio + 0.5;
+				h = (h * scale * pr->aspect_ratio) + 0.5;
 				h = std::min(h, max_h);
 				}
 
 			if (pr->autofit_limit)
 				{
 				gdouble factor = static_cast<gdouble>(pr->autofit_limit_size) / 100;
-				w = w * factor + 0.5;
-				h = h * factor + 0.5;
+				w = (w * factor) + 0.5;
+				h = (h * factor) + 0.5;
 				scale = scale * factor;
 				}
 
@@ -1717,8 +1717,8 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 	else
 		{
 		px = py = 0;
-		old_cx = pr->x_scroll + pr->vis_width / 2;
-		old_cy = pr->y_scroll + pr->vis_height / 2;
+		old_cx = pr->x_scroll + (pr->vis_width / 2);
+		old_cy = pr->y_scroll + (pr->vis_height / 2);
 		}
 
 	if (force) clamp_flags = static_cast<PrZoomFlags>(clamp_flags | PR_ZOOM_INVALIDATE);
@@ -1737,13 +1737,13 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 			{
 			case ScrollReset::NOCHANGE:
 				/* maintain old scroll position */
-				pr->x_scroll = (static_cast<gdouble>(pr->image_width) * old_center_x * pr->scale) - pr->vis_width / 2; // NOLINT(bugprone-integer-division)
-				pr->y_scroll = (static_cast<gdouble>(pr->image_height) * old_center_y * pr->scale * pr->aspect_ratio) - pr->vis_height / 2; // NOLINT(bugprone-integer-division)
+				pr->x_scroll = (static_cast<gdouble>(pr->image_width) * old_center_x * pr->scale) - (pr->vis_width / 2); // NOLINT(bugprone-integer-division)
+				pr->y_scroll = (static_cast<gdouble>(pr->image_height) * old_center_y * pr->scale * pr->aspect_ratio) - (pr->vis_height / 2); // NOLINT(bugprone-integer-division)
 				break;
 			case ScrollReset::CENTER:
 				/* center new image */
-				pr->x_scroll = (static_cast<gdouble>(pr->image_width) / 2 * pr->scale) - pr->vis_width / 2; // NOLINT(bugprone-integer-division)
-				pr->y_scroll = (static_cast<gdouble>(pr->image_height) / 2 * pr->scale * pr->aspect_ratio) - pr->vis_height / 2; // NOLINT(bugprone-integer-division)
+				pr->x_scroll = (static_cast<gdouble>(pr->image_width) / 2 * pr->scale) - (pr->vis_width / 2); // NOLINT(bugprone-integer-division)
+				pr->y_scroll = (static_cast<gdouble>(pr->image_height) / 2 * pr->scale * pr->aspect_ratio) - (pr->vis_height / 2); // NOLINT(bugprone-integer-division)
 				break;
 			case ScrollReset::TOPLEFT:
 			default:
@@ -1758,13 +1758,13 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 		/* user zoom does not force, so keep visible center point */
 		if (center_point)
 			{
-			pr->x_scroll = old_cx / old_scale * pr->scale - (px - pr->x_offset);
-			pr->y_scroll = old_cy / old_scale * pr->scale * pr->aspect_ratio - (py - pr->y_offset);
+			pr->x_scroll = (old_cx / old_scale * pr->scale) - (px - pr->x_offset);
+			pr->y_scroll = (old_cy / old_scale * pr->scale * pr->aspect_ratio) - (py - pr->y_offset);
 			}
 		else
 			{
-			pr->x_scroll = old_cx / old_scale * pr->scale - (pr->vis_width / 2); // NOLINT(bugprone-integer-division)
-			pr->y_scroll = old_cy / old_scale * pr->scale * pr->aspect_ratio - (pr->vis_height / 2); // NOLINT(bugprone-integer-division)
+			pr->x_scroll = (old_cx / old_scale * pr->scale) - (pr->vis_width / 2); // NOLINT(bugprone-integer-division)
+			pr->y_scroll = (old_cy / old_scale * pr->scale * pr->aspect_ratio) - (pr->vis_height / 2); // NOLINT(bugprone-integer-division)
 			}
 		}
 
@@ -1925,8 +1925,8 @@ void pixbuf_renderer_scroll_to_point(PixbufRenderer *pr, gint x, gint y,
 	ax = static_cast<gdouble>(pr->vis_width) * x_align;
 	ay = static_cast<gdouble>(pr->vis_height) * y_align;
 
-	px = static_cast<gdouble>(x) * pr->scale - (pr->x_scroll + ax);
-	py = static_cast<gdouble>(y) * pr->scale * pr->aspect_ratio - (pr->y_scroll + ay);
+	px = (static_cast<gdouble>(x) * pr->scale) - (pr->x_scroll + ax);
+	py = (static_cast<gdouble>(y) * pr->scale * pr->aspect_ratio) - (pr->y_scroll + ay);
 
 	pixbuf_renderer_scroll(pr, px, py);
 }
@@ -2192,7 +2192,7 @@ static void pr_create_anaglyph_color(GdkPixbuf *pixbuf, GdkPixbuf *right, gint x
 
 	drs = gdk_pixbuf_get_rowstride(pixbuf);
 	d_pix = gdk_pixbuf_get_pixels(pixbuf);
-	dpi =  d_pix + x * COLOR_BYTES;
+	dpi =  d_pix + (x * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -2241,7 +2241,7 @@ static void pr_create_anaglyph_gray(GdkPixbuf *pixbuf, GdkPixbuf *right, gint x,
 
 	drs = gdk_pixbuf_get_rowstride(pixbuf);
 	d_pix = gdk_pixbuf_get_pixels(pixbuf);
-	dpi =  d_pix + x * COLOR_BYTES;
+	dpi =  d_pix + (x * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -2325,7 +2325,7 @@ static void pr_create_anaglyph_dubois(GdkPixbuf *pixbuf, GdkPixbuf *right, gint 
 
 	drs = gdk_pixbuf_get_rowstride(pixbuf);
 	d_pix = gdk_pixbuf_get_pixels(pixbuf);
-	dpi =  d_pix + x * COLOR_BYTES;
+	dpi =  d_pix + (x * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{

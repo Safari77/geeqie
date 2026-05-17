@@ -218,8 +218,8 @@ static void slideshow_delay_hours_cb(GtkSpinButton *spin, gpointer)
 	mins_secs_tenths = c_options->slideshow.delay %
 						(3600 * SLIDESHOW_SUBSECOND_PRECISION);
 
-	delay = (gtk_spin_button_get_value(spin) *
-								(3600 * SLIDESHOW_SUBSECOND_PRECISION) +
+	delay = ((gtk_spin_button_get_value(spin) *
+								(3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
 								mins_secs_tenths);
 
 	c_options->slideshow.delay = delay > 0 ? delay : SLIDESHOW_MIN_SECONDS *
@@ -235,7 +235,7 @@ static void slideshow_delay_minutes_cb(GtkSpinButton *spin, gpointer)
 	hours = c_options->slideshow.delay / (3600 * SLIDESHOW_SUBSECOND_PRECISION);
 	secs_tenths = c_options->slideshow.delay % (60 * SLIDESHOW_SUBSECOND_PRECISION);
 
-	delay = hours * (3600 * SLIDESHOW_SUBSECOND_PRECISION) +
+	delay = (hours * (3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
 	        (gtk_spin_button_get_value(spin) *
 					(60 * SLIDESHOW_SUBSECOND_PRECISION) + secs_tenths);
 

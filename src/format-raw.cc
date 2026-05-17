@@ -92,13 +92,13 @@ static guint tiff_table(guchar *data, const guint len, guint offset, ExifByteOrd
 
 	count = exif_byte_get_int16(data + offset, bo);
 	offset += 2;
-	if (len < offset + count * 12 + 4) return 0;
+	if (len < offset + (count * 12) + 4) return 0;
 
 	for (i = 0; i < count; i++)
 		{
 		guint segment;
 
-		segment = offset + i * 12;
+		segment = offset + (i * 12);
 		if (exif_byte_get_int16(data + segment, bo) == tag &&
 		    exif_byte_get_int16(data + segment + 2, bo) == type)
 			{

@@ -322,7 +322,7 @@ static gint collection_table_get_icon_width(CollectTable *ct)
 
 	if (!ct->show_text && !ct->show_infotext) return options->thumbnails.max_width;
 
-	width = options->thumbnails.max_width + options->thumbnails.max_width / 2;
+	width = options->thumbnails.max_width + (options->thumbnails.max_width / 2);
 	width = std::max(width, THUMB_MIN_ICON_WIDTH);
 	if (width > THUMB_MAX_ICON_WIDTH) width = options->thumbnails.max_width;
 
@@ -1224,7 +1224,7 @@ static gint page_height(CollectTable *ct)
 	adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(ct->listview));
 	page_size = static_cast<gint>(gtk_adjustment_get_page_increment(adj));
 
-	row_height = options->thumbnails.max_height + THUMB_BORDER_PADDING * 2;
+	row_height = options->thumbnails.max_height + (THUMB_BORDER_PADDING * 2);
 	if (ct->show_text) row_height += options->thumbnails.max_height / 3;
 	if (ct->show_infotext) row_height += options->thumbnails.max_height / 3;
 

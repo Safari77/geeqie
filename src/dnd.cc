@@ -56,15 +56,15 @@ static void pixbuf_draw_border(GdkPixbuf *pixbuf, gint w, gint h)
 	const gint p_step = alpha ? 4 : 3;
 	for (i = 1; i < h - 1; i++)
 		{
-		p = pix + rs * i;
+		p = pix + (rs * i);
 		*p = 0; p++; *p = 0; p++; *p = 0; p++;
 		if (alpha) *p= 255;
 
-		p = pix + rs * i + (w - 1) * p_step;
+		p = pix + (rs * i) + ((w - 1) * p_step);
 		*p = 0; p++; *p = 0; p++; *p = 0; p++;
 		if (alpha) *p= 255;
 		}
-	p = pix + rs * (h - 1);
+	p = pix + (rs * (h - 1));
 	for (i = 0; i < w; i++)
 		{
 		*p = 0; p++; *p = 0; p++; *p = 0; p++;
