@@ -159,21 +159,13 @@ gchar *cache_get_location(CacheType type, const gchar *source, gint include_name
  *-------------------------------------------------------------------
  */
 
-CacheData *cache_sim_data_new()
-{
-	auto *cd = new CacheData();
-	cd->date = -1;
-
-	return cd;
-}
-
 CacheData *cache_sim_data_new(const gchar *path)
 {
-	std::unique_ptr<CacheData> cd(cache_sim_data_new());
+	auto *cd = new CacheData();
 
-	if (!cd->load(path)) return nullptr;
+	if (path) cd->load(path);
 
-	return cd.release();
+	return cd;
 }
 
 void cache_sim_data_free(CacheData *cd)
@@ -189,27 +181,27 @@ void cache_sim_data_free(CacheData *cd)
 
 bool CacheData::write_dimensions(GString *gstring) const
 {
-	if (!have_dimensions) return false;
+	if (!dimensions) return false;
 
-	g_string_append_printf(gstring, "Dimensions=[%d x %d]\n", dimensions.width, dimensions.height);
+	g_string_append_printf(gstring, "Dimensions=[%d x %d]\n", dimensions->width, dimensions->height);
 
 	return true;
 }
 
 bool CacheData::write_date(GString *gstring) const
 {
-	if (!have_date) return false;
+	if (!date) return false;
 
-	g_string_append_printf(gstring, "Date=[%ld]\n", date);
+	g_string_append_printf(gstring, "Date=[%ld]\n", *date);
 
 	return true;
 }
 
 bool CacheData::write_md5sum(GString *gstring) const
 {
-	if (!have_md5sum) return false;
+	if (!md5sum) return false;
 
-	g_autofree gchar *text = md5_digest_to_text(md5sum);
+	g_autofree gchar *text = md5_digest_to_text(*md5sum);
 
 	g_string_append_printf(gstring, "MD5sum=[%s]\n", text);
 
@@ -218,7 +210,7 @@ bool CacheData::write_md5sum(GString *gstring) const
 
 bool CacheData::write_similarity(GString *gstring) const
 {
-	if (!have_similarity || !sim || !sim->filled) return false;
+	if (!similarity || !similarity->filled) return false;
 
 	g_string_append(gstring, "SimilarityGrid[32 x 32]=");
 
@@ -230,9 +222,9 @@ bool CacheData::write_similarity(GString *gstring) const
 
 		for (guint x = 0; x < 32; x++)
 			{
-			buf[n++] = sim->avg_r[s + x];
-			buf[n++] = sim->avg_g[s + x];
-			buf[n++] = sim->avg_b[s + x];
+			buf[n++] = similarity->avg_r[s + x];
+			buf[n++] = similarity->avg_g[s + x];
+			buf[n++] = similarity->avg_b[s + x];
 			}
 
 		g_string_append_len(gstring, (const gchar *)buf, sizeof(buf));
@@ -243,9 +235,13 @@ bool CacheData::write_similarity(GString *gstring) const
 	return true;
 }
 
-bool CacheData::save(const gchar *path) const
+void CacheData::save(const gchar *source) const
 {
-	if (!path) return false;
+	g_autofree gchar *base = cache_create_location(CacheType::SIM, source);
+	if (!base) return;
+
+	g_autofree gchar *path = cache_get_location(CacheType::SIM, source);
+	if (!path) return;
 
 	g_autofree gchar *pathl = path_from_utf8(path);
 
@@ -258,7 +254,7 @@ bool CacheData::save(const gchar *path) const
 
 	secure_save(pathl, gstring->str, gstring->len);
 
-	return true;
+	filetime_set(path, filetime(source));
 }
 
 /*
@@ -346,7 +342,6 @@ bool CacheData::read_date(FILE *f, const gchar *buffer, gint s)
 	if (!cache_sim_read_buf(f, s, buf, sizeof(buf))) return false;
 
 	date = strtol(buf, nullptr, 10);
-	have_date = TRUE;
 
 	return true;
 }
@@ -360,7 +355,7 @@ bool CacheData::read_md5sum(FILE *f, const gchar *buffer, gint s)
 	gchar buf[64];
 	if (!cache_sim_read_buf(f, s, buf, sizeof(buf))) return false;
 
-	have_md5sum = md5_digest_from_text(buf, md5sum);
+	if (Md5Digest digest; md5_digest_from_text(buf, digest)) set_md5sum(digest);
 
 	return true;
 }
@@ -382,13 +377,12 @@ bool CacheData::read_similarity(FILE *f, const gchar *buffer, gint s)
 		}
 
 	guint8 pixel_buf[3];
-	std::unique_ptr<ImageSimilarityData> sd;
+	std::unique_ptr<ImageSimilarityData> sd = nullptr;
 
-	if (sim)
+	if (similarity)
 		{
 		/* use current sim that may already contain data we will not touch here */
-		sd.swap(sim);
-		have_similarity = FALSE;
+		sd.swap(similarity);
 		}
 	else
 		{
@@ -415,15 +409,17 @@ bool CacheData::read_similarity(FILE *f, const gchar *buffer, gint s)
 
 	sd->filled = TRUE;
 
-	sim.swap(sd);
-	have_similarity = TRUE;
+	set_similarity(*sd);
 
 	return true;
 }
 
-bool CacheData::load(const gchar *path)
+bool CacheData::load(const gchar *source)
 {
+	g_autofree gchar *path = cache_find_location(CacheType::SIM, source);
 	if (!path) return false;
+
+	if (filetime(path) != filetime(source)) return false;
 
 	g_autofree gchar *pathl = path_from_utf8(path);
 	g_autoptr(FILE) f = fopen(pathl, "r");
@@ -459,10 +455,10 @@ bool CacheData::load(const gchar *path)
 			}
 		}
 
-	return have_dimensions
-	    || have_date
-	    || have_md5sum
-	    || have_similarity;
+	return dimensions
+	    || date
+	    || md5sum
+	    || similarity;
 }
 
 /*
@@ -474,23 +470,18 @@ bool CacheData::load(const gchar *path)
 void CacheData::set_dimensions(GqSize dimensions)
 {
 	this->dimensions = dimensions;
-	have_dimensions = TRUE;
 }
 
 void CacheData::set_md5sum(const Md5Digest &digest)
 {
 	md5sum = digest;
-	have_md5sum = TRUE;
 }
 
 void CacheData::set_similarity(const ImageSimilarityData &sd)
 {
 	if (!sd.filled) return;
 
-	if (!sim) sim.reset(image_sim_new());
-
-	*sim = sd;
-	have_similarity = TRUE;
+	similarity = std::make_unique<ImageSimilarityData>(sd);
 }
 
 /*

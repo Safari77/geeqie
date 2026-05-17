@@ -138,27 +138,21 @@ gboolean file_cache_get(FileCacheData *fc, FileData *fd)
 	/* entry exists */
 	DEBUG_2("cache hit: fc=%p %s", (void *)fc, fd->path);
 
-	if (work == fc->list) return TRUE; /* already at the beginning */
-
-	/* move it to the beginning */
-	DEBUG_2("cache move to front: fc=%p %s", (void *)fc, fd->path);
-	fc->list = g_list_remove_link(fc->list, work);
-	fc->list = g_list_concat(work, fc->list);
+	/* move it to the beginning, if needed */
+	if (work != fc->list)
+		{
+		DEBUG_2("cache move to front: fc=%p %s", (void *)fc, fd->path);
+		fc->list = g_list_remove_link(fc->list, work);
+		fc->list = g_list_concat(work, fc->list);
+		}
 
 	if (file_data_check_changed_files(fd))
 		{
 		/* file has been changed, cache entry is no longer valid */
+		/* note that it may have already been evicted from the cache! */
 		file_cache_dump(fc);
-
-        /* FIX: The check above might have triggered a notification callback
-           (file_cache_notify_cb) which could have already removed and freed 'work'.
-           We must check if the entry still exists in the list before trying to remove it.
-        */
-        work = g_list_find_custom(fc->list, fd, reinterpret_cast<GCompareFunc>(file_cache_entry_compare_fd));
-        if (work)
-            {
-		    file_cache_remove_entry(fc, work);
-            }
+		work = g_list_find_custom(fc->list, fd, reinterpret_cast<GCompareFunc>(file_cache_entry_compare_fd));
+		if (work) file_cache_remove_entry(fc, work);
 
 		return FALSE;
 		}

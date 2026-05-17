@@ -1727,20 +1727,20 @@ static void search_file_load_process(SearchData *sd, CacheData *cd)
 	 */
 	if (cd && !pixbuf)
 		{
-		if (!cd->have_dimensions)
+		if (!cd->dimensions)
 			{
 			cd->set_dimensions({-1, -1});
 			}
 		}
 	else if (cd && pixbuf)
 		{
-		if (!cd->have_dimensions)
+		if (!cd->dimensions)
 			{
 			cd->set_dimensions({gdk_pixbuf_get_width(pixbuf),
 			                    gdk_pixbuf_get_height(pixbuf)});
 			}
 
-		if (sd->match_similarity_enable && !cd->have_similarity)
+		if (sd->match_similarity_enable && !cd->similarity)
 			{
 			ImageSimilarityData sim{};
 			sim.fill_data(pixbuf);
@@ -1751,17 +1751,9 @@ static void search_file_load_process(SearchData *sd, CacheData *cd)
 		if (options->thumbnails.enable_caching &&
 		    sd->img_loader && image_loader_get_fd(sd->img_loader))
 			{
-			const gchar *path = image_loader_get_fd(sd->img_loader)->path;
+			const FileData *fd = image_loader_get_fd(sd->img_loader);
 
-			g_autofree gchar *base = cache_create_location(CacheType::SIM, path);
-			if (base)
-				{
-				g_autofree gchar *cd_path = cache_get_location(CacheType::SIM, path);
-				if (cd->save(cd_path))
-					{
-					filetime_set(cd_path, filetime(path));
-					}
-				}
+			cd->save(fd->path);
 			}
 		}
 
@@ -1779,30 +1771,15 @@ static void search_file_load_done_cb(ImageLoader *, gpointer data)
 
 static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolean &match)
 {
-	gboolean new_data = FALSE;
 	gboolean tmatch = TRUE;
 	gboolean tested = FALSE;
 
 	if (!sd->img_cd)
 		{
-		new_data = TRUE;
+		sd->img_cd = cache_sim_data_new(mfd.fd->path);
 
-		g_autofree gchar *cd_path = cache_find_location(CacheType::SIM, mfd.fd->path);
-		if (cd_path && filetime(mfd.fd->path) == filetime(cd_path))
-			{
-			sd->img_cd = cache_sim_data_new(cd_path);
-			}
-		}
-
-	if (!sd->img_cd)
-		{
-		sd->img_cd = cache_sim_data_new();
-		}
-
-	if (new_data)
-		{
-		if ((sd->match_dimensions_enable && !sd->img_cd->have_dimensions) ||
-		    (sd->match_similarity_enable && !sd->img_cd->have_similarity) ||
+		if ((sd->match_dimensions_enable && !sd->img_cd->dimensions) ||
+		    (sd->match_similarity_enable && !sd->img_cd->similarity) ||
 		    sd->match_broken_enable)
 			{
 			sd->img_loader = image_loader_new(mfd.fd);
@@ -1818,57 +1795,57 @@ static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolea
 			}
 		}
 
-	if (sd->match_broken_enable)
+	if (sd->match_broken_enable && sd->img_cd->dimensions)
 		{
 		tested = TRUE;
 		tmatch = FALSE;
-		if (sd->match_class == SEARCH_MATCH_EQUAL && sd->img_cd->dimensions.width == -1)
+		if (sd->match_class == SEARCH_MATCH_EQUAL && sd->img_cd->dimensions->width == -1)
 			{
 			tmatch = TRUE;
 			}
-		else if (sd->match_class == SEARCH_MATCH_NONE && sd->img_cd->dimensions.width != -1)
+		else if (sd->match_class == SEARCH_MATCH_NONE && sd->img_cd->dimensions->width != -1)
 			{
 			tmatch = TRUE;
 			}
 		}
 
-	if (tmatch && sd->match_dimensions_enable && sd->img_cd->have_dimensions)
+	if (tmatch && sd->match_dimensions_enable && sd->img_cd->dimensions)
 		{
-		CacheData *cd = sd->img_cd;
+		const GqSize &dimensions = sd->img_cd->dimensions.value();
 
 		tmatch = FALSE;
 		tested = TRUE;
 
 		if (sd->match_dimensions == SEARCH_MATCH_EQUAL)
 			{
-			tmatch = (cd->dimensions.width == sd->search_width && cd->dimensions.height == sd->search_height);
+			tmatch = (dimensions.width == sd->search_width && dimensions.height == sd->search_height);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_UNDER)
 			{
-			tmatch = (cd->dimensions.width < sd->search_width && cd->dimensions.height < sd->search_height);
+			tmatch = (dimensions.width < sd->search_width && dimensions.height < sd->search_height);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_OVER)
 			{
-			tmatch = (cd->dimensions.width > sd->search_width && cd->dimensions.height > sd->search_height);
+			tmatch = (dimensions.width > sd->search_width && dimensions.height > sd->search_height);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_BETWEEN)
 			{
-			tmatch = match_is_between(cd->dimensions.width, sd->search_width, sd->search_width_end) &&
-			         match_is_between(cd->dimensions.height, sd->search_height, sd->search_height_end);
+			tmatch = match_is_between(dimensions.width, sd->search_width, sd->search_width_end) &&
+			         match_is_between(dimensions.height, sd->search_height, sd->search_height_end);
 			}
 		}
 
-	if (tmatch && sd->match_similarity_enable && sd->img_cd->have_similarity)
+	if (tmatch && sd->match_similarity_enable && sd->img_cd->similarity)
 		{
 		tmatch = FALSE;
 		tested = TRUE;
 
 		/** @FIXME implement similarity checking */
-		if (sd->search_similarity_cd && sd->search_similarity_cd->have_similarity)
+		if (sd->search_similarity_cd && sd->search_similarity_cd->similarity)
 			{
 			gdouble result;
 
-			result = image_sim_compare_fast(sd->search_similarity_cd->sim.get(), sd->img_cd->sim.get(),
+			result = image_sim_compare_fast(sd->search_similarity_cd->similarity.get(), sd->img_cd->similarity.get(),
 			                                static_cast<gdouble>(sd->search_similarity) / 100.0);
 			result *= 100.0;
 			if (result >= static_cast<gdouble>(sd->search_similarity))
@@ -1879,10 +1856,10 @@ static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolea
 			}
 		}
 
-	if (sd->img_cd->have_dimensions)
+	if (sd->img_cd->dimensions)
 		{
-		mfd.width = sd->img_cd->dimensions.width;
-		mfd.height = sd->img_cd->dimensions.height;
+		mfd.width = sd->img_cd->dimensions->width;
+		mfd.height = sd->img_cd->dimensions->height;
 		}
 
 	cache_sim_data_free(sd->img_cd);
@@ -2448,19 +2425,10 @@ static void search_start(SearchData *sd)
 	    !sd->search_similarity_cd &&
 	    isfile(sd->search_similarity_path))
 		{
-		g_autofree gchar *cd_path = cache_find_location(CacheType::SIM, sd->search_similarity_path);
-		if (cd_path && filetime(sd->search_similarity_path) == filetime(cd_path))
-			{
-			sd->search_similarity_cd = cache_sim_data_new(cd_path);
-			}
+		sd->search_similarity_cd = cache_sim_data_new(sd->search_similarity_path);
 
-		if (!sd->search_similarity_cd || !sd->search_similarity_cd->have_similarity)
+		if (!sd->search_similarity_cd->similarity)
 			{
-			if (!sd->search_similarity_cd)
-				{
-				sd->search_similarity_cd = cache_sim_data_new();
-				}
-
 			sd->img_loader = image_loader_new(file_data_new_group(sd->search_similarity_path));
 			g_signal_connect(G_OBJECT(sd->img_loader), "error", (GCallback)search_similarity_load_done_cb, sd);
 			g_signal_connect(G_OBJECT(sd->img_loader), "done", (GCallback)search_similarity_load_done_cb, sd);

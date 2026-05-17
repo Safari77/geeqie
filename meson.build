@@ -825,6 +825,21 @@ else
     summary({'Temporary Comments' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
 endif
 
+# Boolean comparison checks
+boolean_comparison_check_awk = find_program('boolean-comparison-check.awk', dirs : buildauxdir, required : true)
+if boolean_comparison_check_awk.found()
+    foreach source_file : code_sources
+        source_file_name = fs.name(source_file)
+        if (source_file_name != 'debug.h')
+            test('Boolean Comparison_ ' + source_file_name, boolean_comparison_check_awk, args : [source_file], timeout : 100, suite : 'analysis')
+        endif
+    endforeach
+
+    summary({'Boolean Comparison' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
+else
+    summary({'Boolean Comparison' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
+endif
+
 # GTK4 migration regression checks
 gtk4_migration_check_sh = find_program('gtk4-migration-regression-check.sh', dirs : buildauxdir, required : true)
 if gtk4_migration_check_sh.found()

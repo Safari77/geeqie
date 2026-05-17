@@ -140,6 +140,13 @@ Checks for comments starting with `//~` in the source tree.
 
 See `build-aux/temporary-comments-check.sh` for more details.
 
+### Boolean comparison checks
+
+Checks for boolean comparisons in the style: `if (a == FALSE)`.
+
+See <https://docs.gtk.org/glib/types.html#gboolean> and
+`build-aux/boolean-comparison-check.awk`for more details.
+
 ### GTK4 migration regression checks
 
 Checks that gtk functions for which there is a Geeqie GTK4 compatibility
