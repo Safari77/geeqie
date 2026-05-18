@@ -465,7 +465,7 @@ void draw_page(GtkPrintOperation *, GtkPrintContext *context, gint page_nr, gpoi
 		PangoRectangle logical_rect;
 		pango_layout_get_extents(layout, &ink_rect, &logical_rect);
 		text_width = static_cast<gdouble>(logical_rect.width) / PANGO_SCALE;
-		pango_height = static_cast<gdouble>(logical_rect.height) / PANGO_SCALE + PRINT_TEXT_PADDING * 2;
+		pango_height = (static_cast<gdouble>(logical_rect.height) / PANGO_SCALE) + (PRINT_TEXT_PADDING * 2);
 
 		pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
 		pango_layout_set_text(layout, text, text_len);

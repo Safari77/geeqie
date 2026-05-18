@@ -792,7 +792,7 @@ void rt_tile_rotate_90_clockwise(RendererTiles *rt, GdkPixbuf **tile, gint x, gi
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
 	d_pix = gdk_pixbuf_get_pixels(dest);
-	dpi = d_pix + (tw - 1) * COLOR_BYTES;
+	dpi = d_pix + ((tw - 1) * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -834,7 +834,7 @@ void rt_tile_rotate_90_counter_clockwise(RendererTiles *rt, GdkPixbuf **tile, gi
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
 	d_pix = gdk_pixbuf_get_pixels(dest);
-	dpi = d_pix + (th - 1) * drs;
+	dpi = d_pix + ((th - 1) * drs);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -876,7 +876,7 @@ void rt_tile_mirror_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gi
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
 	d_pix = gdk_pixbuf_get_pixels(dest);
-	dpi =  d_pix + (tw - x - 1) * COLOR_BYTES;
+	dpi =  d_pix + ((tw - x - 1) * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -916,7 +916,7 @@ void rt_tile_mirror_and_flip(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
 	d_pix = gdk_pixbuf_get_pixels(dest);
-	dpi = d_pix + (th - 1) * drs + (tw - 1) * COLOR_BYTES;
+	dpi = d_pix + ((th - 1) * drs) + ((tw - 1) * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{
@@ -956,7 +956,7 @@ void rt_tile_flip_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gint
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
 	d_pix = gdk_pixbuf_get_pixels(dest);
-	dpi = d_pix + (th - 1) * drs + (x * COLOR_BYTES);
+	dpi = d_pix + ((th - 1) * drs) + (x * COLOR_BYTES);
 
 	for (i = y; i < y + h; i++)
 		{

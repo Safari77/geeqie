@@ -39,6 +39,7 @@ namespace
 struct FileCacheEntry {
 	FileData *fd;
 	gulong size;
+	gboolean checking_if_changed;
 };
 
 #ifdef DEBUG
@@ -66,9 +67,16 @@ gint file_cache_entry_compare_fd(const FileCacheEntry *fe, const FileData *fd)
 	return (fe->fd == fd) ? 0 : 1;
 }
 
-void file_cache_remove_entry(FileCacheData *fc, GList *link)
+gboolean file_cache_remove_entry(FileCacheData *fc, GList *link)
 {
 	auto *fe = static_cast<FileCacheEntry *>(link->data);
+
+	// Avoid evicting a FileCacheEntry that implicitly triggered this removal attempt.
+	if (fe->checking_if_changed)
+		{
+		DEBUG_1("deferring cache remove: fc=%p %s", (void *)fc, fe->fd->path);
+		return FALSE;
+		}
 
 	DEBUG_1("cache remove: fc=%p %s", (void *)fc, fe->fd->path);
 
@@ -77,6 +85,8 @@ void file_cache_remove_entry(FileCacheData *fc, GList *link)
 	fc->release(fe->fd);
 	file_data_unref(fe->fd);
 	g_free(fe);
+
+	return TRUE;
 }
 
 void file_cache_notify_cb(FileData *fd, NotifyType type, gpointer data)
@@ -103,6 +113,9 @@ void file_cache_shrink_to_max_size(FileCacheData *fc)
 	while (fc->size > fc->max_size && work)
 		{
 		GList *prev = work->prev;
+		// This may fail to remove the specified entry if this resize was implicitly
+		// triggered during a file_cache_get call.  Any file_cache_put after the
+		// file_cache_get will re-trigger the shrink and correct the cache size, if needed.
 		file_cache_remove_entry(fc, work);
 		work = prev;
 		}
@@ -126,6 +139,24 @@ FileCacheData *file_cache_new(FileCacheReleaseFunc release, gulong max_size)
 
 gboolean file_cache_get(FileCacheData *fc, FileData *fd)
 {
+	/* Operating theory of this function:
+	 * This function must be re-entrant, which means it must specifically be implemented in a
+	 * way that remains correct even when a re-entrant call happens.
+	 *
+	 * In particular, the file_data_check_changed_files function call may trigger another call
+	 * into this function.  In order to handle that case correctly, we establish that if the
+	 * FileData has changed (in which case we plan to evict it and return FALSE), any
+	 * re-entrant calls into the function will return TRUE _without_ checking for changes.
+	 * Then we will evict the FileData from the cache (if that hasn't happened already), and
+	 * then we will return FALSE.
+	 *
+	 * That said, because it's also possible for a re-entrant call to target a _different_
+	 * FileData than the one that we plan to evict, we stash a checking_if_changed bool in
+	 * every FileCacheEntry.  That is, we need to handle the case where
+	 * file_cache_get(fc, fd_A) triggers file_cache_get(fc, fd_B), which in turn triggers
+	 * file_cache_get(fc, fd_A) again.
+	 */
+
 	g_assert(fc && fd);
 
 	GList *work = g_list_find_custom(fc->list, fd, reinterpret_cast<GCompareFunc>(file_cache_entry_compare_fd));
@@ -135,10 +166,10 @@ gboolean file_cache_get(FileCacheData *fc, FileData *fd)
 		return FALSE;
 		}
 
-	/* entry exists */
+	// Entry exists.
 	DEBUG_2("cache hit: fc=%p %s", (void *)fc, fd->path);
 
-	/* move it to the beginning, if needed */
+	// Move it to the beginning, if needed.
 	if (work != fc->list)
 		{
 		DEBUG_2("cache move to front: fc=%p %s", (void *)fc, fd->path);
@@ -146,14 +177,34 @@ gboolean file_cache_get(FileCacheData *fc, FileData *fd)
 		fc->list = g_list_concat(work, fc->list);
 		}
 
-	if (file_data_check_changed_files(fd))
-		{
-		/* file has been changed, cache entry is no longer valid */
-		/* note that it may have already been evicted from the cache! */
-		file_cache_dump(fc);
-		work = g_list_find_custom(fc->list, fd, reinterpret_cast<GCompareFunc>(file_cache_entry_compare_fd));
-		if (work) file_cache_remove_entry(fc, work);
+	// Most of the following code is defending against the case where
+	// file_data_check_changed_files triggers a re-entrant call back into this file_cache_get.
+	{
+		auto *entry = static_cast<FileCacheEntry *>(work->data);
+		if (entry->checking_if_changed) return TRUE;  // Avoid infinite recursion.
 
+		entry->checking_if_changed = TRUE;
+	}
+
+	// We assume that file_data_check_changed_files may invalidate work.
+	work = nullptr;
+	const gboolean fd_changed = file_data_check_changed_files(fd);
+
+	// Now we re-acquire work to take the appropriate action, if it still exists.
+	work = g_list_find_custom(fc->list, fd, reinterpret_cast<GCompareFunc>(file_cache_entry_compare_fd));
+	if (!work) return FALSE;
+
+	// Doing this here for correctness, even though we might immediately evict the entry.
+	{
+		auto *entry = static_cast<FileCacheEntry *>(work->data);
+		entry->checking_if_changed = FALSE;
+	}
+
+	if (fd_changed)
+		{
+		// Underlying file has been changed.  Evict the cache entry.
+		file_cache_dump(fc);
+		file_cache_remove_entry(fc, work);
 		return FALSE;
 		}
 
@@ -168,9 +219,11 @@ void file_cache_put(FileCacheData *fc, FileData *fd, gulong size)
 	if (file_cache_get(fc, fd)) return;
 
 	DEBUG_2("cache add: fc=%p %s", (void *)fc, fd->path);
+	// TODO[xsdg]: Switch to an stl container and do this initialization in a constructor.
 	fe = g_new(FileCacheEntry, 1);
 	fe->fd = file_data_ref(fd);
 	fe->size = size;
+	fe->checking_if_changed = FALSE;
 	fc->list = g_list_prepend(fc->list, fe);
 	fc->size += size;
 

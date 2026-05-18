@@ -535,7 +535,7 @@ void pixbuf_set_rect_fill(GdkPixbuf *pb,
 
 	for (i = 0; i < h; i++)
 		{
-		pp = p_pix + (y + i) * prs + (x * p_step);
+		pp = p_pix + ((y + i) * prs) + (x * p_step);
 		for (j = 0; j < w; j++)
 			{
 			pixel_set_color(pp, color, has_alpha);
@@ -825,7 +825,7 @@ void pixbuf_draw_triangle(GdkPixbuf *pb, GdkRectangle clip,
 		x1 = std::clamp(x1, f.x, fx2);
 		x2 = std::clamp(x2, f.x, fx2);
 
-		pp = p_pix + y * prs + x1 * p_step;
+		pp = p_pix + (y * prs) + (x1 * p_step);
 
 		while (x1 < x2)
 			{
@@ -893,13 +893,13 @@ static gboolean util_clip_line(GdkRectangle clip,
 		// region, while maintaining the line's slope and y-offset.
 		if (x1 < clip.x)
 			{
-			y1 = y1 + slope * (clip.x - x1);
+			y1 = y1 + (slope * (clip.x - x1));
 			x1 = clip.x;
 			}
 		// Likewise with (x2, y2).
 		if (x2 > clip_right)
 			{
-			y2 = y2 + slope * (clip_right - x2);
+			y2 = y2 + (slope * (clip_right - x2));
 			x2 = clip_right;
 			}
 		}
@@ -928,13 +928,13 @@ static gboolean util_clip_line(GdkRectangle clip,
 		// region, while maintaining the line's slope and x-offset.
 		if (y1 < clip.y)
 			{
-			x1 = x1 + slope * (clip.y - y1);
+			x1 = x1 + (slope * (clip.y - y1));
 			y1 = clip.y;
 			}
 		// Likewise with (x2, y2).
 		if (y2 > clip_bottom)
 			{
-			x2 = x2 + slope * (clip_bottom - y2);
+			x2 = x2 + (slope * (clip_bottom - y2));
 			y2 = clip_bottom;
 			}
 		}
@@ -1223,7 +1223,7 @@ void pixbuf_desaturate_rect(GdkPixbuf *pb,
 
 	for (i = 0; i < h; i++)
 		{
-		pp = p_pix + (y + i) * prs + (x * p_step);
+		pp = p_pix + ((y + i) * prs) + (x * p_step);
 		for (j = 0; j < w; j++)
 			{
 			guint8 grey;
@@ -1278,7 +1278,7 @@ void pixbuf_desaturate_rect(GdkPixbuf *pb,
 
 	for (i = 0; i < h; i++)
 		{
-		pp = p_pix + (y + i) * prs + (x * p_step);
+		pp = p_pix + ((y + i) * prs) + (x * p_step);
 		for (j = 0; j < w; j++)
 			{
 			if (pp[0] == 255 || pp[1] == 255 || pp[2] == 255 || pp[0] == 0 || pp[1] == 0 || pp[2] == 0)
@@ -1331,7 +1331,7 @@ void pixbuf_ignore_alpha_rect(GdkPixbuf *pb,
 
    for (i = 0; i < h; i++)
        {
-       pp = p_pix + (y + i) * prs + (x * 4 );
+       pp = p_pix + ((y + i) * prs) + (x * 4 );
        for (j = 0; j < w; j++)
            {
            pp[3] = 0xff;

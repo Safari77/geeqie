@@ -264,8 +264,8 @@ void pan_flower_compute(PanWindow *pw, gint &width, gint &height,
 	PanItem *pi = pan_item_find_by_fd(pw, PAN_ITEM_BOX, pw->dir_fd, FALSE, FALSE);
 	if (pi)
 		{
-		scroll_x = pi->x + pi->width / 2;
-		scroll_y = pi->y + pi->height / 2;
+		scroll_x = pi->x + (pi->width / 2);
+		scroll_y = pi->y + (pi->height / 2);
 		}
 }
 

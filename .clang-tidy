@@ -40,6 +40,7 @@ Checks: >
   -bugprone-sizeof-expression,
   -llvm-header-guard,
   -llvm-namespace-comment,
+  -llvm-prefer-static-over-anonymous-namespace,
   -llvm-qualified-auto,
   -misc-const-correctness,
   -misc-include-cleaner,

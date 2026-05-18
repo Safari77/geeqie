@@ -359,7 +359,7 @@ void gq_delay(GtkApplication *, GApplicationCommandLine *app_command_line, GVari
 		}
 	else if (res == 2)
 		{
-		n = t1 * 60 + t2;
+		n = (t1 * 60) + t2;
 		if (n < SLIDESHOW_MIN_SECONDS || n > SLIDESHOW_MAX_SECONDS ||
 		        t1 >= 60 || t2 >= 60)
 			{

@@ -990,7 +990,7 @@ gint exif_parse_IFD_table(ExifData *exif,
 	offset += 2;
 
 	/* Entries and next IFD offset must be readable */
-	if (size < offset + count * EXIF_TIFD_SIZE + 4) return -1;
+	if (size < offset + (count * EXIF_TIFD_SIZE) + 4) return -1;
 
 	for (i = 0; i < count; i++)
 		{

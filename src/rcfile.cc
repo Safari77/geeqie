@@ -363,7 +363,7 @@ gboolean read_int_unit_option(const gchar *option, const gchar *label, const gch
 		r = 0;
 		}
 
-	*n = l * subunits + r;
+	*n = (l * subunits) + r;
 
 	return TRUE;
 }

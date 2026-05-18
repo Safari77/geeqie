@@ -94,7 +94,7 @@ static gint canon_cr2_tiff_table(guchar *data, const guint len, guint offset, Ex
 
 	count = exif_byte_get_int16(data + offset, bo);
 	offset += 2;
-	if (len < offset + count * EXIF_TIFD_SIZE + 4) return 0;
+	if (len < offset + (count * EXIF_TIFD_SIZE) + 4) return 0;
 
 	for (i = 0; i < count; i++)
 		{
@@ -183,7 +183,7 @@ gboolean format_canon_raw_crw(guchar *data, const guint len,
 	 */
 	count = exif_byte_get_int16(data + offset, CRW_BYTE_ORDER);
 	offset += 2;
-	if (len < offset + count * CRW_DIR_ENTRY_SIZE + 4) return FALSE;
+	if (len < offset + (count * CRW_DIR_ENTRY_SIZE) + 4) return FALSE;
 
 	/* walk the directory entries looking for type jpeg (tag 0x2007),
 	 * for reference, other tags are 0x2005 for raw and 0x300a for photo info:
@@ -195,7 +195,7 @@ gboolean format_canon_raw_crw(guchar *data, const guint len,
 		guint record_offset;
 		guint record_length;
 
-		entry_offset = offset + i * CRW_DIR_ENTRY_SIZE;
+		entry_offset = offset + (i * CRW_DIR_ENTRY_SIZE);
 
 		/* entry is 10 bytes (in order):
 		 *  2 for type

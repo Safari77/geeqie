@@ -878,7 +878,7 @@ gdouble metadata_read_GPS_coord(FileData *fd, const gchar *key, gdouble fallback
 
 		if (*endptr == 'S' || *endptr == 'W' || *endptr == 'N' || *endptr == 'E')
 			{
-			coord = deg + min /60.0 + sec / 3600.0;
+			coord = deg + (min /60.0) + (sec / 3600.0);
 			ok = TRUE;
 			if (*endptr == 'S' || *endptr == 'W') coord = -coord;
 			}

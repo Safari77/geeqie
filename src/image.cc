@@ -1642,7 +1642,7 @@ void image_zoom_set_fill_geometry(ImageWindow *imd, gboolean vertical)
 
 	if (zoom < 1.0)
 		{
-		zoom = 0.0 - 1.0 / zoom;
+		zoom = 0.0 - (1.0 / zoom);
 		}
 
 	pixbuf_renderer_zoom_set(pr, zoom);

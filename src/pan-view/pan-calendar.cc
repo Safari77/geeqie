@@ -314,11 +314,11 @@ void pan_calendar_compute(PanWindow *pw, gint &width, gint &height)
 		g_autofree gchar *month_buf = pan_date_value_string(dt, PAN_DATE_LENGTH_MONTH);
 		pi_text = pan_item_text_new(pw, x, y, month_buf, PAN_TEXT_ATTR_BOLD_HEADING,
 		                            PAN_TEXT_BORDER, PAN_CAL_MONTH_TEXT_COLOR);
-		pi_text->x = pi_month->x + (pi_month->width - pi_text->width) / 2;
+		pi_text->x = pi_month->x + ((pi_month->width - pi_text->width) / 2);
 
 		pi_month->height = pi_text->y + pi_text->height - pi_month->y;
 
-		x = PAN_BOX_BORDER + col * PAN_CAL_DAY_WIDTH;
+		x = PAN_BOX_BORDER + (col * PAN_CAL_DAY_WIDTH);
 		y = pi_month->y + pi_month->height + PAN_BOX_BORDER;
 
 		for (day = 1; day <= days; day++)
@@ -344,8 +344,8 @@ void pan_calendar_compute(PanWindow *pw, gint &width, gint &height)
 			                          PAN_CAL_DAY_COLOR, PAN_CAL_DAY_BORDER, PAN_CAL_DAY_BORDER_COLOR);
 			pi_day->set_key(PanKey::Day);
 
-			dx = x + PAN_CAL_DOT_GAP * 2;
-			dy = y + PAN_CAL_DOT_GAP * 2;
+			dx = x + (PAN_CAL_DOT_GAP * 2);
+			dy = y + (PAN_CAL_DOT_GAP * 2);
 
 			fd = static_cast<FileData *>((work) ? work->data : nullptr);
 			while (fd && pan_date_compare(fd->date, dt, PAN_DATE_LENGTH_DAY))
@@ -357,15 +357,15 @@ void pan_calendar_compute(PanWindow *pw, gint &width, gint &height)
 				pi->set_key(PanKey::Dot);
 
 				dx += PAN_CAL_DOT_SIZE + PAN_CAL_DOT_GAP;
-				if (dx + PAN_CAL_DOT_SIZE > pi_day->x + pi_day->width - PAN_CAL_DOT_GAP * 2)
+				if (dx + PAN_CAL_DOT_SIZE > pi_day->x + pi_day->width - (PAN_CAL_DOT_GAP * 2))
 					{
-					dx = x + PAN_CAL_DOT_GAP * 2;
+					dx = x + (PAN_CAL_DOT_GAP * 2);
 					dy += PAN_CAL_DOT_SIZE + PAN_CAL_DOT_GAP;
 					}
-				if (dy + PAN_CAL_DOT_SIZE > pi_day->y + pi_day->height - PAN_CAL_DOT_GAP * 2)
+				if (dy + PAN_CAL_DOT_SIZE > pi_day->y + pi_day->height - (PAN_CAL_DOT_GAP * 2))
 					{
 					/* must keep all dots within respective day even if it gets ugly */
-					dy = y + PAN_CAL_DOT_GAP * 2;
+					dy = y + (PAN_CAL_DOT_GAP * 2);
 					}
 
 				n++;
@@ -385,8 +385,8 @@ void pan_calendar_compute(PanWindow *pw, gint &width, gint &height)
 				pi = pan_item_text_new(pw, x, y, day_buf, PAN_TEXT_ATTR_NONE,
 				                       PAN_TEXT_BORDER, PAN_CAL_DAY_TEXT_COLOR);
 
-				pi->x = pi_day->x + (pi_day->width - pi->width) / 2;
-				pi->y = pi_day->y + (pi_day->height - pi->height) / 2;
+				pi->x = pi_day->x + ((pi_day->width - pi->width) / 2);
+				pi->y = pi_day->y + ((pi_day->height - pi->height) / 2);
 				}
 
 			pi_day_number = pan_item_text_new(pw, x + 4, y + 4, std::to_string(day).c_str(),

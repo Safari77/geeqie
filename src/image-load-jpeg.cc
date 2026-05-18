@@ -73,7 +73,7 @@ explode_gray_into_buf (struct jpeg_decompress_struct *cinfo,
 		guchar *to;
 
 		from = lines[i] + w - 1;
-		to = lines[i] + (w - 1) * 3;
+		to = lines[i] + ((w - 1) * 3);
 		for (j = w - 1; j >= 0; j--) {
 			to[0] = from[0];
 			to[1] = from[0];

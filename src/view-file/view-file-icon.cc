@@ -182,7 +182,7 @@ static gint vficon_get_icon_width(ViewFile *vf)
 
 	if (!VFICON(vf)->show_text && !vf->marks_enabled ) return options->thumbnails.max_width;
 
-	width = options->thumbnails.max_width + options->thumbnails.max_width / 2;
+	width = options->thumbnails.max_width + (options->thumbnails.max_width / 2);
 	width = std::max(width, THUMB_MIN_ICON_WIDTH);
 	if (width > THUMB_MAX_ICON_WIDTH) width = options->thumbnails.max_width;
 	if (vf->marks_enabled && width < THUMB_MIN_ICON_WIDTH_WITH_MARKS) width = THUMB_MIN_ICON_WIDTH_WITH_MARKS;
@@ -1020,7 +1020,7 @@ static gint page_height(ViewFile *vf)
 	adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(vf->listview));
 	page_size = static_cast<gint>(gtk_adjustment_get_page_increment(adj));
 
-	row_height = options->thumbnails.max_height + THUMB_BORDER_PADDING * 2;
+	row_height = options->thumbnails.max_height + (THUMB_BORDER_PADDING * 2);
 	if (VFICON(vf)->show_text) row_height += options->thumbnails.max_height / 3;
 
 	ret = page_size / row_height;
