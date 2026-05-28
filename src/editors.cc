@@ -655,35 +655,48 @@ static gchar *editor_command_path_parse(const FileData *fd, gboolean consider_si
 		else
 			{
 			const auto file_data_compare_ext = [](gconstpointer data, gconstpointer user_data)
-			{
-				return g_ascii_strcasecmp(static_cast<const FileData *>(data)->extension, static_cast<const gchar *>(user_data));
-			};
-
-			while (work)
 				{
-				auto ext = static_cast<gchar *>(work->data);
-				work = work->next;
+				return g_ascii_strcasecmp(static_cast<const FileData *>(data)->extension, static_cast<const gchar *>(user_data));
+				};
 
-				if (strcmp(ext, "*") == 0 ||
-				    g_ascii_strcasecmp(ext, fd->extension) == 0)
-					{
-					p = fd->path;
-					break;
-					}
+			const auto file_data_compare_primary_image = [](gconstpointer data, gconstpointer user_data)
+				{
+				return g_ascii_strcasecmp(static_cast<const gchar *>(data), static_cast<const gchar *>(user_data));
+				};
 
-				if (consider_sidecars)
-					{
-					GList *work2 = g_list_find_custom(fd->sidecar_files, ext, file_data_compare_ext);
-					if (work2)
-						{
-						auto sfd = static_cast<FileData *>(work2->data);
-						p = sfd->path;
-						}
-					}
+			GList *work_primary_image = g_list_find_custom(editor->ext_list, fd->extension, file_data_compare_primary_image);
 
-				if (p) break;
+			if (work_primary_image)
+				{
+				p = fd->path;
 				}
+			else
+				{
+				while (work)
+					{
+					auto ext = static_cast<gchar *>(work->data);
+					work = work->next;
 
+					if (strcmp(ext, "*") == 0 ||
+							g_ascii_strcasecmp(ext, fd->extension) == 0)
+						{
+						p = fd->path;
+						break;
+						}
+
+					if (consider_sidecars)
+						{
+						GList *work2 = g_list_find_custom(fd->sidecar_files, ext, file_data_compare_ext);
+						if (work2)
+							{
+							auto sfd = static_cast<FileData *>(work2->data);
+							p = sfd->path;
+							}
+						}
+
+					if (p) break;
+					}
+				}
 			if (!p) return nullptr;
 			}
 		}
