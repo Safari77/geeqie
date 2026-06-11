@@ -645,9 +645,20 @@ void bar_pane_exif_menu_popup(GtkWidget *widget, PaneExifData *ped)
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 }
 
+#if HAVE_GTK4
+void bar_pane_exif_menu_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
+{
+	auto *ped = static_cast<PaneExifData *>(data);
+
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+
+	bar_pane_exif_menu_popup(widget, ped);
+}
+#else
 gboolean bar_pane_exif_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 {
-	auto ped = static_cast<PaneExifData *>(data);
+	auto *ped = static_cast<PaneExifData *>(data);
+
 	if (bevent->button == GDK_BUTTON_SECONDARY)
 		{
 		bar_pane_exif_menu_popup(widget, ped);
@@ -655,6 +666,7 @@ gboolean bar_pane_exif_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpoint
 		}
 	return FALSE;
 }
+#endif
 
 gboolean bar_pane_exif_copy_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
 {
@@ -756,10 +768,15 @@ GtkWidget *bar_pane_exif_new(const gchar *id, const gchar *title, gboolean expan
 	ped->show_all = show_all;
 
 	ped->size_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
-	ped->widget = gtk_event_box_new();
+	ped->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	ped->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
+
+#if HAVE_GTK4
+	gtk_box_append(GTK_BOX(ped->widget), ped->vbox);
+#else
 	gq_gtk_container_add(ped->widget, ped->vbox);
 	gtk_widget_show(ped->vbox);
+#endif
 
 	ped->min_height = MIN_HEIGHT;
 	g_object_set_data_full(G_OBJECT(ped->widget), "pane_data", ped, bar_pane_exif_destroy);
@@ -768,7 +785,17 @@ GtkWidget *bar_pane_exif_new(const gchar *id, const gchar *title, gboolean expan
 			 G_CALLBACK(bar_pane_exif_size_allocate), ped);
 
 	bar_pane_exif_dnd_init(ped->widget);
+
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+
+	g_signal_connect(gesture, "released", G_CALLBACK(bar_pane_exif_menu_cb), ped);
+
+	gtk_widget_add_controller(ped->widget, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(ped->widget, "button_release_event", G_CALLBACK(bar_pane_exif_menu_cb), ped);
+#endif
 
 	file_data_register_notify_func(bar_pane_exif_notify_cb, ped, NOTIFY_PRIORITY_LOW);
 
