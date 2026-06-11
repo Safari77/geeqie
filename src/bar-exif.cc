@@ -814,17 +814,34 @@ GList *bar_pane_exif_list()
 	if (!pane) return nullptr;
 
 	auto *ped = static_cast<PaneExifData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
+	if (!ped) return nullptr;
 
+	GList *exif_list = nullptr;
+
+#if HAVE_GTK4
+	for (GtkWidget *child = gtk_widget_get_first_child(ped->vbox);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		auto *ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(child), "entry_data"));
+		if (!ee) continue;
+
+		exif_list = g_list_append(exif_list, g_strdup(ee->title));
+		exif_list = g_list_append(exif_list, g_strdup(ee->key));
+		}
+#else
 	static const auto exif_entry_to_list = [](GtkWidget *widget, gpointer data)
 	{
 		auto *ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
+		if (!ee) return;
 
-		auto *exif_list = static_cast<GList **>(data);
-		*exif_list = g_list_append(*exif_list, g_strdup(ee->title));
-		*exif_list = g_list_append(*exif_list, g_strdup(ee->key));
+		auto *list = static_cast<GList **>(data);
+		*list = g_list_append(*list, g_strdup(ee->title));
+		*list = g_list_append(*list, g_strdup(ee->key));
 	};
-	GList *exif_list = nullptr;
+
 	gtk_container_foreach(GTK_CONTAINER(ped->vbox), exif_entry_to_list, &exif_list);
+#endif
 
 	return exif_list;
 }
