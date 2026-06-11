@@ -931,12 +931,10 @@ static void vf_marks_tooltip_help_cb(GenericDialog *, gpointer)
 	help_window_show("GuideImageMarks.html");
 }
 
-static gboolean vf_marks_tooltip_cb(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static void vf_marks_tooltip_open_dialog(GtkWidget *widget, gint mark_no)
 {
-	if (event->button != GDK_BUTTON_SECONDARY) return FALSE;
-
 	auto mte = g_new0(MarksTextEntry, 1);
-	mte->mark_no = GPOINTER_TO_INT(user_data);
+	mte->mark_no = mark_no;
 	mte->parent = widget;
 
 	GenericDialog *gd = generic_dialog_new(_("Mark text"), "mark_text", widget, FALSE,
@@ -972,9 +970,28 @@ static gboolean vf_marks_tooltip_cb(GtkWidget *widget, GdkEventButton *event, gp
 	gtk_widget_show(mte->edit_widget);
 	gtk_widget_grab_focus(mte->edit_widget);
 	gtk_widget_show(gd->dialog);
+}
+
+#if HAVE_GTK4
+static void vf_marks_tooltip_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer user_data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+
+	vf_marks_tooltip_open_dialog(widget, GPOINTER_TO_INT(user_data));
+}
+#else
+static gboolean vf_marks_tooltip_cb(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+	if (event->button != GDK_BUTTON_SECONDARY)
+		{
+		return FALSE;
+		}
+
+	vf_marks_tooltip_open_dialog(widget, GPOINTER_TO_INT(user_data));
 
 	return TRUE;
 }
+#endif
 
 static void vf_file_filter_save_cb(GtkEntry *combo_entry, gpointer data)
 {
@@ -1047,15 +1064,33 @@ static GtkWidget *vf_marks_filter_init(ViewFile *vf)
 		gq_gtk_box_pack_start(GTK_BOX(hbox), check, FALSE, FALSE, 0);
 		g_signal_connect(G_OBJECT(check), "toggled",
 			 G_CALLBACK(vf_marks_filter_toggle_cb), vf);
-		g_signal_connect(G_OBJECT(check), "button_press_event",
-			 G_CALLBACK(vf_marks_tooltip_cb), GINT_TO_POINTER(i));
+
+#if HAVE_GTK4
+		GtkGesture *gesture = gtk_gesture_click_new();
+		gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+
+		g_signal_connect(gesture, "released", G_CALLBACK(vf_marks_tooltip_cb), GINT_TO_POINTER(i));
+
+		gtk_widget_add_controller(check, GTK_EVENT_CONTROLLER(gesture));
+#else
+		g_signal_connect(check, "button_press_event", G_CALLBACK(vf_marks_tooltip_cb), GINT_TO_POINTER(i));
+#endif
+
 		gtk_widget_set_tooltip_text(check, options->marks_tooltips[i]);
 
+#if !HAVE_GTK4
 		gtk_widget_show(check);
+#endif
+
 		vf->filter_check[i] = check;
 		}
+
 	gq_gtk_container_add(frame, hbox);
+
+#if !HAVE_GTK4
 	gtk_widget_show(hbox);
+#endif
+
 	return frame;
 }
 
