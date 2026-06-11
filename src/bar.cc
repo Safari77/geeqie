@@ -433,11 +433,19 @@ static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
 
 void bar_notify_selection(GtkWidget *bar, gint count)
 {
-	BarData *bd;
-	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
+	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	gtk_container_foreach(GTK_CONTAINER(bd->vbox), bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+#if HAVE_GTK4
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		bar_pane_notify_selection_cb(child, GINT_TO_POINTER(count));
+		}
+#else
+	gtk_container_foreach(GTK_CONTAINER(bd->vbox),  bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+#endif
 }
 
 gboolean bar_event(GtkWidget *bar, GdkEvent *event)
