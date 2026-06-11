@@ -276,12 +276,22 @@ void bar_pane_exif_update(PaneExifData *ped)
 {
 	ped->all_hidden = TRUE;
 
+#if HAVE_GTK4
+	for (GtkWidget *entry = gtk_widget_get_first_child(ped->vbox);
+	     entry != nullptr;
+	     entry = gtk_widget_get_next_sibling(entry))
+		{
+		bar_pane_exif_update_entry(ped, entry, FALSE);
+		}
+#else
 	static const auto update_entry = [](GtkWidget *entry, gpointer data)
 	{
 		auto *ped = static_cast<PaneExifData *>(data);
 		bar_pane_exif_update_entry(ped, entry, FALSE);
 	};
+
 	gtk_container_foreach(GTK_CONTAINER(ped->vbox), update_entry, ped);
+#endif
 
 	gtk_widget_set_sensitive(ped->pane.title, !ped->all_hidden);
 }
