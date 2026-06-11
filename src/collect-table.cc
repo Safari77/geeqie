@@ -568,117 +568,6 @@ GList *collection_table_selection_get_list(CollectTable *ct)
 
 /*
  *-------------------------------------------------------------------
- * tooltip type window
- *-------------------------------------------------------------------
- */
-
-static void tip_show(CollectTable *ct)
-{
-	GtkWidget *label;
-	gint x;
-	gint y;
-	GdkDisplay *display;
-	GdkSeat *seat;
-	GdkDevice *device;
-
-	if (ct->tip_window) return;
-
-	seat = gdk_display_get_default_seat(gdk_window_get_display(gtk_widget_get_window(ct->listview)));
-	device = gdk_seat_get_pointer(seat);
-	get_pointer_position(ct->listview, device, &x, &y, nullptr);
-
-	ct->tip_info = collection_table_find_data_by_coord(ct, x, y, nullptr);
-	if (!ct->tip_info) return;
-
-	ct->tip_window = gtk_window_new(GTK_WINDOW_POPUP);
-	gtk_window_set_resizable(GTK_WINDOW(ct->tip_window), FALSE);
-	gtk_container_set_border_width(GTK_CONTAINER(ct->tip_window), 2);
-
-	label = gtk_label_new(ct->show_text ? ct->tip_info->fd->path : ct->tip_info->fd->name);
-
-	g_object_set_data(G_OBJECT(ct->tip_window), "tip_label", label);
-	gq_gtk_container_add(ct->tip_window, label);
-	gtk_widget_show(label);
-
-	display = gdk_display_get_default();
-	seat = gdk_display_get_default_seat(display);
-	device = gdk_seat_get_pointer(seat);
-	get_device_position(device, x, y);
-
-	if (!gtk_widget_get_realized(ct->tip_window)) gtk_widget_realize(ct->tip_window);
-	gq_gtk_window_move(GTK_WINDOW(ct->tip_window), x + 16, y + 16);
-	gtk_widget_show(ct->tip_window);
-}
-
-static void tip_hide(CollectTable *ct)
-{
-	if (ct->tip_window) gq_gtk_widget_destroy(ct->tip_window);
-	ct->tip_window = nullptr;
-}
-
-static gboolean tip_schedule_cb(gpointer data)
-{
-	auto ct = static_cast<CollectTable *>(data);
-
-	if (ct->tip_delay_id)
-		{
-		tip_show(ct);
-
-		ct->tip_delay_id = 0;
-		}
-
-	return G_SOURCE_REMOVE;
-}
-
-static void tip_unschedule(CollectTable *ct)
-{
-	tip_hide(ct);
-
-	g_clear_handle_id(&ct->tip_delay_id, g_source_remove);
-}
-
-static void tip_schedule(CollectTable *ct)
-{
-	tip_unschedule(ct);
-
-	ct->tip_delay_id = g_timeout_add(ct->show_text ? COLLECT_TABLE_TIP_DELAY_PATH : COLLECT_TABLE_TIP_DELAY, tip_schedule_cb, ct);
-}
-
-static void tip_update(CollectTable *ct, CollectInfo *info)
-{
-	GdkDisplay *display = gdk_display_get_default();
-	GdkSeat *seat = gdk_display_get_default_seat(display);
-	GdkDevice *device = gdk_seat_get_pointer(seat);
-
-	tip_schedule(ct);
-
-	if (ct->tip_window)
-		{
-		gint x;
-		gint y;
-		get_device_position(device, x, y);
-
-		gq_gtk_window_move(GTK_WINDOW(ct->tip_window), x + 16, y + 16);
-
-		if (info != ct->tip_info)
-			{
-			GtkWidget *label;
-
-			ct->tip_info = info;
-
-			if (!ct->tip_info)
-				{
-				return;
-				}
-
-			label = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(ct->tip_window), "tip_label"));
-			gtk_label_set_text(GTK_LABEL(label), ct->show_text ? ct->tip_info->fd->path : ct->tip_info->fd->name);
-			}
-		}
-}
-
-/*
- *-------------------------------------------------------------------
  * popup menus
  *-------------------------------------------------------------------
  */
@@ -1298,7 +1187,6 @@ static gboolean collection_table_press_key_cb(GtkWidget *widget, GdkEventKey *ev
 			ct->click_info = info;
 
 			collection_table_selection_add(ct, ct->click_info, SELECTION_PRELIGHT, nullptr);
-			tip_unschedule(ct);
 
 			ct->popup = collection_table_popup_menu(ct, (info != nullptr));
 			gtk_menu_popup_at_widget(GTK_MENU(ct->popup), widget, GDK_GRAVITY_SOUTH, GDK_GRAVITY_CENTER, nullptr);
@@ -1343,11 +1231,6 @@ static gboolean collection_table_press_key_cb(GtkWidget *widget, GdkEventKey *ev
 				collection_table_select(ct, new_info);
 				}
 			}
-		}
-
-	if (stop_signal)
-		{
-		tip_unschedule(ct);
 		}
 
 	return stop_signal;
@@ -1469,59 +1352,12 @@ static CollectInfo *collection_table_insert_point(CollectTable *ct, gint x, gint
  *-------------------------------------------------------------------
  */
 
-static void collection_table_motion_update(CollectTable *ct, gint x, gint y, gboolean drop_event)
-{
-	CollectInfo *info;
-
-	info = collection_table_find_data_by_coord(ct, x, y, nullptr);
-
-	if (drop_event)
-		{
-		tip_unschedule(ct);
-		}
-	else
-		{
-		tip_update(ct, info);
-		}
-}
-
-static gboolean collection_table_auto_scroll_idle_cb(gpointer data)
-{
-	auto ct = static_cast<CollectTable *>(data);
-
-	if (ct->drop_idle_id)
-		{
-		if (ct->pointer_valid)
-			{
-			collection_table_motion_update(ct, ct->last_x, ct->last_y, TRUE);
-			}
-
-		ct->drop_idle_id = 0;
-		}
-
-	return G_SOURCE_REMOVE;
-}
-
 static void collection_table_scroll(CollectTable *ct, gboolean scroll)
 {
 	if (!scroll)
 		{
 		g_clear_handle_id(&ct->drop_idle_id, g_source_remove);
 		widget_auto_scroll_stop(ct->listview);
-		}
-	else
-		{
-		const auto collection_table_auto_scroll_notify_cb = [ct](GtkWidget *, GqPoint)
-		{
-			if (!ct->drop_idle_id)
-				{
-				ct->drop_idle_id = g_idle_add(collection_table_auto_scroll_idle_cb, ct);
-				}
-
-			return true;
-		};
-		widget_auto_scroll_start(ct->listview, -1, options->thumbnails.max_height / 2,
-		                         collection_table_auto_scroll_notify_cb);
 		}
 }
 
@@ -1531,22 +1367,11 @@ static void collection_table_scroll(CollectTable *ct, gboolean scroll)
  *-------------------------------------------------------------------
  */
 
-static gboolean collection_table_motion_cb(GtkWidget *, GdkEventMotion *event, gpointer data)
-{
-	auto ct = static_cast<CollectTable *>(data);
-
-	collection_table_motion_update(ct, static_cast<gint>(event->x), static_cast<gint>(event->y), FALSE);
-
-	return FALSE;
-}
-
 static gboolean collection_table_press_cb(GtkWidget *, GdkEventButton *bevent, gpointer data)
 {
 	auto ct = static_cast<CollectTable *>(data);
 	GtkTreeIter iter;
 	CollectInfo *info;
-
-	tip_unschedule(ct);
 
 	info = collection_table_find_data_by_coord(ct, static_cast<gint>(bevent->x), static_cast<gint>(bevent->y), &iter);
 
@@ -1584,8 +1409,6 @@ static gboolean collection_table_release_cb(GtkWidget *, GdkEventButton *bevent,
 	auto ct = static_cast<CollectTable *>(data);
 	GtkTreeIter iter;
 	CollectInfo *info = nullptr;
-
-	tip_schedule(ct);
 
 	if (static_cast<gint>(bevent->x) != 0 || static_cast<gint>(bevent->y) != 0)
 		{
@@ -1637,14 +1460,6 @@ static gboolean collection_table_release_cb(GtkWidget *, GdkEventButton *bevent,
 		}
 
 	return TRUE;
-}
-
-static gboolean collection_table_leave_cb(GtkWidget *, GdkEventCrossing *, gpointer data)
-{
-	auto ct = static_cast<CollectTable *>(data);
-
-	tip_unschedule(ct);
-	return FALSE;
 }
 
 /*
@@ -2241,17 +2056,13 @@ static void collection_table_dnd_end(GtkWidget *, GdkDragContext *, gpointer dat
 {
 	auto ct = static_cast<CollectTable *>(data);
 
-	/* apparently a leave event is not generated on a drop */
-	tip_unschedule(ct);
-
 	collection_table_scroll(ct, FALSE);
 }
 
-static gint collection_table_dnd_motion(GtkWidget *, GdkDragContext *, gint x, gint y, guint, gpointer data)
+static gint collection_table_dnd_motion(GtkWidget *, GdkDragContext *, gint, gint, guint, gpointer data)
 {
 	auto ct = static_cast<CollectTable *>(data);
 
-	collection_table_motion_update(ct, x, y, TRUE);
 	collection_table_scroll(ct, TRUE);
 
 	return FALSE;
@@ -2446,7 +2257,6 @@ static void collection_table_destroy(GtkWidget *, gpointer data)
 
 	if (ct->sync_idle_id) g_source_remove(ct->sync_idle_id);
 
-	tip_unschedule(ct);
 	collection_table_scroll(ct, FALSE);
 
 	g_free(ct);
@@ -2482,6 +2292,27 @@ static gboolean listview_motion_cb(GtkWidget *, GdkEventMotion *event, gpointer 
 }
 #endif
 
+static gboolean collection_table_query_tooltip_cb(GtkWidget *, gint x, gint y, gboolean keyboard_mode, GtkTooltip *tooltip, gpointer data)
+{
+	auto *ct = static_cast<CollectTable *>(data);
+
+	if (keyboard_mode)
+		{
+		return FALSE;
+		}
+
+	CollectInfo *info = collection_table_find_data_by_coord(ct, x, y, nullptr);
+
+	if (!info || !info->fd)
+		{
+		return FALSE;
+		}
+
+	gtk_tooltip_set_text(tooltip, ct->show_text ? info->fd->path : info->fd->name);
+
+	return TRUE;
+}
+
 CollectTable *collection_table_new(CollectionData *cd)
 {
 	CollectTable *ct;
@@ -2503,6 +2334,9 @@ CollectTable *collection_table_new(CollectionData *cd)
 	store = gtk_list_store_new(1, G_TYPE_POINTER);
 	ct->listview = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
 	g_object_unref(store);
+
+	gtk_widget_set_has_tooltip(ct->listview, TRUE);
+	g_signal_connect(ct->listview, "query-tooltip", G_CALLBACK(collection_table_query_tooltip_cb), ct);
 
 	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ct->listview));
 	gtk_tree_selection_set_mode(selection, GTK_SELECTION_NONE);
@@ -2538,10 +2372,6 @@ CollectTable *collection_table_new(CollectionData *cd)
 			 G_CALLBACK(collection_table_press_cb), ct);
 	g_signal_connect(G_OBJECT(ct->listview),"button_release_event",
 			 G_CALLBACK(collection_table_release_cb), ct);
-	g_signal_connect(G_OBJECT(ct->listview),"motion_notify_event",
-			 G_CALLBACK(collection_table_motion_cb), ct);
-	g_signal_connect(G_OBJECT(ct->listview), "leave_notify_event",
-			 G_CALLBACK(collection_table_leave_cb), ct);
 
 #if HAVE_GTK4
 	GtkEventController *motion = gtk_event_controller_motion_new();
