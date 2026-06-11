@@ -544,11 +544,19 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 
 static void bookmark_populate(BookMarkData *bm)
 {
+#if HAVE_GTK4
+	while (GtkWidget *child = gtk_widget_get_first_child(bm->box))
+		{
+		gtk_box_remove(GTK_BOX(bm->box), child);
+		}
+#else
 	static const auto destroy_widget = [](GtkWidget *widget, gpointer)
 	{
 		gq_gtk_widget_destroy(widget);
 	};
 	gtk_container_foreach(GTK_CONTAINER(bm->box), destroy_widget, nullptr);
+#endif
+
 
 	if (!bm->no_defaults && !history_list_get_by_key(bm->key.c_str()))
 		{
