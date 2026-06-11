@@ -403,17 +403,24 @@ static void bar_pane_set_fd_cb(GtkWidget *expander, gpointer data)
 
 void bar_set_fd(GtkWidget *bar, FileData *fd)
 {
-	BarData *bd;
-	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
+	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
 	file_data_unref(bd->fd);
 	bd->fd = file_data_ref(fd);
 
+#if HAVE_GTK4
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		bar_pane_set_fd_cb(child, fd);
+		}
+#else
 	gtk_container_foreach(GTK_CONTAINER(bd->vbox), bar_pane_set_fd_cb, fd);
+#endif
 
-	gtk_label_set_text(GTK_LABEL(bd->label_file_name), (bd->fd) ? bd->fd->name : "");
-
+	gtk_label_set_text(GTK_LABEL(bd->label_file_name), bd->fd ? bd->fd->name : "");
 }
 
 static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
