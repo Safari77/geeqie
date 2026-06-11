@@ -231,15 +231,31 @@ static gboolean tab_completion_popup_key_press(GtkWidget *widget, GdkEventKey *e
 		const gchar *entry_text = gq_gtk_entry_get_text(GTK_ENTRY(td->entry));
 		const gchar *prefix = filename_from_path(entry_text);
 		TabCompPrefix tp{ prefix, strlen(prefix), 0 };
+
+#if HAVE_GTK4
+		for (GtkWidget *child = gtk_widget_get_first_child(widget);
+		     child != nullptr;
+		     child = gtk_widget_get_next_sibling(child))
+			{
+			tab_completion_iter_menu_items(child, &tp);
+			}
+#else
 		gtk_container_foreach(GTK_CONTAINER(widget), tab_completion_iter_menu_items, &tp);
+#endif
+
 		if (tp.choices > 1) return TRUE; /* multiple choices */
 		if (tp.choices > 0) tab_completion_do(td); /* one choice */
 		}
 
 	/* close the menu */
+#if HAVE_GTK4
+	gtk_popover_popdown(GTK_POPOVER(widget));
+#else
 	gtk_menu_popdown(GTK_MENU(widget));
 	/* doing this does not emit the "selection done" signal, unref it ourselves */
 	g_object_unref(widget);
+#endif
+
 	return TRUE;
 }
 
