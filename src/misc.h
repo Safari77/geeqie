@@ -44,7 +44,7 @@ gint gq_gtk_tree_iter_utf8_collate(GtkTreeModel *model, GtkTreeIter *a, GtkTreeI
 int runcmd(const gchar *cmd);
 void gq_gtk_entry_set_text(GtkEntry *entry, const gchar *text);
 void gq_gtk_grid_attach_default(GtkGrid *grid, GtkWidget *child, guint left_attach, guint right_attach, guint top_attach, guint bottom_attach);
-void gq_gtk_grid_attach(GtkGrid *grid, GtkWidget *child, guint left_attach, guint right_attach, guint top_attach, guint bottom_attach, GtkAttachOptions, GtkAttachOptions, guint, guint);
+void gq_gtk_grid_attach(GtkGrid *grid, GtkWidget *child, guint left_attach, guint right_attach, guint top_attach, guint bottom_attach);
 
 GdkRGBA convert_gdkcolor_to_gdkrgba(/* GdkColor * */ gpointer data);
 void shift_color(GdkRGBA &src, gshort val = -1, gint direction = 0);
