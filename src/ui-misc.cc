@@ -666,159 +666,108 @@ struct DateSelection
 
 	GtkWidget *button;
 
-	GtkWidget *window;
+	GtkWidget *popover;
 	GtkWidget *calendar;
 };
 
-
 static void date_selection_popup_hide(DateSelection *ds)
 {
-	if (!ds->window) return;
+	if (!ds->popover) return;
 
-	if (gtk_widget_has_grab(ds->window))
-		{
-		widget_input_ungrab(ds->window);
-		}
-
-	gtk_widget_hide(ds->window);
-
-	gq_gtk_widget_destroy(ds->window);
-	ds->window = nullptr;
-	ds->calendar = nullptr;
+#if HAVE_GTK4
+	gtk_popover_popdown(GTK_POPOVER(ds->popover));
+#else
+	gtk_widget_hide(ds->popover);
+#endif
 
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), FALSE);
 }
 
-static gboolean date_selection_popup_release_cb(GtkWidget *, GdkEventButton *, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
-
-	date_selection_popup_hide(ds);
-	return TRUE;
-}
-
-static gboolean date_selection_popup_press_cb(GtkWidget *, GdkEventButton *event, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
-
-	auto xr = static_cast<gint>(event->x_root);
-	auto yr = static_cast<gint>(event->y_root);
-
-	if (!widget_received_event(ds->window, {xr, yr}))
-		{
-		g_signal_connect(G_OBJECT(ds->window), "button_release_event",
-				 G_CALLBACK(date_selection_popup_release_cb), ds);
-		return TRUE;
-		}
-
-	return FALSE;
-}
-
 static void date_selection_popup_sync(DateSelection *ds)
 {
-	guint day;
-	guint month;
-	guint year;
-
 #if HAVE_GTK4
-	GDateTime *date_selected;
+	g_autoptr(GDateTime) date_selected = gtk_calendar_get_date(GTK_CALENDAR(ds->calendar));
 
-	date_selected = gtk_calendar_get_date(GTK_CALENDAR(ds->calendar));
-	g_date_time_get_ymd(date_selected, static_cast<guint>(&year), static_cast<guint>(&month), static_cast<guint>(&day));
+	gint year;
+	gint month;
+	gint day;
 
-	g_date_time_unref(date_selected);
-#else
-	gtk_calendar_get_date(GTK_CALENDAR(ds->calendar), &year, &month, &day);
-	/* month is range 0 to 11 */
-	month = month + 1;
-#endif
+	g_date_time_get_ymd(date_selected, &year, &month, &day);
+
 	date_selection_set(ds->box, day, month, year);
-}
+#else
+	guint year;
+	guint month;
+	guint day;
 
-static gboolean date_selection_popup_keypress_cb(GtkWidget *, GdkEventKey *event, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
+	gtk_calendar_get_date(GTK_CALENDAR(ds->calendar), &year, &month, &day);
 
-	switch (event->keyval)
-		{
-		case GDK_KEY_Return:
-		case GDK_KEY_KP_Enter:
-		case GDK_KEY_Tab:
-		case GDK_KEY_ISO_Left_Tab:
-			date_selection_popup_sync(ds);
-			date_selection_popup_hide(ds);
-			break;
-		case GDK_KEY_Escape:
-			date_selection_popup_hide(ds);
-			break;
-		default:
-			break;
-		}
-
-	return FALSE;
+	/* GTK3 month is 0..11 */
+	date_selection_set(ds->box, day, month + 1, year);
+#endif
 }
 
 static void date_selection_popup(DateSelection *ds)
 {
-	GDateTime *date;
-	gint wx;
-	gint wy;
-	gint x;
-	gint y;
-	GtkAllocation button_allocation;
-	GtkAllocation window_allocation;
+	if (ds->popover)
+		{
+#if HAVE_GTK4
+		gtk_popover_popup(GTK_POPOVER(ds->popover));
+#else
+		gtk_widget_show(ds->popover);
+#endif
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
+		return;
+		}
 
-	if (ds->window) return;
-
-	ds->window = gtk_window_new(GTK_WINDOW_POPUP);
-	gtk_window_set_resizable(GTK_WINDOW(ds->window), FALSE);
-	g_signal_connect(G_OBJECT(ds->window), "button_press_event",
-			 G_CALLBACK(date_selection_popup_press_cb), ds);
-	g_signal_connect(G_OBJECT(ds->window), "key_press_event",
-			 G_CALLBACK(date_selection_popup_keypress_cb), ds);
+#if HAVE_GTK4
+	ds->popover = gtk_popover_new();
+	gtk_widget_set_parent(ds->popover, ds->button);
+#else
+	ds->popover = gtk_popover_new(ds->button);
+#endif
 
 	ds->calendar = gtk_calendar_new();
-	gq_gtk_container_add(ds->window, ds->calendar);
-	gtk_widget_show(ds->calendar);
 
-	date = date_selection_get(ds->box);
+#if HAVE_GTK4
+	gtk_popover_set_child(GTK_POPOVER(ds->popover), ds->calendar);
+#else
+	gq_gtk_container_add(ds->popover, ds->calendar);
+	gtk_widget_show(ds->calendar);
+#endif
+
+	g_autoptr(GDateTime) date = date_selection_get(ds->box);
+
 #if HAVE_GTK4
 	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar), date);
 #else
-	gtk_calendar_select_month(GTK_CALENDAR(ds->calendar), g_date_time_get_month(date), g_date_time_get_year(date));
-	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar), g_date_time_get_day_of_month(date));
+	gtk_calendar_select_month(GTK_CALENDAR(ds->calendar),
+	                          g_date_time_get_month(date) - 1,
+	                          g_date_time_get_year(date));
+
+	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar),
+	                        g_date_time_get_day_of_month(date));
 #endif
-	g_date_time_unref(date);
 
-	g_signal_connect_swapped(G_OBJECT(ds->calendar), "day-selected",
-	                         G_CALLBACK(date_selection_popup_sync), ds);
-	g_signal_connect_swapped(G_OBJECT(ds->calendar), "day-selected-double-click",
-	                         G_CALLBACK(date_selection_popup_hide), ds);
+	g_signal_connect_swapped(ds->calendar,
+	                         "day-selected",
+	                         G_CALLBACK(date_selection_popup_sync),
+	                         ds);
 
-	gtk_widget_realize(ds->window);
+#if !HAVE_GTK4
+	g_signal_connect_swapped(ds->calendar,
+	                         "day-selected-double-click",
+	                         G_CALLBACK(date_selection_popup_hide),
+	                         ds);
+#endif
 
-	gdk_window_get_origin(gtk_widget_get_window(ds->button), &wx, &wy);
-
-	gtk_widget_get_allocation(ds->button, &button_allocation);
-	gtk_widget_get_allocation(ds->window, &window_allocation);
-
-	x = wx + button_allocation.x + button_allocation.width - window_allocation.width;
-	y = wy + button_allocation.y + button_allocation.height;
-
-	if (y + window_allocation.height > deprecated_gdk_screen_height())
-		{
-		y = wy + button_allocation.y - window_allocation.height;
-		}
-	x = std::max(x, 0);
-	y = std::max(y, 0);
-
-	gq_gtk_window_move(GTK_WINDOW(ds->window), x, y);
-	gtk_widget_show(ds->window);
+#if HAVE_GTK4
+	gtk_popover_popup(GTK_POPOVER(ds->popover));
+#else
+	gtk_widget_show(ds->popover);
+#endif
 
 	gtk_widget_grab_focus(ds->calendar);
-	widget_input_grab(ds->window, GDK_SEAT_CAPABILITY_ALL, TRUE,
-	                  static_cast<GdkEventMask>(GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK));
-
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
 }
 
@@ -826,9 +775,13 @@ static void date_selection_button_cb(GtkWidget *, gpointer data)
 {
 	auto ds = static_cast<DateSelection *>(data);
 
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ds->button)) == (!ds->window))
+	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ds->button)))
 		{
 		date_selection_popup(ds);
+		}
+	else
+		{
+		date_selection_popup_hide(ds);
 		}
 }
 
