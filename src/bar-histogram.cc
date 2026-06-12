@@ -263,17 +263,13 @@ static gboolean bar_pane_histogram_press_cb(GtkGesture *, gint, gdouble, gdouble
 
 static GtkWidget *bar_pane_histogram_new(const gchar *id, const gchar *title, gint height, gboolean expanded, gint histogram_channel, gint histogram_mode)
 {
-	PaneHistogramData *phd;
-	GtkGesture *gesture;
-
-	phd = g_new0(PaneHistogramData, 1);
+	PaneHistogramData *phd = g_new0(PaneHistogramData, 1);
 
 	phd->pane.pane_set_fd = bar_pane_histogram_set_fd;
 	phd->pane.pane_write_config = bar_pane_histogram_write_config;
 	phd->pane.title = bar_pane_expander_title(title);
 	phd->pane.id = g_strdup(id);
 	phd->pane.type = PANE_HISTOGRAM;
-
 	phd->pane.expanded = expanded;
 
 	phd->histogram = Histogram();
@@ -285,27 +281,36 @@ static GtkWidget *bar_pane_histogram_new(const gchar *id, const gchar *title, gi
 	gtk_widget_set_size_request(phd->widget, -1, height);
 
 	phd->drawing_area = gtk_drawing_area_new();
-	g_signal_connect_after(G_OBJECT(phd->drawing_area), "size_allocate",
-                               G_CALLBACK(bar_pane_histogram_size_cb), phd);
-
-	g_signal_connect(G_OBJECT(phd->drawing_area), "draw",
-			 G_CALLBACK(bar_pane_histogram_draw_cb), phd);
-
-	gq_gtk_box_pack_start(GTK_BOX(phd->widget), phd->drawing_area, TRUE, TRUE, 0);
-	gtk_widget_show(phd->drawing_area);
-	gtk_widget_add_events(phd->drawing_area, GDK_BUTTON_PRESS_MASK);
-
 
 #if HAVE_GTK4
-	gesture = gtk_gesture_click_new();
+	gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(phd->drawing_area),
+	                               bar_pane_histogram_draw_cb,
+	                               phd,
+	                               nullptr);
+
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture),
+	                              GDK_BUTTON_SECONDARY);
+	g_signal_connect(gesture, "pressed", G_CALLBACK(bar_pane_histogram_press_cb), phd);
 	gtk_widget_add_controller(phd->drawing_area, GTK_EVENT_CONTROLLER(gesture));
+
+	gtk_box_append(GTK_BOX(phd->widget), phd->drawing_area);
 #else
-	gesture = gtk_gesture_multi_press_new(phd->drawing_area);
-#endif
+	g_signal_connect_after(phd->drawing_area, "size_allocate", G_CALLBACK(bar_pane_histogram_size_cb), phd);
+
+	g_signal_connect(phd->drawing_area, "draw", G_CALLBACK(bar_pane_histogram_draw_cb), phd);
+
+	gtk_widget_add_events(phd->drawing_area, GDK_BUTTON_PRESS_MASK);
+
+	GtkGesture *gesture = gtk_gesture_multi_press_new(phd->drawing_area);
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect(gesture, "pressed", G_CALLBACK(bar_pane_histogram_press_cb), phd);
 
+	gq_gtk_box_pack_start(GTK_BOX(phd->widget), phd->drawing_area, TRUE, TRUE, 0);
+
+	gtk_widget_show(phd->drawing_area);
 	gtk_widget_show(phd->widget);
+#endif
 
 	file_data_register_notify_func(bar_pane_histogram_notify_cb, phd, NOTIFY_PRIORITY_LOW);
 
