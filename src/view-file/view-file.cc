@@ -1327,14 +1327,14 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 	gtk_widget_show(menubar);
 
 	GtkWidget *box_class = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_MENU);
+	icon = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_MENU);
 	label = gtk_label_new(_("Class"));
 
 	gq_gtk_box_pack_start(GTK_BOX(box_class), label, FALSE, FALSE, 0);
 	gq_gtk_box_pack_start(GTK_BOX(box_class), icon, FALSE, FALSE, 0);
 
 	GtkWidget *box_rating = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_MENU);
+	icon = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_MENU);
 	label = gtk_label_new(_("Rating"));
 
 	gq_gtk_box_pack_start(GTK_BOX(box_rating), label, FALSE, FALSE, 0);

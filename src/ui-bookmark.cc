@@ -511,12 +511,12 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 			}
 		else
 			{
-			image = gtk_image_new_from_icon_name(GQ_ICON_DIRECTORY, GTK_ICON_SIZE_BUTTON);
+			image = gq_gtk_image_new_from_icon_name(GQ_ICON_DIRECTORY, GTK_ICON_SIZE_BUTTON);
 			}
 		}
 	else
 		{
-		image = gtk_image_new_from_icon_name(GQ_ICON_DIRECTORY, GTK_ICON_SIZE_BUTTON);
+		image = gq_gtk_image_new_from_icon_name(GQ_ICON_DIRECTORY, GTK_ICON_SIZE_BUTTON);
 		}
 	gq_gtk_box_pack_start(GTK_BOX(box), image, FALSE, FALSE, 0);
 	gtk_widget_show(image);

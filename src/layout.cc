@@ -663,7 +663,7 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 #if HAVE_GTK4
 	gtk_button_set_icon_name(GTK_BUTTON(button), GQ_ICON_PAN_DOWN);
 #else
-	GtkWidget *image = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
+	GtkWidget *image = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 	gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
 	gtk_button_set_image(GTK_BUTTON(button), image);
 #endif
@@ -742,7 +742,7 @@ static GtkWidget *layout_zoom_button(LayoutWindow *lw, GtkWidget *box, gint size
 #if HAVE_GTK4
 	gtk_button_set_icon_name(GTK_BUTTON(button), GQ_ICON_PAN_DOWN);
 #else
-	GtkWidget *image = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
+	GtkWidget *image = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 	gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
 	gtk_button_set_image(GTK_BUTTON(button), image);
 #endif
