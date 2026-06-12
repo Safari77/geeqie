@@ -433,7 +433,7 @@ static gboolean view_window_key_press_cb(GtkWidget * (widget), GdkEventKey *even
 
 	if (x != 0 || y!= 0)
 		{
-		keyboard_scroll_calc(x, y, event);
+		keyboard_scroll_calc(x, y,static_cast<GdkModifierType>(event->state), event->keyval, event->time);
 		image_scroll(imd, x, y);
 		}
 

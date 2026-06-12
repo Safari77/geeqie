@@ -30,7 +30,7 @@ enum ToolbarType : gint;
 
 struct LayoutWindow;
 
-void keyboard_scroll_calc(gint &x, gint &y, const GdkEventKey *event);
+void keyboard_scroll_calc(gint &x, gint &y, GdkModifierType state, guint keyval, guint32 time);
 
 void layout_keyboard_init(LayoutWindow *lw, GtkWidget *window);
 

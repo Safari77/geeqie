@@ -167,19 +167,19 @@ static gboolean layout_key_match(guint keyval)
 	return it != std::cend(tree_key_overrides);
 }
 
-void keyboard_scroll_calc(gint &x, gint &y, const GdkEventKey *event)
+void keyboard_scroll_calc(gint &x, gint &y, GdkModifierType state, guint keyval, guint32 time)
 {
 	static gint delta = 0;
 	static guint32 time_old = 0;
 	static guint keyval_old = 0;
 
-	if (event->state & GDK_SHIFT_MASK)
+	if (state & GDK_SHIFT_MASK)
 		{
 		x *= 3;
 		y *= 3;
 		}
 
-	if (event->state & GDK_CONTROL_MASK)
+	if (state & GDK_CONTROL_MASK)
 		{
 		if (x < 0) x = G_MININT / 2;
 		if (x > 0) x = G_MAXINT / 2;
@@ -191,15 +191,16 @@ void keyboard_scroll_calc(gint &x, gint &y, const GdkEventKey *event)
 
 	if (options->progressive_key_scrolling)
 		{
-		guint32 time_diff;
+		guint32 time_diff = time - time_old;
 
-		time_diff = event->time - time_old;
+		/* key pressed within 125 ms? */
+		if (time_diff > 125 || keyval != keyval_old)
+			{
+			delta = 0;
+			}
 
-		/* key pressed within 125ms ? (1/8 second) */
-		if (time_diff > 125 || event->keyval != keyval_old) delta = 0;
-
-		time_old = event->time;
-		keyval_old = event->keyval;
+		time_old = time;
+		keyval_old = keyval;
 
 		delta += 2;
 		}
@@ -212,6 +213,134 @@ void keyboard_scroll_calc(gint &x, gint &y, const GdkEventKey *event)
 	y *= delta * options->keyboard_scroll_step;
 }
 
+static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModifierType state, gpointer data)
+{
+	auto lw = static_cast<LayoutWindow *>(data);
+
+	if (lw->path_entry && gtk_widget_has_focus(lw->path_entry))
+		{
+		if (keyval == GDK_KEY_Escape && lw->dir_fd)
+			{
+			gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
+			return TRUE;
+			}
+
+#if !HAVE_GTK4
+		/* GTK3 hack: let the entry handle keys stolen by the accel group. */
+		return FALSE;
+#endif
+		}
+
+	if (lw->vf->file_filter.combo)
+		{
+		GtkWidget *combo_entry =
+			gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
+
+#if !HAVE_GTK4
+		if (gtk_widget_has_focus(combo_entry))
+			{
+			return FALSE;
+			}
+#else
+		if (combo_entry && gtk_widget_has_focus(combo_entry))
+			{
+			return FALSE;
+			}
+#endif
+		}
+
+#if !HAVE_GTK4
+	if (lw->vd &&
+	    lw->options.dir_view_type == DIRVIEW_TREE &&
+	    gtk_widget_has_focus(lw->vd->view) &&
+	    !layout_key_match(keyval))
+		{
+		return FALSE;
+		}
+#endif
+
+#if !HAVE_GTK4
+	if (lw->bar)
+		{
+		return FALSE;
+		}
+#endif
+
+	GtkWidget *focused = nullptr;
+
+#if !HAVE_GTK4
+	focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
+#endif
+
+	gboolean stop_signal = FALSE;
+	gint x = 0;
+	gint y = 0;
+
+	if (lw->image &&
+	    ((focused && gtk_widget_has_focus(focused)) ||
+	     (lw->tools && widget == lw->window) ||
+	     lw->full_screen))
+		{
+		stop_signal = TRUE;
+
+		switch (keyval)
+			{
+			case GDK_KEY_Left:
+			case GDK_KEY_KP_Left:
+				x -= 1;
+				break;
+
+			case GDK_KEY_Right:
+			case GDK_KEY_KP_Right:
+				x += 1;
+				break;
+
+			case GDK_KEY_Up:
+			case GDK_KEY_KP_Up:
+				y -= 1;
+				break;
+
+			case GDK_KEY_Down:
+			case GDK_KEY_KP_Down:
+				y += 1;
+				break;
+
+			default:
+				stop_signal = FALSE;
+				break;
+			}
+
+		if (!stop_signal && !(state & GDK_CONTROL_MASK))
+			{
+			stop_signal = TRUE;
+
+			switch (keyval)
+				{
+				case GDK_KEY_Menu:
+					layout_image_menu_popup(lw);
+					break;
+
+				default:
+					stop_signal = FALSE;
+					break;
+				}
+			}
+		}
+
+	if (x != 0 || y != 0)
+		{
+#if !HAVE_GTK4
+		/* Existing function needs GdkEventKey. Keep GTK3 path below. */
+#else
+		keyboard_scroll_calc(x, y, state, keyval, static_cast<guint32>(g_get_monotonic_time() / 1000));
+#endif
+		layout_image_scroll(lw, x, y, (state & GDK_SHIFT_MASK));
+		}
+
+	return stop_signal;
+}
+
+#if !HAVE_GTK4
 static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
@@ -223,9 +352,6 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 			gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 			}
 
-		/* the gtkaccelgroup of the window is stealing presses before they get to the entry (and more),
-		 * so when the some widgets have focus, give them priority (HACK)
-		 */
 		if (gtk_widget_event(lw->path_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;
@@ -234,14 +360,19 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 
 	if (lw->vf->file_filter.combo)
 		{
-		GtkWidget *combo_entry = gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
-		if (gtk_widget_has_focus(combo_entry) && gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
+		GtkWidget *combo_entry =
+			gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
+
+		if (gtk_widget_has_focus(combo_entry) &&
+		    gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;
 			}
 		}
 
-	if (lw->vd && lw->options.dir_view_type == DIRVIEW_TREE && gtk_widget_has_focus(lw->vd->view) &&
+	if (lw->vd &&
+	    lw->options.dir_view_type == DIRVIEW_TREE &&
+	    gtk_widget_has_focus(lw->vd->view) &&
 	    !layout_key_match(event->keyval) &&
 	    gtk_widget_event(lw->vd->view, reinterpret_cast<GdkEvent *>(event)))
 		{
@@ -254,62 +385,71 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 		return TRUE;
 		}
 
-	GtkWidget *focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
-	gboolean stop_signal = FALSE;
-	gint x = 0;
-	gint y = 0;
-	if (lw->image &&
-	    ((focused && gtk_widget_has_focus(focused)) || (lw->tools && widget == lw->window) || lw->full_screen) )
+	gboolean stop_signal =
+		layout_key_press_common(widget, event->keyval, static_cast<GdkModifierType>(event->state), data);
+
+	if (stop_signal)
 		{
-		stop_signal = TRUE;
+		gint x = 0;
+		gint y = 0;
+
 		switch (event->keyval)
 			{
-			case GDK_KEY_Left: case GDK_KEY_KP_Left:
-				x -= 1;
+			case GDK_KEY_Left:
+			case GDK_KEY_KP_Left:
+				x = -1;
 				break;
-			case GDK_KEY_Right: case GDK_KEY_KP_Right:
-				x += 1;
+
+			case GDK_KEY_Right:
+			case GDK_KEY_KP_Right:
+				x = 1;
 				break;
-			case GDK_KEY_Up: case GDK_KEY_KP_Up:
-				y -= 1;
+
+			case GDK_KEY_Up:
+			case GDK_KEY_KP_Up:
+				y = -1;
 				break;
-			case GDK_KEY_Down: case GDK_KEY_KP_Down:
-				y += 1;
+
+			case GDK_KEY_Down:
+			case GDK_KEY_KP_Down:
+				y = 1;
 				break;
+
 			default:
-				stop_signal = FALSE;
 				break;
 			}
 
-		if (!stop_signal &&
-		    !(event->state & GDK_CONTROL_MASK))
+		if (x != 0 || y != 0)
 			{
-			stop_signal = TRUE;
-			switch (event->keyval)
-				{
-				case GDK_KEY_Menu:
-					layout_image_menu_popup(lw);
-					break;
-				default:
-					stop_signal = FALSE;
-					break;
-				}
+			keyboard_scroll_calc(x, y, static_cast<GdkModifierType>(event->state), event->keyval, event->time);
+			layout_image_scroll(lw, x, y, (event->state & GDK_SHIFT_MASK));
 			}
-		}
-
-	if (x != 0 || y!= 0)
-		{
-		keyboard_scroll_calc(x, y, event);
-		layout_image_scroll(lw, x, y, (event->state & GDK_SHIFT_MASK));
 		}
 
 	return stop_signal;
 }
+#endif
+
+#if HAVE_GTK4
+static gboolean layout_key_press_cb(GtkEventControllerKey *controller, guint keyval, guint GdkModifierType state, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+
+	return layout_key_press_common(widget, keyval, state, data);
+}
+#endif
 
 void layout_keyboard_init(LayoutWindow *lw, GtkWidget *window)
 {
-	g_signal_connect(G_OBJECT(window), "key_press_event",
-			 G_CALLBACK(layout_key_press_cb), lw);
+#if HAVE_GTK4
+	GtkEventController *controller = gtk_event_controller_key_new();
+
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(layout_key_press_cb), lw);
+
+	gtk_widget_add_controller(window, controller);
+#else
+	g_signal_connect(window, "key_press_event", G_CALLBACK(layout_key_press_cb), lw);
+#endif
 }
 
 bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *event)

@@ -1116,7 +1116,7 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 
 		if (x != 0 || y!= 0)
 			{
-			keyboard_scroll_calc(x, y, event);
+			keyboard_scroll_calc(x, y, static_cast<GdkModifierType>(event->state), event->keyval, event->time);
 			pixbuf_renderer_scroll(pr, x, y);
 			}
 		}
