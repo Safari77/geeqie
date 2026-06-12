@@ -215,8 +215,17 @@ ViewDir *vd_new(LayoutWindow *lw)
 			 G_CALLBACK(vd_press_key_cb), vd);
 	g_signal_connect(G_OBJECT(vd->view), "button_press_event",
 			 G_CALLBACK(vd_press_cb), vd);
-	g_signal_connect(G_OBJECT(vd->view), "button_release_event",
-			 G_CALLBACK(vd_release_cb), vd);
+
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
+
+	g_signal_connect(gesture, "released",  G_CALLBACK(vd_release_cb), vd);
+
+	gtk_widget_add_controller(vd->view, GTK_EVENT_CONTROLLER(gesture));
+#else
+	g_signal_connect(vd->view, "button_release_event", G_CALLBACK(vd_release_cb), vd);
+#endif
 
 	file_data_register_notify_func(vd_notify_cb, vd, NOTIFY_PRIORITY_HIGH);
 
@@ -1098,12 +1107,13 @@ void vd_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell, GtkTreeModel *tree_
 	             NULL);
 }
 
+#if !HAVE_GTK4
 gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 	FileData *fd = nullptr;
 
-	if (layout_handle_user_defined_mouse_buttons(vd->layout, bevent))
+	if (layout_handle_user_defined_mouse_buttons(vd->layout, bevent->button))
 		{
 		return TRUE;
 		}
@@ -1131,6 +1141,50 @@ gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 
 	return FALSE;
 }
+#endif
+
+#if HAVE_GTK4
+static void vd_release_cb(GtkGestureClick *gesture,  gint, gdouble x, gdouble y, gpointer data)
+{
+	auto vd = static_cast<ViewDir *>(data);
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+
+	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+
+	if (layout_handle_user_defined_mouse_buttons(vd->layout, button))
+		{
+		return;
+		}
+
+	if (vd->type == DIRVIEW_LIST && !options->view_dir_list_single_click_enter)
+		return;
+
+	if (!vd->click_fd) return;
+	vd_color_set(vd, vd->click_fd, FALSE);
+
+	if (button != GDK_BUTTON_PRIMARY) return;
+
+	FileData *fd = nullptr;
+
+	if (g_autoptr(GtkTreePath) tpath = nullptr;
+	    (x != 0 || y != 0) &&
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),
+	                                  static_cast<gint>(x),
+	                                  static_cast<gint>(y),
+	                                  &tpath,
+	                                  nullptr,
+	                                  nullptr,
+	                                  nullptr))
+		{
+		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(widget), tpath);
+		}
+
+	if (fd && vd->click_fd == fd)
+		{
+		vd_select_row(vd, vd->click_fd);
+		}
+}
+#endif
 
 gboolean vd_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {

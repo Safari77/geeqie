@@ -34,7 +34,7 @@ void keyboard_scroll_calc(gint &x, gint &y, GdkModifierType state, guint keyval,
 
 void layout_keyboard_init(LayoutWindow *lw, GtkWidget *window);
 
-bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *event);
+bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, guint button);
 
 void layout_util_sync_thumb(LayoutWindow *lw);
 void layout_util_sync_marks(LayoutWindow *lw);

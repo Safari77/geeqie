@@ -452,7 +452,7 @@ void layout_keyboard_init(LayoutWindow *lw, GtkWidget *window)
 #endif
 }
 
-bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *event)
+bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, guint button)
 {
 	enum MouseButton {
 		MOUSE_BUTTON_8 = 8,
@@ -465,11 +465,15 @@ bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *
 
 		if (g_strstr_len(action_name, -1, ".desktop") != nullptr)
 			{
-			file_util_start_editor_from_filelist(action_name, layout_selection_list(lw), layout_get_path(lw), lw->window);
+			file_util_start_editor_from_filelist(action_name,
+			                                     layout_selection_list(lw),
+			                                     layout_get_path(lw),
+			                                     lw->window);
 			}
 		else
 			{
-			GtkAction *action = deprecated_gtk_action_group_get_action(lw->action_group, action_name);
+			GtkAction *action = deprecated_gtk_action_group_get_action(lw->action_group,
+				                                       action_name);
 			if (action)
 				{
 				deprecated_gtk_action_activate(action);
@@ -479,7 +483,7 @@ bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, GdkEventButton *
 		return true;
 	};
 
-	switch (event->button)
+	switch (button)
 		{
 		case MOUSE_BUTTON_8:
 			return handle_button(options->mouse_button_8);

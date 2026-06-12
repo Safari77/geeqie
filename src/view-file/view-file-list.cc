@@ -516,7 +516,7 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
 
-	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent))
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent->button))
 		{
 		return TRUE;
 		}

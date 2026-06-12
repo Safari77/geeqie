@@ -236,7 +236,7 @@ static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer d
 		lw = get_current_layout();
 		}
 
-	layout_handle_user_defined_mouse_buttons(lw, event);
+	layout_handle_user_defined_mouse_buttons(lw, event->button);
 }
 
 static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer data)
