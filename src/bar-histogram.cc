@@ -263,7 +263,7 @@ static gboolean bar_pane_histogram_press_cb(GtkGesture *, gint, gdouble, gdouble
 
 static GtkWidget *bar_pane_histogram_new(const gchar *id, const gchar *title, gint height, gboolean expanded, gint histogram_channel, gint histogram_mode)
 {
-	PaneHistogramData *phd = g_new0(PaneHistogramData, 1);
+	auto *phd = g_new0(PaneHistogramData, 1);
 
 	phd->pane.pane_set_fd = bar_pane_histogram_set_fd;
 	phd->pane.pane_write_config = bar_pane_histogram_write_config;
