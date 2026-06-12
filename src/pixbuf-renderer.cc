@@ -2037,43 +2037,80 @@ static gboolean pr_leave_notify_cb(GtkWidget *widget, GdkEventCrossing *, gpoint
 	return FALSE;
 }
 
-static gboolean pr_mouse_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+static gboolean pr_mouse_press_common(GtkWidget *widget,
+                                      guint button,
+                                      gdouble x,
+                                      gdouble y)
 {
-	PixbufRenderer *pr;
-	GtkWidget *parent;
-
-	pr = PIXBUF_RENDERER(widget);
+	PixbufRenderer *pr = PIXBUF_RENDERER(widget);
 
 	if (pr->scroller_id) return TRUE;
 
-	switch (bevent->button)
+	switch (button)
 		{
 		case GDK_BUTTON_PRIMARY:
 			pr->in_drag = TRUE;
-			pr->drag_last_x = bevent->x;
-			pr->drag_last_y = bevent->y;
+			pr->drag_last_x = x;
+			pr->drag_last_y = y;
 			pr->drag_moved = 0;
+
+#if !HAVE_GTK4
 			widget_input_grab(widget, GDK_SEAT_CAPABILITY_ALL_POINTING, FALSE,
-			                  static_cast<GdkEventMask>(GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_RELEASE_MASK));
+			                  static_cast<GdkEventMask>(GDK_POINTER_MOTION_MASK |
+			                                            GDK_POINTER_MOTION_HINT_MASK |
+			                                            GDK_BUTTON_RELEASE_MASK));
+#endif
 			break;
+
 		case GDK_BUTTON_MIDDLE:
 			pr->drag_moved = 0;
 			break;
+
 		case GDK_BUTTON_SECONDARY:
-			pr_clicked_signal(pr, bevent);
+#if !HAVE_GTK4
+			/* keep old signal path if pr_clicked_signal needs GdkEventButton */
+			return FALSE;
+#else
+			pr_clicked_signal_button(pr, button, x, y);
+#endif
 			break;
+
 		default:
 			break;
 		}
 
-	parent = gtk_widget_get_parent(widget);
-	if (widget && gtk_widget_get_can_focus(parent))
+	GtkWidget *parent = gtk_widget_get_parent(widget);
+	if (parent && gtk_widget_get_can_focus(parent))
 		{
 		gtk_widget_grab_focus(parent);
 		}
 
 	return FALSE;
 }
+
+#if !HAVE_GTK4
+static gboolean pr_mouse_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+{
+	if (bevent->button == GDK_BUTTON_SECONDARY)
+		{
+		pr_clicked_signal(PIXBUF_RENDERER(widget), bevent);
+		return FALSE;
+		}
+
+	return pr_mouse_press_common(widget, bevent->button, bevent->x, bevent->y);
+}
+#endif
+
+#if HAVE_GTK4
+static void pr_mouse_press_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+
+	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+
+	pr_mouse_press_common(widget, button, x, y);
+}
+#endif
 
 static gboolean pr_mouse_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
 {
