@@ -137,20 +137,37 @@ GList *vf_get_list(ViewFile *vf)
  *-------------------------------------------------------------------
  */
 
+static gboolean vf_press_key_common(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state)
+{
+	switch (vf->type)
+		{
+		case FILEVIEW_LIST:
+			return vflist_press_key_cb(vf, widget, keyval, state);
+
+		case FILEVIEW_ICON:
+			return vficon_press_key_cb(vf, widget, keyval, state);
+
+		default:
+			return FALSE;
+		}
+}
+
+#if HAVE_GTK4
+static gboolean vf_press_key_cb(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
+{
+	auto vf = static_cast<ViewFile *>(data);
+	GtkWidget *widget = vf->listview;
+
+	return vf_press_key_common(vf, widget, keyval, state);
+}
+#else
 static gboolean vf_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
-	gboolean ret;
 
-	switch (vf->type)
-	{
-	case FILEVIEW_LIST: ret = vflist_press_key_cb(vf, widget, event); break;
-	case FILEVIEW_ICON: ret = vficon_press_key_cb(vf, widget, event); break;
-	default: ret = FALSE;
-	}
-
-	return ret;
+	return vf_press_key_common(vf, widget, event->keyval, static_cast<GdkModifierType>(event->state));
 }
+#endif
 
 /*
  *-------------------------------------------------------------------
@@ -1403,12 +1420,18 @@ ViewFile *vf_new(FileViewType type, FileData *dir_fd)
 	vf_dnd_init(vf);
 #endif
 
-	g_signal_connect(G_OBJECT(vf->listview), "key_press_event",
-			 G_CALLBACK(vf_press_key_cb), vf);
-	g_signal_connect(G_OBJECT(vf->listview), "button_press_event",
-			 G_CALLBACK(vf_press_cb), vf);
-	g_signal_connect(G_OBJECT(vf->listview), "button_release_event",
-			 G_CALLBACK(vf_release_cb), vf);
+#if HAVE_GTK4
+	GtkEventController *key_controller = gtk_event_controller_key_new();
+
+	g_signal_connect(key_controller, "key-pressed", G_CALLBACK(vf_press_key_cb), vf);
+
+	gtk_widget_add_controller(vf->listview, key_controller);
+#else
+	g_signal_connect(vf->listview, "key_press_event", G_CALLBACK(vf_press_key_cb), vf);
+#endif
+
+	g_signal_connect(G_OBJECT(vf->listview), "button_press_event", G_CALLBACK(vf_press_cb), vf);
+	g_signal_connect(G_OBJECT(vf->listview), "button_release_event", G_CALLBACK(vf_release_cb), vf);
 
 	gq_gtk_container_add(vf->scrolled, vf->listview);
 	gtk_widget_show(vf->listview);

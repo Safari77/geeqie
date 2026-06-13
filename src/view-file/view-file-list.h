@@ -41,7 +41,7 @@ struct ViewFileInfoList
 
 #define VFLIST(_vf_) ((ViewFileInfoList *)((_vf_)->info))
 
-gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event);
+gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType);
 gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 

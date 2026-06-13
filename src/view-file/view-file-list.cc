@@ -403,18 +403,20 @@ static gboolean vflist_row_rename_cb(TreeEditData *, const gchar *old_name, cons
 	return FALSE;
 }
 
-gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event)
+gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType)
 {
-	if (event->keyval != GDK_KEY_Menu) return FALSE;
+	if (keyval != GDK_KEY_Menu)
+		{
+		return FALSE;
+		}
 
 	g_autoptr(GtkTreePath) tpath = nullptr;
 	gtk_tree_view_get_cursor(GTK_TREE_VIEW(vf->listview), &tpath, nullptr);
 	if (tpath)
 		{
-		GtkTreeModel *store;
+		GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 		GtkTreeIter iter;
 
-		store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &vf->click_fd, -1);
 		}
@@ -424,7 +426,12 @@ gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 		}
 
 	vf->popup = vf_pop_menu(vf);
+
+#if HAVE_GTK4
+	popup_menu(G_MENU(vf->popup), widget);
+#else
 	gtk_menu_popup_at_widget(GTK_MENU(vf->popup), widget, GDK_GRAVITY_EAST, GDK_GRAVITY_CENTER, nullptr);
+#endif
 
 	return TRUE;
 }

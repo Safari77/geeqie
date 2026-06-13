@@ -52,7 +52,7 @@ struct ViewFileInfoIcon
 
 #define VFICON(_vf_) ((ViewFileInfoIcon *)((_vf_)->info))
 
-gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event);
+gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state);
 gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 

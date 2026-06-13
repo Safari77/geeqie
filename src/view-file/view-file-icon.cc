@@ -1030,7 +1030,7 @@ static gint page_height(ViewFile *vf)
  *-------------------------------------------------------------------
  */
 
-gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event)
+gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state)
 {
 	gint focus_row = 0;
 	gint focus_col = 0;
@@ -1038,7 +1038,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 	gboolean stop_signal;
 
 	stop_signal = TRUE;
-	switch (event->keyval)
+	switch (keyval)
 		{
 		case GDK_KEY_Left: case GDK_KEY_KP_Left:
 			focus_col = -1;
@@ -1071,7 +1071,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 			if (fd)
 				{
 				vf->click_fd = fd;
-				if (event->state & GDK_CONTROL_MASK)
+				if (state & GDK_CONTROL_MASK)
 					{
 					gint selected;
 
@@ -1120,7 +1120,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 
 		if (new_fd != old_fd)
 			{
-			if (event->state & GDK_SHIFT_MASK)
+			if (state & GDK_SHIFT_MASK)
 				{
 				if (!options->collections.rectangular_selection)
 					{
@@ -1133,7 +1133,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 				vficon_select_region_util(vf, vf->click_fd, new_fd, TRUE);
 				vficon_send_layout_select(vf, new_fd);
 				}
-			else if (event->state & GDK_CONTROL_MASK)
+			else if (state & GDK_CONTROL_MASK)
 				{
 				vf->click_fd = new_fd;
 				}
