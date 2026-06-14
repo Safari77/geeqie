@@ -154,7 +154,7 @@ struct RendererFuncs
 
 struct PixbufRenderer
 {
-	GtkEventBox eventbox;
+	GtkDrawingArea drawing_area;
 
 	gint image_width;	/**< image actual dimensions (pixels) */
 	gint image_height;
@@ -270,7 +270,7 @@ struct PixbufRenderer
 
 struct PixbufRendererClass
 {
-	GtkEventBoxClass parent_class;
+	GtkDrawingAreaClass parent_class;
 
 	void (*zoom)(PixbufRenderer *pr, gdouble zoom);
 	void (*clicked)(PixbufRenderer *pr, GdkEventButton *event);

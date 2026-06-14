@@ -102,9 +102,30 @@ struct ConfDialogData
 void bar_pane_exif_entry_dnd_init(GtkWidget *entry);
 void bar_pane_exif_entry_update_title(ExifEntry *ee);
 void bar_pane_exif_update(PaneExifData *ped);
+#if HAVE_GTK4
+void bar_pane_exif_menu_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data);
+void bar_pane_exif_copy_gesture_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data);
+#else
 gboolean bar_pane_exif_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data);
-void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data);
 gboolean bar_pane_exif_copy_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data);
+#endif
+void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data);
+
+void bar_pane_exif_copy_to_primary(GtkWidget *widget)
+{
+	auto *ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
+	const gchar *value = gtk_label_get_text(GTK_LABEL(ee->value_widget));
+
+#if HAVE_GTK4
+	GdkDisplay *display = gdk_display_get_default();
+	GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
+
+	gdk_clipboard_set_text(clipboard, value);
+#else
+	GtkClipboard *clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
+	gtk_clipboard_set_text(clipboard, value, -1);
+#endif
+}
 
 void bar_pane_exif_entry_changed(GtkEntry *, gpointer data)
 {
@@ -184,14 +205,27 @@ GtkWidget *bar_pane_exif_add_entry(PaneExifData *ped, const gchar *key, const gc
 
 	ee->ped = ped;
 
-	ee->ebox = gtk_event_box_new();
+	ee->ebox = gtk_frame_new(nullptr);
+	gq_gtk_frame_set_shadow_type(GTK_FRAME(ee->ebox), GTK_SHADOW_NONE);
 	g_object_set_data_full(G_OBJECT(ee->ebox), "entry_data", ee, bar_pane_exif_entry_destroy);
 
 	gq_gtk_box_pack_start(GTK_BOX(ped->vbox), ee->ebox, FALSE, FALSE, 0);
 
 	bar_pane_exif_entry_dnd_init(ee->ebox);
+#if HAVE_GTK4
+	GtkGesture *menu_gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(menu_gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect(menu_gesture, "released", G_CALLBACK(bar_pane_exif_menu_cb), ped);
+	gtk_widget_add_controller(ee->ebox, GTK_EVENT_CONTROLLER(menu_gesture));
+
+	GtkGesture *copy_gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(copy_gesture), GDK_BUTTON_PRIMARY);
+	g_signal_connect(copy_gesture, "pressed", G_CALLBACK(bar_pane_exif_copy_gesture_cb), ped);
+	gtk_widget_add_controller(ee->ebox, GTK_EVENT_CONTROLLER(copy_gesture));
+#else
 	g_signal_connect(ee->ebox, "button_release_event", G_CALLBACK(bar_pane_exif_menu_cb), ped);
 	g_signal_connect(ee->ebox, "button_press_event", G_CALLBACK(bar_pane_exif_copy_cb), ped);
+#endif
 
 	bar_pane_exif_setup_entry_box(ped, ee);
 
@@ -678,33 +712,26 @@ gboolean bar_pane_exif_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpoint
 }
 #endif
 
+#if HAVE_GTK4
+void bar_pane_exif_copy_gesture_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer)
+{
+	if (gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)) != GDK_BUTTON_PRIMARY) return;
+
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	bar_pane_exif_copy_to_primary(widget);
+}
+#else
 gboolean bar_pane_exif_copy_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
 {
-	const gchar *value;
-	ExifEntry *ee;
-
 	if (bevent->button == GDK_BUTTON_PRIMARY)
 		{
-		ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
-		value = gtk_label_get_text(GTK_LABEL(ee->value_widget));
-
-#if HAVE_GTK4
-		GdkDisplay *display = gdk_display_get_default();
-		GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
-
-		gdk_clipboard_set_text(clipboard, value);
-#else
-		GtkClipboard *clipboard;
-
-		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
-		gtk_clipboard_set_text(clipboard, value, -1);
-#endif
-
+		bar_pane_exif_copy_to_primary(widget);
 		return TRUE;
 		}
 
 	return FALSE;
 }
+#endif
 
 void bar_pane_exif_entry_write_config(GtkWidget *entry, GString *outstr, gint indent)
 {

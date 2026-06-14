@@ -119,7 +119,7 @@ enum PrZoomFlags {
 };
 
 static guint signals[SIGNAL_COUNT] = { 0 };
-static GtkEventBoxClass *parent_class = nullptr;
+static GtkDrawingAreaClass *parent_class = nullptr;
 
 
 
@@ -173,7 +173,7 @@ GType pixbuf_renderer_get_type()
 	    reinterpret_cast<GInstanceInitFunc>(pixbuf_renderer_init_wrapper), /* instance_init */
 	    nullptr,		/* value_table */
 	};
-	static GType pixbuf_renderer_type = g_type_register_static(GTK_TYPE_EVENT_BOX, "PixbufRenderer",
+	static GType pixbuf_renderer_type = g_type_register_static(GTK_TYPE_DRAWING_AREA, "PixbufRenderer",
 	                                                           &pixbuf_renderer_info, static_cast<GTypeFlags>(0));
 
 	return pixbuf_renderer_type;
@@ -183,7 +183,7 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 {
 	GObjectClass *gobject_class = G_OBJECT_CLASS(renderer_class);
 
-	parent_class = static_cast<GtkEventBoxClass *>(g_type_class_peek_parent(renderer_class));
+	parent_class = static_cast<GtkDrawingAreaClass *>(g_type_class_peek_parent(renderer_class));
 
 	gobject_class->set_property = pixbuf_renderer_set_property;
 	gobject_class->get_property = pixbuf_renderer_get_property;
