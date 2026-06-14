@@ -2088,7 +2088,13 @@ static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpo
 	return FALSE;
 }
 
+#if HAVE_GTK4
+static void pr_leave_notify_cb(GtkEventControllerMotion *controller, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+#else
 static gboolean pr_leave_notify_cb(GtkWidget *widget, GdkEventCrossing *, gpointer)
+#endif
 {
 	PixbufRenderer *pr;
 
@@ -2096,7 +2102,9 @@ static gboolean pr_leave_notify_cb(GtkWidget *widget, GdkEventCrossing *, gpoint
 	pr->mouse = { -1, -1 };
 
 	pr_update_pixel_signal(pr);
+#if !HAVE_GTK4
 	return FALSE;
+#endif
 }
 
 static gboolean pr_mouse_press_common(GtkWidget *widget,
@@ -2245,7 +2253,13 @@ static gboolean pr_mouse_release_cb(GtkWidget *widget, GdkEventButton *bevent, g
 	return FALSE;
 }
 
+#if HAVE_GTK4
+static void pr_mouse_leave_cb(GtkEventControllerMotion *controller, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+#else
 static gboolean pr_mouse_leave_cb(GtkWidget *widget, GdkEventCrossing *, gpointer)
+#endif
 {
 	PixbufRenderer *pr;
 
@@ -2259,7 +2273,9 @@ static gboolean pr_mouse_leave_cb(GtkWidget *widget, GdkEventCrossing *, gpointe
 		pr->scroller_yinc = 0;
 		}
 
+#if !HAVE_GTK4
 	return FALSE;
+#endif
 }
 
 static void pr_mouse_drag_cb(GtkWidget *widget, GdkDragContext *, gpointer)
@@ -2281,16 +2297,21 @@ static void pr_signals_connect(PixbufRenderer *pr)
 	g_signal_connect(gesture, "pressed", G_CALLBACK(pr_mouse_press_cb), pr);
 	g_signal_connect(gesture, "released", G_CALLBACK(pr_mouse_release_cb), pr);
 	gtk_widget_add_controller(GTK_WIDGET(pr), GTK_EVENT_CONTROLLER(gesture));
+
+	GtkEventController *motion_controller = gtk_event_controller_motion_new();
+	g_signal_connect(motion_controller, "leave", G_CALLBACK(pr_mouse_leave_cb), pr);
+	g_signal_connect(motion_controller, "leave", G_CALLBACK(pr_leave_notify_cb), pr);
+	gtk_widget_add_controller(GTK_WIDGET(pr), motion_controller);
 #else
 	g_signal_connect(G_OBJECT(pr), "button_press_event",
 			 G_CALLBACK(pr_mouse_press_cb), pr);
 	g_signal_connect(G_OBJECT(pr), "button_release_event",
 			 G_CALLBACK(pr_mouse_release_cb), pr);
-#endif
 	g_signal_connect(G_OBJECT(pr), "leave_notify_event",
 			 G_CALLBACK(pr_mouse_leave_cb), pr);
 	g_signal_connect(G_OBJECT(pr), "leave_notify_event",
 			 G_CALLBACK(pr_leave_notify_cb), pr);
+#endif
 
 	gtk_widget_set_events(GTK_WIDGET(pr), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK |
 					      static_cast<GdkEventMask>(GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK |

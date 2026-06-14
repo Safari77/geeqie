@@ -1346,12 +1346,18 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 	return TRUE;
 }
 
+#if HAVE_GTK4
+static void vficon_leave_cb(GtkEventControllerMotion *, gpointer data)
+#else
 static gboolean vficon_leave_cb(GtkWidget *, GdkEventCrossing *, gpointer data)
+#endif
 {
 	auto vf = static_cast<ViewFile *>(data);
 
 	tip_unschedule(vf);
+#if !HAVE_GTK4
 	return FALSE;
+#endif
 }
 
 /*
@@ -2125,8 +2131,14 @@ ViewFile *vficon_new(ViewFile *vf)
 
 	g_signal_connect(G_OBJECT(vf->listview),"motion_notify_event",
 			 G_CALLBACK(vficon_motion_cb), vf);
+#if HAVE_GTK4
+	GtkEventController *motion_controller = gtk_event_controller_motion_new();
+	g_signal_connect(motion_controller, "leave", G_CALLBACK(vficon_leave_cb), vf);
+	gtk_widget_add_controller(vf->listview, motion_controller);
+#else
 	g_signal_connect(G_OBJECT(vf->listview), "leave_notify_event",
 			 G_CALLBACK(vficon_leave_cb), vf);
+#endif
 
 	/* force VFICON(vf)->columns to be at least 1 (sane) - this will be corrected in the size_cb */
 	vficon_populate_at_new_size(vf, 1, 1, FALSE);
