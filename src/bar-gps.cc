@@ -753,7 +753,7 @@ gint bar_pane_gps_event(GtkWidget *bar, GdkEvent *event)
 
 	if (!gtk_widget_has_focus(pgd->widget)) return FALSE;
 
-	return gtk_widget_event(pgd->widget, event);
+	return gq_gtk_widget_event(pgd->widget, event);
 }
 
 const gchar *bar_pane_gps_get_map_id(const PaneGPSData *pgd)

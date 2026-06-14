@@ -355,7 +355,7 @@ gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 		auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(work->data), "entry_data"));
 
 		if (ee->editable && gtk_widget_has_focus(ee->value_widget))
-			ret = gtk_widget_event(ee->value_widget, event);
+			ret = gq_gtk_widget_event(ee->value_widget, event);
 		}
 
 	return ret;

@@ -352,7 +352,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 			gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 			}
 
-		if (gtk_widget_event(lw->path_entry, reinterpret_cast<GdkEvent *>(event)))
+		if (gq_gtk_widget_event(lw->path_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;
 			}
@@ -364,7 +364,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 			gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
 
 		if (gtk_widget_has_focus(combo_entry) &&
-		    gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
+		    gq_gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
 			{
 			return TRUE;
 			}
@@ -374,7 +374,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 	    lw->options.dir_view_type == DIRVIEW_TREE &&
 	    gtk_widget_has_focus(lw->vd->view) &&
 	    !layout_key_match(event->keyval) &&
-	    gtk_widget_event(lw->vd->view, reinterpret_cast<GdkEvent *>(event)))
+	    gq_gtk_widget_event(lw->vd->view, reinterpret_cast<GdkEvent *>(event)))
 		{
 		return TRUE;
 		}

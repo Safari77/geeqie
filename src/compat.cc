@@ -101,6 +101,11 @@ void gq_gtk_viewport_set_shadow_type(GtkWidget *, int)
 {
 }
 
+gboolean gq_gtk_widget_event(GtkWidget *, GdkEvent *)
+{
+	return FALSE;
+}
+
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
 }
@@ -145,6 +150,11 @@ GList *gq_gtk_widget_get_children(GtkWidget *widget)
 void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
 {
 	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), static_cast<GtkShadowType>(type));
+}
+
+gboolean gq_gtk_widget_event(GtkWidget *widget, GdkEvent *event)
+{
+	return gtk_widget_event(widget, event);
 }
 
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)

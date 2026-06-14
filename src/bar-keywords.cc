@@ -333,11 +333,11 @@ gint bar_pane_keywords_event(GtkWidget *bar, GdkEvent *event)
 	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!pkd) return FALSE;
 
-	if (gtk_widget_has_focus(pkd->keyword_view)) return gtk_widget_event(pkd->keyword_view, event);
+	if (gtk_widget_has_focus(pkd->keyword_view)) return gq_gtk_widget_event(pkd->keyword_view, event);
 
 	if (gtk_widget_has_focus(pkd->autocomplete))
 		{
-		return gtk_widget_event(pkd->autocomplete, event);
+		return gq_gtk_widget_event(pkd->autocomplete, event);
 		}
 	return FALSE;
 }

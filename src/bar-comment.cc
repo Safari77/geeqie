@@ -151,7 +151,7 @@ static gint bar_pane_comment_event(GtkWidget *bar, GdkEvent *event)
 	pcd = static_cast<PaneCommentData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!pcd) return FALSE;
 
-	if (gtk_widget_has_focus(pcd->comment_view)) return gtk_widget_event(pcd->comment_view, event);
+	if (gtk_widget_has_focus(pcd->comment_view)) return gq_gtk_widget_event(pcd->comment_view, event);
 
 	return FALSE;
 }
