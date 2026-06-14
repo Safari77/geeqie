@@ -1408,7 +1408,11 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
  *-----------------------------------------------------------------------------
  */
 
+#if HAVE_GTK4
+static void button_cb(PixbufRenderer *pr, GqMouseButtonEvent *event, gpointer data)
+#else
 static void button_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto pw = static_cast<PanWindow *>(data);
 	PanItem *pi = nullptr;

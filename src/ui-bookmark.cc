@@ -358,16 +358,29 @@ static void bookmark_menu_popup(BookMarkData *bm, GtkWidget *button, bool local)
 		}
 }
 
-static gboolean bookmark_press_cb(GtkWidget *button, GdkEventButton *event, gpointer data)
+static gboolean bookmark_press_common(GtkWidget *button, guint button_id, gpointer data)
 {
 	auto bm = static_cast<BookMarkData *>(data);
 
-	if (event->button != GDK_BUTTON_SECONDARY) return FALSE;
+	if (button_id != GDK_BUTTON_SECONDARY) return FALSE;
 
 	bookmark_menu_popup(bm, button, false);
 
 	return TRUE;
 }
+
+#if HAVE_GTK4
+static void bookmark_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer data)
+{
+	GtkWidget *button = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	bookmark_press_common(button, gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)), data);
+}
+#else
+static gboolean bookmark_press_cb(GtkWidget *button, GdkEventButton *event, gpointer data)
+{
+	return bookmark_press_common(button, event->button, data);
+}
+#endif
 
 static gboolean bookmark_keypress_cb(GtkWidget *button, GdkEventKey *event, gpointer data)
 {
@@ -525,8 +538,15 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 
 	g_signal_connect(G_OBJECT(button), "clicked",
 	                 G_CALLBACK(bookmark_select_cb), bm);
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect(gesture, "pressed", G_CALLBACK(bookmark_gesture_press_cb), bm);
+	gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(G_OBJECT(button), "button_press_event",
 	                 G_CALLBACK(bookmark_press_cb), bm);
+#endif
 	g_signal_connect(G_OBJECT(button), "key_press_event",
 	                 G_CALLBACK(bookmark_keypress_cb), bm);
 

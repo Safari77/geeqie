@@ -175,30 +175,48 @@ static gboolean vf_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer 
  *-------------------------------------------------------------------
  */
 
+#if HAVE_GTK4
+static gboolean vf_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+#else
 static gboolean vf_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+#endif
 {
 	auto vf = static_cast<ViewFile *>(data);
 	gboolean ret;
 
 	switch (vf->type)
 	{
+#if HAVE_GTK4
+	case FILEVIEW_LIST: ret = vflist_press_cb(vf, widget, event); break;
+	case FILEVIEW_ICON: ret = vficon_press_cb(vf, widget, event); break;
+#else
 	case FILEVIEW_LIST: ret = vflist_press_cb(vf, widget, bevent); break;
 	case FILEVIEW_ICON: ret = vficon_press_cb(vf, widget, bevent); break;
+#endif
 	default: ret = FALSE;
 	}
 
 	return ret;
 }
 
+#if HAVE_GTK4
+static gboolean vf_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+#else
 static gboolean vf_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+#endif
 {
 	auto vf = static_cast<ViewFile *>(data);
 	gboolean ret;
 
 	switch (vf->type)
 	{
+#if HAVE_GTK4
+	case FILEVIEW_LIST: ret = vflist_release_cb(vf, widget, event); break;
+	case FILEVIEW_ICON: ret = vficon_release_cb(vf, widget, event); break;
+#else
 	case FILEVIEW_LIST: ret = vflist_release_cb(vf, widget, bevent); break;
 	case FILEVIEW_ICON: ret = vficon_release_cb(vf, widget, bevent); break;
+#endif
 	default: ret = FALSE;
 	}
 
@@ -1058,7 +1076,11 @@ static void vf_file_filter_cb(GtkWidget *, gpointer data)
 	vf_refresh(vf);
 }
 
+#if HAVE_GTK4
+static gboolean vf_file_filter_press_cb(GtkWidget *widget, gpointer data)
+#else
 static gboolean vf_file_filter_press_cb(GtkWidget *widget, GdkEventButton *, gpointer data)
+#endif
 {
 	auto vf = static_cast<ViewFile *>(data);
 	vf->file_filter.last_selected = gtk_combo_box_get_active(GTK_COMBO_BOX(vf->file_filter.combo));
@@ -1067,6 +1089,40 @@ static gboolean vf_file_filter_press_cb(GtkWidget *widget, GdkEventButton *, gpo
 
 	return TRUE;
 }
+
+#if HAVE_GTK4
+static void vf_gesture_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	GqMouseButtonEvent event = {
+		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
+		x,
+		y,
+		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
+		static_cast<guint>(n_press)
+	};
+	vf_press_cb(widget, &event, data);
+}
+
+static void vf_gesture_release_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	GqMouseButtonEvent event = {
+		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
+		x,
+		y,
+		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
+		static_cast<guint>(n_press)
+	};
+	vf_release_cb(widget, &event, data);
+}
+
+static void vf_file_filter_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	vf_file_filter_press_cb(widget, data);
+}
+#endif
 
 static GtkWidget *vf_marks_filter_init(ViewFile *vf)
 {
@@ -1325,8 +1381,15 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 	g_signal_connect(G_OBJECT(vf->file_filter.combo), "changed",
 		G_CALLBACK(vf_file_filter_cb), vf);
 
+#if HAVE_GTK4
+	GtkGesture *filter_gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(filter_gesture), 0);
+	g_signal_connect(filter_gesture, "pressed", G_CALLBACK(vf_file_filter_gesture_press_cb), vf);
+	gtk_widget_add_controller(combo_entry, GTK_EVENT_CONTROLLER(filter_gesture));
+#else
 	g_signal_connect(G_OBJECT(combo_entry), "button_press_event",
 			 G_CALLBACK(vf_file_filter_press_cb), vf);
+#endif
 
 	gq_gtk_box_pack_start(GTK_BOX(hbox), vf->file_filter.combo, FALSE, FALSE, 0);
 	gtk_widget_show(vf->file_filter.combo);
@@ -1430,8 +1493,16 @@ ViewFile *vf_new(FileViewType type, FileData *dir_fd)
 	g_signal_connect(vf->listview, "key_press_event", G_CALLBACK(vf_press_key_cb), vf);
 #endif
 
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
+	g_signal_connect(gesture, "pressed", G_CALLBACK(vf_gesture_press_cb), vf);
+	g_signal_connect(gesture, "released", G_CALLBACK(vf_gesture_release_cb), vf);
+	gtk_widget_add_controller(vf->listview, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(G_OBJECT(vf->listview), "button_press_event", G_CALLBACK(vf_press_cb), vf);
 	g_signal_connect(G_OBJECT(vf->listview), "button_release_event", G_CALLBACK(vf_release_cb), vf);
+#endif
 
 	gq_gtk_container_add(vf->scrolled, vf->listview);
 	gtk_widget_show(vf->listview);

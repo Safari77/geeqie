@@ -350,15 +350,28 @@ static void bar_menu_popup(GtkWidget *widget)
 }
 
 
-static gboolean bar_menu_expander_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+static gboolean bar_menu_expander_common(GtkWidget *widget, guint button)
 {
-	if (bevent->button == GDK_BUTTON_SECONDARY)
+	if (button == GDK_BUTTON_SECONDARY)
 		{
 		bar_menu_popup(widget);
 		return TRUE;
 		}
 	return FALSE;
 }
+
+#if HAVE_GTK4
+static void bar_menu_expander_gesture_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	bar_menu_expander_common(widget, gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
+}
+#else
+static gboolean bar_menu_expander_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+{
+	return bar_menu_expander_common(widget, bevent->button);
+}
+#endif
 
 static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 {
@@ -378,7 +391,7 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 		}
 }
 
-static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
+static void bar_menu_add_cb(GtkWidget *, gpointer)
 {
 	GtkWidget *menu = popup_menu_short_lived();
 
@@ -389,7 +402,6 @@ static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
 		}
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
-	return TRUE;
 }
 
 
@@ -575,7 +587,14 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 
 	gq_gtk_box_pack_start(GTK_BOX(bd->vbox), expander, FALSE, TRUE, 0);
 
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect(gesture, "released", G_CALLBACK(bar_menu_expander_gesture_cb), bd);
+	gtk_widget_add_controller(expander, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(expander, "button_release_event", G_CALLBACK(bar_menu_expander_cb), bd);
+#endif
 	g_signal_connect(expander, "notify::expanded", G_CALLBACK(bar_expander_cb), pd);
 
 	gq_gtk_container_add(expander, pane);

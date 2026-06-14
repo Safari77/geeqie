@@ -81,6 +81,10 @@ enum {
 enum {
 	SIGNAL_ZOOM = 0,
 	SIGNAL_CLICKED,
+#if HAVE_GTK4
+	SIGNAL_BUTTON_PRESS,
+	SIGNAL_BUTTON_RELEASE,
+#endif
 	SIGNAL_SCROLL_NOTIFY,
 	SIGNAL_RENDER_COMPLETE,
 	SIGNAL_DRAG,
@@ -141,6 +145,11 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 static void pr_signals_connect(PixbufRenderer *pr);
 static void pr_size_cb(GtkWidget *widget, GtkAllocation *allocation, gpointer data);
 static void pr_stereo_temp_disable(PixbufRenderer *pr, gboolean disable);
+#if HAVE_GTK4
+static void pr_clicked_signal_button(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
+static void pr_button_press_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
+static void pr_button_release_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
+#endif
 
 
 /*
@@ -360,9 +369,37 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 			     G_SIGNAL_RUN_LAST,
 			     G_STRUCT_OFFSET(PixbufRendererClass, clicked),
 			     nullptr, nullptr,
+#if HAVE_GTK4
+			     g_cclosure_marshal_VOID__POINTER,
+			     G_TYPE_NONE, 1,
+			     G_TYPE_POINTER);
+#else
 			     g_cclosure_marshal_VOID__BOXED,
 			     G_TYPE_NONE, 1,
 			     GDK_TYPE_EVENT);
+#endif
+
+#if HAVE_GTK4
+	signals[SIGNAL_BUTTON_PRESS] =
+		g_signal_new("button-press",
+			     G_OBJECT_CLASS_TYPE(gobject_class),
+			     G_SIGNAL_RUN_LAST,
+			     G_STRUCT_OFFSET(PixbufRendererClass, button_press),
+			     nullptr, nullptr,
+			     g_cclosure_marshal_VOID__POINTER,
+			     G_TYPE_NONE, 1,
+			     G_TYPE_POINTER);
+
+	signals[SIGNAL_BUTTON_RELEASE] =
+		g_signal_new("button-release",
+			     G_OBJECT_CLASS_TYPE(gobject_class),
+			     G_SIGNAL_RUN_LAST,
+			     G_STRUCT_OFFSET(PixbufRendererClass, button_release),
+			     nullptr, nullptr,
+			     g_cclosure_marshal_VOID__POINTER,
+			     G_TYPE_NONE, 1,
+			     G_TYPE_POINTER);
+#endif
 
 	signals[SIGNAL_SCROLL_NOTIFY] =
 		g_signal_new("scroll-notify",
@@ -1270,6 +1307,31 @@ static void pr_clicked_signal(PixbufRenderer *pr, GdkEventButton *bevent)
 	g_signal_emit(pr, signals[SIGNAL_CLICKED], 0, bevent);
 }
 
+#if HAVE_GTK4
+static GqMouseButtonEvent pr_button_event_new(guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count)
+{
+	return {button, x, y, state, press_count};
+}
+
+static void pr_clicked_signal_button(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count)
+{
+	GqMouseButtonEvent event = pr_button_event_new(button, x, y, state, press_count);
+	g_signal_emit(pr, signals[SIGNAL_CLICKED], 0, &event);
+}
+
+static void pr_button_press_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count)
+{
+	GqMouseButtonEvent event = pr_button_event_new(button, x, y, state, press_count);
+	g_signal_emit(pr, signals[SIGNAL_BUTTON_PRESS], 0, &event);
+}
+
+static void pr_button_release_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count)
+{
+	GqMouseButtonEvent event = pr_button_event_new(button, x, y, state, press_count);
+	g_signal_emit(pr, signals[SIGNAL_BUTTON_RELEASE], 0, &event);
+}
+#endif
+
 static void pr_scroll_notify_signal(PixbufRenderer *pr)
 {
 	g_signal_emit(pr, signals[SIGNAL_SCROLL_NOTIFY], 0);
@@ -2071,7 +2133,7 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 			/* keep old signal path if pr_clicked_signal needs GdkEventButton */
 			return FALSE;
 #else
-			pr_clicked_signal_button(pr, button, x, y);
+			pr_clicked_signal_button(pr, button, x, y, static_cast<GdkModifierType>(0), 1);
 #endif
 			break;
 
@@ -2102,13 +2164,47 @@ static gboolean pr_mouse_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpo
 #endif
 
 #if HAVE_GTK4
-static void pr_mouse_press_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer)
+static void pr_mouse_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
 
 	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+	GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture));
+	pr_button_press_signal(PIXBUF_RENDERER(widget), button, x, y, state, n_press);
 
 	pr_mouse_press_common(widget, button, x, y);
+}
+#endif
+
+#if HAVE_GTK4
+static void pr_mouse_release_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	auto *pr = PIXBUF_RENDERER(widget);
+	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+	GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture));
+
+	pr_button_release_signal(pr, button, x, y, state, n_press);
+
+	if (pr->scroller_id)
+		{
+		pr_scroller_stop(pr);
+		return;
+		}
+
+	if (pr->drag_moved < PR_DRAG_SCROLL_THRESHHOLD)
+		{
+		if (button == GDK_BUTTON_PRIMARY && (state & GDK_CONTROL_MASK))
+			{
+			pr_scroller_start(pr, x, y);
+			}
+		else if (button == GDK_BUTTON_PRIMARY || button == GDK_BUTTON_MIDDLE)
+			{
+			pr_clicked_signal_button(pr, button, x, y, state, n_press);
+			}
+		}
+
+	pr->in_drag = FALSE;
 }
 #endif
 
@@ -2179,10 +2275,18 @@ static void pr_signals_connect(PixbufRenderer *pr)
 {
 	g_signal_connect(G_OBJECT(pr), "motion_notify_event",
 			 G_CALLBACK(pr_mouse_motion_cb), pr);
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
+	g_signal_connect(gesture, "pressed", G_CALLBACK(pr_mouse_press_cb), pr);
+	g_signal_connect(gesture, "released", G_CALLBACK(pr_mouse_release_cb), pr);
+	gtk_widget_add_controller(GTK_WIDGET(pr), GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(G_OBJECT(pr), "button_press_event",
 			 G_CALLBACK(pr_mouse_press_cb), pr);
 	g_signal_connect(G_OBJECT(pr), "button_release_event",
 			 G_CALLBACK(pr_mouse_release_cb), pr);
+#endif
 	g_signal_connect(G_OBJECT(pr), "leave_notify_event",
 			 G_CALLBACK(pr_mouse_leave_cb), pr);
 	g_signal_connect(G_OBJECT(pr), "leave_notify_event",

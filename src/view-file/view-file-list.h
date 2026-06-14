@@ -26,6 +26,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "compat.h"
 #include "view-file.h"
 
 class FileData;
@@ -42,8 +43,13 @@ struct ViewFileInfoList
 #define VFLIST(_vf_) ((ViewFileInfoList *)((_vf_)->info))
 
 gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType);
+#if HAVE_GTK4
+gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
+gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
+#else
 gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
+#endif
 
 FileData *vflist_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
 

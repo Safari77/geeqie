@@ -213,17 +213,18 @@ ViewDir *vd_new(LayoutWindow *lw)
 			 G_CALLBACK(vd_destroy_cb), vd);
 	g_signal_connect(G_OBJECT(vd->view), "key_press_event",
 			 G_CALLBACK(vd_press_key_cb), vd);
-	g_signal_connect(G_OBJECT(vd->view), "button_press_event",
-			 G_CALLBACK(vd_press_cb), vd);
 
 #if HAVE_GTK4
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
 
-	g_signal_connect(gesture, "released",  G_CALLBACK(vd_release_cb), vd);
+	g_signal_connect(gesture, "pressed",  G_CALLBACK(vd_gesture_press_cb), vd);
+	g_signal_connect(gesture, "released",  G_CALLBACK(vd_gesture_release_cb), vd);
 
 	gtk_widget_add_controller(vd->view, GTK_EVENT_CONTROLLER(gesture));
 #else
+	g_signal_connect(G_OBJECT(vd->view), "button_press_event",
+			 G_CALLBACK(vd_press_cb), vd);
 	g_signal_connect(vd->view, "button_release_event", G_CALLBACK(vd_release_cb), vd);
 #endif
 
@@ -1107,13 +1108,20 @@ void vd_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell, GtkTreeModel *tree_
 	             NULL);
 }
 
-#if !HAVE_GTK4
+#if HAVE_GTK4
+gboolean vd_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+#else
 gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+#endif
 {
 	auto vd = static_cast<ViewDir *>(data);
 	FileData *fd = nullptr;
 
+#if HAVE_GTK4
+	if (layout_handle_user_defined_mouse_buttons(vd->layout, event->button))
+#else
 	if (layout_handle_user_defined_mouse_buttons(vd->layout, bevent->button))
+#endif
 		{
 		return TRUE;
 		}
@@ -1124,11 +1132,20 @@ gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 	if (!vd->click_fd) return FALSE;
 	vd_color_set(vd, vd->click_fd, FALSE);
 
+#if HAVE_GTK4
+	if (event->button != GDK_BUTTON_PRIMARY) return TRUE;
+#else
 	if (bevent->button != GDK_BUTTON_PRIMARY) return TRUE;
+#endif
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
+#if HAVE_GTK4
+	    (event->x != 0 || event->y != 0) &&
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+#else
 	    (bevent->x != 0 || bevent->y != 0) &&
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+#endif
 					  &tpath, nullptr, nullptr, nullptr))
 		{
 		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(widget), tpath);
@@ -1141,47 +1158,21 @@ gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 
 	return FALSE;
 }
-#endif
 
 #if HAVE_GTK4
-static void vd_release_cb(GtkGestureClick *gesture,  gint, gdouble x, gdouble y, gpointer data)
+static void vd_gesture_release_cb(GtkGestureClick *gesture,  gint, gdouble x, gdouble y, gpointer data)
 {
-	auto vd = static_cast<ViewDir *>(data);
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
-
-	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
-
-	if (layout_handle_user_defined_mouse_buttons(vd->layout, button))
+	GqMouseButtonEvent event = {
+		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
+		x,
+		y,
+		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
+		1
+	};
+	if (vd_release_cb(widget, &event, data))
 		{
-		return;
-		}
-
-	if (vd->type == DIRVIEW_LIST && !options->view_dir_list_single_click_enter)
-		return;
-
-	if (!vd->click_fd) return;
-	vd_color_set(vd, vd->click_fd, FALSE);
-
-	if (button != GDK_BUTTON_PRIMARY) return;
-
-	FileData *fd = nullptr;
-
-	if (g_autoptr(GtkTreePath) tpath = nullptr;
-	    (x != 0 || y != 0) &&
-	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),
-	                                  static_cast<gint>(x),
-	                                  static_cast<gint>(y),
-	                                  &tpath,
-	                                  nullptr,
-	                                  nullptr,
-	                                  nullptr))
-		{
-		fd = vd_get_fd_from_tree_path(vd, GTK_TREE_VIEW(widget), tpath);
-		}
-
-	if (fd && vd->click_fd == fd)
-		{
-		vd_select_row(vd, vd->click_fd);
+		gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 		}
 }
 #endif
@@ -1200,14 +1191,26 @@ gboolean vd_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 	return ret;
 }
 
+#if HAVE_GTK4
+gboolean vd_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+#else
 gboolean vd_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+#endif
 {
 	auto vd = static_cast<ViewDir *>(data);
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_SECONDARY)
+#else
 	if (bevent->button == GDK_BUTTON_SECONDARY)
+#endif
 		{
 		if (g_autoptr(GtkTreePath) tpath = nullptr;
+#if HAVE_GTK4
+		    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y, &tpath, nullptr, nullptr, nullptr))
+#else
 		    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y, &tpath, nullptr, nullptr, nullptr))
+#endif
 			{
 			GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 			GtkTreeIter iter;
@@ -1247,12 +1250,35 @@ gboolean vd_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
 
 	switch (vd->type)
 	{
+#if HAVE_GTK4
+	case DIRVIEW_LIST: ret = vdlist_press_cb(widget, event, data); break;
+	case DIRVIEW_TREE: ret = vdtree_press_cb(widget, event, data); break;
+#else
 	case DIRVIEW_LIST: ret = vdlist_press_cb(widget, bevent, data); break;
 	case DIRVIEW_TREE: ret = vdtree_press_cb(widget, bevent, data); break;
+#endif
 	}
 
 	return ret;
 }
+
+#if HAVE_GTK4
+static void vd_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	GqMouseButtonEvent event = {
+		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
+		x,
+		y,
+		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
+		1
+	};
+	if (vd_press_cb(widget, &event, data))
+		{
+		gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+		}
+}
+#endif
 
 static void vd_notify_cb(FileData *fd, NotifyType type, gpointer data)
 {

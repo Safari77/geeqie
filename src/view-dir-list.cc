@@ -371,14 +371,22 @@ gboolean vdlist_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer dat
 	return TRUE;
 }
 
+#if HAVE_GTK4
+gboolean vdlist_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+#else
 gboolean vdlist_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+#endif
 {
 	auto vd = static_cast<ViewDir *>(data);
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
+#if HAVE_GTK4
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+#else
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+#endif
 	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		GtkTreeModel *store;
@@ -394,7 +402,11 @@ gboolean vdlist_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer dat
 	if (options->view_dir_list_single_click_enter)
 		vd_color_set(vd, vd->click_fd, TRUE);
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_SECONDARY)
+#else
 	if (bevent->button == GDK_BUTTON_SECONDARY)
+#endif
 		{
 		vd->popup = vd_pop_menu(vd, vd->click_fd);
 		gtk_menu_popup_at_pointer(GTK_MENU(vd->popup), nullptr);

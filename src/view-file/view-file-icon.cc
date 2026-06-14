@@ -1172,21 +1172,33 @@ static gboolean vficon_motion_cb(GtkWidget *, GdkEventMotion *event, gpointer da
 	return FALSE;
 }
 
+#if HAVE_GTK4
+gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *event)
+#else
 gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd;
 
 	tip_unschedule(vf);
 
+#if HAVE_GTK4
+	fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+#else
 	fd = vficon_find_data_by_coord(vf, static_cast<gint>(bevent->x), static_cast<gint>(bevent->y), &iter);
+#endif
 
 	if (fd)
 		{
 		vf->click_fd = fd;
 		vficon_selection_add(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
 
+#if HAVE_GTK4
+		switch (event->button)
+#else
 		switch (bevent->button)
+#endif
 			{
 			case GDK_BUTTON_PRIMARY:
 				if (!gtk_widget_has_focus(vf->listview))
@@ -1194,7 +1206,11 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 					gtk_widget_grab_focus(vf->listview);
 					}
 
+#if HAVE_GTK4
+				if (event->press_count == 2 && vf->layout)
+#else
 				if (bevent->type == GDK_2BUTTON_PRESS && vf->layout)
+#endif
 					{
 					if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
 						{
@@ -1219,7 +1235,11 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 	return FALSE;
 }
 
+#if HAVE_GTK4
+gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *event)
+#else
 gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
@@ -1227,15 +1247,26 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	tip_schedule(vf);
 
+#if HAVE_GTK4
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, event->button))
+#else
 	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent->button))
+#endif
 		{
 		return TRUE;
 		}
 
+#if HAVE_GTK4
+	if (static_cast<gint>(event->x) != 0 || static_cast<gint>(event->y) != 0)
+		{
+		fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+		}
+#else
 	if (static_cast<gint>(bevent->x) != 0 || static_cast<gint>(bevent->y) != 0)
 		{
 		fd = vficon_find_data_by_coord(vf, static_cast<gint>(bevent->x), static_cast<gint>(bevent->y), &iter);
 		}
+#endif
 
 	if (vf->click_fd)
 		{
@@ -1246,18 +1277,30 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	was_selected = !!(fd->selected & SELECTION_SELECTED);
 
+#if HAVE_GTK4
+	switch (event->button)
+#else
 	switch (bevent->button)
+#endif
 		{
 		case GDK_BUTTON_PRIMARY:
 			{
 			vficon_set_focus(vf, fd);
 
+#if HAVE_GTK4
+			if (event->state & GDK_CONTROL_MASK)
+#else
 			if (bevent->state & GDK_CONTROL_MASK)
+#endif
 				{
 				gboolean select;
 
 				select = !(fd->selected & SELECTION_SELECTED);
+#if HAVE_GTK4
+				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#else
 				if ((bevent->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#endif
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, select);
 					}
@@ -1270,7 +1313,11 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 				{
 				vficon_select_none(vf);
 
+#if HAVE_GTK4
+				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#else
 				if ((bevent->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#endif
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, TRUE);
 					}

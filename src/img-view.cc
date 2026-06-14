@@ -640,7 +640,11 @@ static gboolean view_window_key_press_cb(GtkWidget * (widget), GdkEventKey *even
  * view window main routines
  *-----------------------------------------------------------------------------
  */
+#if HAVE_GTK4
+static void button_cb(ImageWindow *imd, GqMouseButtonEvent *event, gpointer data)
+#else
 static void button_cb(ImageWindow *imd, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto vw = static_cast<ViewWindow *>(data);
 	GtkWidget *menu;

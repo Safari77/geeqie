@@ -30,6 +30,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "compat.h"
+
 enum StereoPixbufData : gint;
 
 struct CollectInfo;
@@ -93,7 +95,11 @@ struct ImageWindow
 	gpointer data_state;
 
 	/* button, scroll functions */
+#if HAVE_GTK4
+	void (*func_button)(ImageWindow *, GqMouseButtonEvent *event, gpointer);
+#else
 	void (*func_button)(ImageWindow *, GdkEventButton *event, gpointer);
+#endif
 	void (*func_drag)(ImageWindow *, GdkEventMotion *event, gdouble dx, gdouble dy, gpointer);
 	void (*func_scroll)(ImageWindow *, GdkEventScroll *event, gpointer);
 	void (*func_focus_in)(ImageWindow *, gpointer);
@@ -145,9 +151,15 @@ void image_attach_window(ImageWindow *imd, GtkWidget *window,
 void image_set_update_func(ImageWindow *imd,
 			   void (*func)(ImageWindow *imd, gpointer data),
 			   gpointer data);
+#if HAVE_GTK4
+void image_set_button_func(ImageWindow *imd,
+	void (*func)(ImageWindow *, GqMouseButtonEvent *event, gpointer),
+	gpointer data);
+#else
 void image_set_button_func(ImageWindow *imd,
 	void (*func)(ImageWindow *, GdkEventButton *event, gpointer),
 	gpointer data);
+#endif
 void image_set_drag_func(ImageWindow *imd,
 	void (*func)(ImageWindow *, GdkEventMotion *event, gdouble dx, gdouble dy, gpointer),
 	gpointer data);

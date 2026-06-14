@@ -1726,7 +1726,11 @@ static void layout_image_focus_in_cb(ImageWindow *imd, gpointer data)
 }
 
 
+#if HAVE_GTK4
+static void layout_image_button_cb(ImageWindow *imd, GqMouseButtonEvent *event, gpointer data)
+#else
 static void layout_image_button_cb(ImageWindow *imd, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 	GtkWidget *menu;
@@ -1735,7 +1739,11 @@ static void layout_image_button_cb(ImageWindow *imd, GdkEventButton *event, gpoi
 	switch (event->button)
 		{
 		case GDK_BUTTON_PRIMARY:
+#if HAVE_GTK4
+			if (event->press_count == 2)
+#else
 			if (event->type == GDK_2BUTTON_PRESS)
+#endif
 				{
 				layout_image_full_screen_toggle(lw);
 				}
@@ -1866,7 +1874,11 @@ static void layout_image_drag_cb(ImageWindow *imd, GdkEventMotion *event, gdoubl
 		}
 }
 
+#if HAVE_GTK4
+static void layout_image_button_inactive_cb(ImageWindow *imd, GqMouseButtonEvent *event, gpointer data)
+#else
 static void layout_image_button_inactive_cb(ImageWindow *imd, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 	GtkWidget *menu;
