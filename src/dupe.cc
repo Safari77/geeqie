@@ -115,6 +115,7 @@ constexpr gint DUPE_DEF_HEIGHT = 400;
 
 constexpr gdouble DUPE_PROGRESS_PULSE_STEP = 0.0001;
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> dupe_drag_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -124,6 +125,7 @@ constexpr std::array<GtkTargetEntry, 2> dupe_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_COLLECTION_MEMBER_STRING), 0, TARGET_APP_COLLECTION_MEMBER },
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST }
 }};
+#endif
 
 DupeMatchType param_match_mask;
 GList *dupe_window_list = nullptr;	/**< list of open DupeWindow *s */
@@ -4527,6 +4529,7 @@ static GtkWidget *dupe_confirm_dir_list(DupeWindow *dw, GList *list)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static void dupe_dnd_data_set(GtkWidget *widget, GdkDragContext *,
                               GtkSelectionData *selection_data, guint info,
                               guint, gpointer)
@@ -4681,6 +4684,12 @@ static void dupe_dnd_init(DupeWindow *dw)
 	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 }
+#else
+static void dupe_dnd_init(DupeWindow *dw)
+{
+	(void)dw;
+}
+#endif
 
 /*
  *-------------------------------------------------------------------

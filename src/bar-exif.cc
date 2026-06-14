@@ -378,6 +378,7 @@ void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> bar_pane_exif_drag_types{{
 	{ const_cast<gchar *>(TARGET_APP_EXIF_ENTRY_STRING), GTK_TARGET_SAME_APP, TARGET_APP_EXIF_ENTRY },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -387,6 +388,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_exif_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_EXIF_ENTRY_STRING), GTK_TARGET_SAME_APP, TARGET_APP_EXIF_ENTRY },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 #if !HAVE_GTK4
 void bar_pane_exif_entry_dnd_get(GtkWidget *entry, GdkDragContext *,
@@ -495,6 +497,16 @@ void bar_pane_exif_dnd_init(GtkWidget *pane)
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
 	gq_drag_g_signal_connect(G_OBJECT(pane), "drag_data_received",
 			 G_CALLBACK(bar_pane_exif_dnd_receive), nullptr);
+}
+#else
+void bar_pane_exif_entry_dnd_init(GtkWidget *entry)
+{
+	(void)entry;
+}
+
+void bar_pane_exif_dnd_init(GtkWidget *pane)
+{
+	(void)pane;
 }
 #endif
 

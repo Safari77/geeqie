@@ -104,9 +104,11 @@ constexpr struct OsdTag
 	{"%Xmp.dc.rights%",					N_("© Rights")},
 };
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 1> osd_drag_types{{
 	{ const_cast<gchar *>("text/plain"), GTK_TARGET_SAME_APP, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 void tag_data_add_key_to_template(TagData *td)
 {
@@ -141,8 +143,10 @@ GtkWidget *osd_tag_button_new(const OsdTag &tag, GtkWidget *template_view)
 	g_signal_connect_swapped(G_OBJECT(tag_button), "destroy", G_CALLBACK(tag_data_free), td);
 	gtk_widget_show(tag_button);
 
+#if !HAVE_GTK4
 	gq_gtk_drag_source_set(tag_button, GDK_BUTTON1_MASK, osd_drag_types.data(), osd_drag_types.size(), GDK_ACTION_COPY);
 	gq_drag_g_signal_swapped(G_OBJECT(tag_button), "drag_data_get", G_CALLBACK(tag_data_add_key_to_selection), td);
+#endif
 
 	return tag_button;
 }

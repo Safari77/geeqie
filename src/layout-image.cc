@@ -1042,6 +1042,7 @@ static void layout_image_dnd_end(GtkWidget *, GdkDragContext *context, gpointer 
 
 static void layout_image_dnd_init(LayoutWindow *lw, gint i)
 {
+#if !HAVE_GTK4
 	ImageWindow *imd = lw->split_images[i];
 
 	gq_gtk_drag_source_set(imd->pr, GDK_BUTTON2_MASK,
@@ -1058,6 +1059,10 @@ static void layout_image_dnd_init(LayoutWindow *lw, gint i)
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 	gq_drag_g_signal_connect(G_OBJECT(imd->pr), "drag_data_received",
 			 G_CALLBACK(layout_image_dnd_receive), lw);
+#else
+	(void)lw;
+	(void)i;
+#endif
 }
 
 

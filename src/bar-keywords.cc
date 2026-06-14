@@ -498,6 +498,7 @@ void bar_pane_keywords_changed(GtkTextBuffer *, gpointer data)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drag_types{{
 	{ const_cast<gchar *>(TARGET_APP_KEYWORD_PATH_STRING), GTK_TARGET_SAME_WIDGET, TARGET_APP_KEYWORD_PATH },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -507,6 +508,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_KEYWORD_PATH_STRING), GTK_TARGET_SAME_WIDGET, TARGET_APP_KEYWORD_PATH },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 #if !HAVE_GTK4
 void bar_pane_keywords_dnd_get(GtkWidget *tree_view, GdkDragContext *,
@@ -1503,6 +1505,7 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	gtk_tree_view_append_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 	gtk_tree_view_set_expander_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 
+#if !HAVE_GTK4
 	gq_gtk_drag_source_set(pkd->keyword_treeview,
 	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    bar_pane_keywords_drag_types.data(), bar_pane_keywords_drag_types.size(),
@@ -1526,6 +1529,7 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 
 	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
 			 G_CALLBACK(bar_pane_keywords_dnd_motion), pkd);
+#endif
 
 #if HAVE_GTK4
 	GtkGesture *gesture = gtk_gesture_click_new();

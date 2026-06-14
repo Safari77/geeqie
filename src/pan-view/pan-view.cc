@@ -2251,6 +2251,7 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
  *-----------------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static void pan_window_get_dnd_data(GtkWidget *, GdkDragContext *context,
 				    gint, gint,
 				    GtkSelectionData *selection_data, guint info,
@@ -2314,6 +2315,12 @@ static void pan_window_dnd_init(PanWindow *pw)
 	gq_drag_g_signal_connect(G_OBJECT(widget), "drag_data_received",
 			 G_CALLBACK(pan_window_get_dnd_data), pw);
 }
+#else
+static void pan_window_dnd_init(PanWindow *pw)
+{
+	(void)pw;
+}
+#endif
 
 FileDataList *pan_list_tree(PanWindow *pw, SortType method)
 {

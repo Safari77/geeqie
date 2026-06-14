@@ -99,6 +99,7 @@ enum {
 	TARGET_TEXT_PLAIN
 };
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 3> bookmark_drop_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("x-url/http"),    0, TARGET_X_URL },
@@ -109,6 +110,7 @@ constexpr std::array<GtkTargetEntry, 2> bookmark_drag_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"),    0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 std::vector<BookMarkData *> bookmark_widget_list;
 std::vector<std::pair<std::string, std::string>> bookmark_default_list;
@@ -550,6 +552,7 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 	g_signal_connect(G_OBJECT(button), "key_press_event",
 	                 G_CALLBACK(bookmark_keypress_cb), bm);
 
+#if !HAVE_GTK4
 	gq_gtk_drag_source_set(button, GDK_BUTTON1_MASK,
 	                       bookmark_drag_types.data(), bookmark_drag_types.size(),
 	                       static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
@@ -557,6 +560,7 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 	                         G_CALLBACK(bookmark_drag_set_data), bm);
 	gq_drag_g_signal_connect(G_OBJECT(button), "drag_begin",
 	                         G_CALLBACK(bookmark_drag_begin), nullptr);
+#endif
 
 	gtk_widget_set_has_tooltip(button, TRUE);
 	g_signal_connect(G_OBJECT(button), "query-tooltip", G_CALLBACK(bookmark_tooltip_cb), b);
@@ -700,12 +704,14 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 	g_object_set_data(G_OBJECT(scrolled), BOOKMARK_DATA_KEY, bm);
 	bm->widget = scrolled;
 
+#if !HAVE_GTK4
 	gq_gtk_drag_dest_set(scrolled,
 	                  static_cast<GtkDestDefaults>(GTK_DEST_DEFAULT_MOTION | GTK_DEST_DEFAULT_DROP),
 	                  bookmark_drop_types.data(), bookmark_drop_types.size(),
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 	g_signal_connect(G_OBJECT(scrolled), "drag_data_received",
 			 G_CALLBACK(bookmark_dnd_get_data), bm);
+#endif
 
 	bookmark_widget_list.push_back(bm);
 

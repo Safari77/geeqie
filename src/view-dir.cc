@@ -58,9 +58,11 @@
 namespace
 {
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 1> vd_dnd_drop_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST }
 }};
+#endif
 
 GdkPixbuf *create_folder_icon_with_emblem(GtkIconTheme *icon_theme, const gchar *emblem, const gchar *fallback_icon, gint size)
 {
@@ -812,6 +814,7 @@ void vd_new_folder(ViewDir *vd, FileData *dir_fd)
  *-----------------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static void vd_dest_set(ViewDir *vd, gint enable)
 {
 	if (enable)
@@ -827,7 +830,6 @@ static void vd_dest_set(ViewDir *vd, gint enable)
 		}
 }
 
-#if !HAVE_GTK4
 static void vd_dnd_get(GtkWidget *, GdkDragContext *,
 			   GtkSelectionData *selection_data, guint info,
 			   guint, gpointer data)
@@ -1040,6 +1042,7 @@ static void vd_dnd_drop_leave(GtkWidget *, GdkDragContext *, guint, gpointer dat
 
 void vd_dnd_init(ViewDir *vd)
 {
+#if !HAVE_GTK4
 	gq_gtk_drag_source_set(vd->view, static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    dnd_file_drag_types.data(), dnd_file_drag_types.size(),
 	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_ASK));
@@ -1057,6 +1060,9 @@ void vd_dnd_init(ViewDir *vd)
 			 G_CALLBACK(vd_dnd_drop_motion), vd);
 	gq_drag_g_signal_connect(G_OBJECT(vd->view), "drag_leave",
 			 G_CALLBACK(vd_dnd_drop_leave), vd);
+#else
+	(void)vd;
+#endif
 }
 
 /*

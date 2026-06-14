@@ -77,6 +77,7 @@ constexpr gint COLLECT_TABLE_MAX_COLUMNS = 32;
 
 constexpr gint THUMB_BORDER_PADDING = 2;
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 3> collection_drag_types{{
 	{ const_cast<gchar *>(TARGET_APP_COLLECTION_MEMBER_STRING), 0, TARGET_APP_COLLECTION_MEMBER },
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
@@ -87,6 +88,7 @@ constexpr std::array<GtkTargetEntry, 2> collection_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_COLLECTION_MEMBER_STRING), 0, TARGET_APP_COLLECTION_MEMBER },
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST }
 }};
+#endif
 
 inline gboolean info_selected(const CollectInfo *info)
 {

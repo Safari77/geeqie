@@ -30,6 +30,7 @@
 #include "options.h"
 #include "pixbuf-util.h"
 
+#if !HAVE_GTK4
 
 #define DND_ICON_SIZE (options->dnd_icon_size)
 
@@ -164,6 +165,8 @@ void dnd_set_drag_label(GtkWidget *widget, GdkDragContext *context, const gchar 
 	g_signal_connect(G_OBJECT(widget), "drag_end",
 			 G_CALLBACK(dnd_set_drag_label_end_cb), window);
 }
+
+#endif
 
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
