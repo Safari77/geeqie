@@ -94,7 +94,7 @@ void image_sim_channel_equal(ImageSimilarityData::Avg &pix)
  */
 gdouble image_sim_data_compare_transfo(const ImageSimilarityData *a, const ImageSimilarityData *b, gchar transfo, const ImageSimilarityCheckAbort &check_abort)
 {
-	if (!a || !b || !a->filled || !b->filled) return 0.0;
+	if (!image_sim_filled(a) || !image_sim_filled(b)) return 0.0;
 
 	gint sim = 0.0;
 	gint i2;
@@ -135,16 +135,6 @@ gdouble image_sim_data_compare(const ImageSimilarityData *a, const ImageSimilari
 
 } // namespace
 
-ImageSimilarityData *image_sim_new()
-{
-	return new ImageSimilarityData();
-}
-
-void image_sim_free(ImageSimilarityData *sd)
-{
-	delete sd;
-}
-
 static void image_sim_channel_norm(ImageSimilarityData::Avg &pix)
 {
 	const auto [l, h] = std::minmax_element(pix.cbegin(), pix.cend());
@@ -157,35 +147,38 @@ static void image_sim_channel_norm(ImageSimilarityData::Avg &pix)
 		}
 }
 
+ImageSimilarityData::ImageSimilarityData(GdkPixbuf *pixbuf)
+	: ImageSimilarityData()
+{
+	fill_data(pixbuf);
+}
+
 /*
  * The Alternate algorithm is only for testing of new techniques to
  * improve the result, and hopes to reduce false positives.
  */
-void image_sim_alternate_processing(ImageSimilarityData *sd)
+void ImageSimilarityData::alternate_processing()
 {
-	gint i;
-
 	if (!options->alternate_similarity_algorithm.enabled)
 		{
 		return;
 		}
 
-	image_sim_channel_norm(sd->avg_r);
-	image_sim_channel_norm(sd->avg_g);
-	image_sim_channel_norm(sd->avg_b);
+	image_sim_channel_norm(avg_r);
+	image_sim_channel_norm(avg_g);
+	image_sim_channel_norm(avg_b);
 
-	image_sim_channel_equal(sd->avg_r);
-	image_sim_channel_equal(sd->avg_g);
-	image_sim_channel_equal(sd->avg_b);
+	image_sim_channel_equal(avg_r);
+	image_sim_channel_equal(avg_g);
+	image_sim_channel_equal(avg_b);
 
 	if (options->alternate_similarity_algorithm.grayscale)
 		{
-		for (i = 0; i < (gint)sizeof(sd->avg_r); i++)
+		for (size_t i = 0; i < std::tuple_size_v<Avg>; i++)
 			{
-			guint8 n;
+			guint8 n = static_cast<gint>(avg_r[i] + avg_g[i] + avg_b[i]) / 3;
 
-			n = (guint8)((gint)(sd->avg_r[i] + sd->avg_g[i] + sd->avg_b[i]) / 3);
-			sd->avg_r[i] = sd->avg_g[i] = sd->avg_b[i] = n;
+			avg_r[i] = avg_g[i] = avg_b[i] = n;
 			}
 		}
 }
@@ -269,7 +262,7 @@ void ImageSimilarityData::fill_data(GdkPixbuf *pixbuf)
 		h_left -= y_inc;
 		}
 
-	filled = TRUE;
+	filled = true;
 }
 
 GdkPixbuf *ImageSimilarityData::to_pixbuf() const
@@ -295,6 +288,47 @@ GdkPixbuf *ImageSimilarityData::to_pixbuf() const
 	return pixbuf;
 }
 
+bool ImageSimilarityData::fill_data(FILE *f)
+{
+	guint8 pixel_buf[3];
+
+	for (gint y = 0; y < 32; y++)
+		{
+		gint s = y * 32;
+		for (gint x = 0; x < 32; x++)
+			{
+			if (fread(&pixel_buf, sizeof(pixel_buf), 1, f) != 1) return false;
+
+			avg_r[s + x] = pixel_buf[0];
+			avg_g[s + x] = pixel_buf[1];
+			avg_b[s + x] = pixel_buf[2];
+			}
+		}
+
+	filled = true;
+	return true;
+}
+
+void ImageSimilarityData::to_string(GString *str) const
+{
+	guint8 buf[3 * 32];
+
+	for (guint y = 0; y < 32; y++)
+		{
+		guint s = y * 32;
+		guint n = 0;
+
+		for (guint x = 0; x < 32; x++)
+			{
+			buf[n++] = avg_r[s + x];
+			buf[n++] = avg_g[s + x];
+			buf[n++] = avg_b[s + x];
+			}
+
+		g_string_append_len(str, (const gchar *)buf, sizeof(buf));
+		}
+}
+
 static gdouble alternate_image_sim_compare_fast(const ImageSimilarityData *a, const ImageSimilarityData *b, gdouble min)
 {
 	gint sim;
@@ -302,7 +336,7 @@ static gdouble alternate_image_sim_compare_fast(const ImageSimilarityData *a, co
 	gint j;
 	gint ld;
 
-	if (!a || !b || !a->filled || !b->filled) return 0.0;
+	if (!image_sim_filled(a) || !image_sim_filled(b)) return 0.0;
 
 	sim = 0.0;
 	ld = 0;
@@ -351,9 +385,8 @@ gdouble image_sim_compare_fast(ImageSimilarityData *a, ImageSimilarityData *b, g
 	return image_sim_data_compare(a, b, [min](gdouble sim){ return (sim / (255.0 * 1024.0 * 3.0)) > min; });
 }
 
-gboolean image_sim_filled(const ImageSimilarityData *sd)
+bool image_sim_filled(const ImageSimilarityData *sd)
 {
-	if (!sd) return FALSE;
-	return sd->filled;
+	return sd && sd->filled;
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

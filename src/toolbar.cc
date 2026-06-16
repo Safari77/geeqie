@@ -119,7 +119,7 @@ static void toolbarlist_add_button(const gchar *name, const gchar *label,
 		}
 	else
 		{
-		image = gtk_image_new_from_icon_name(GQ_ICON_GO_JUMP, GTK_ICON_SIZE_BUTTON);
+		image = gq_gtk_image_new_from_icon_name(GQ_ICON_GO_JUMP, GTK_ICON_SIZE_BUTTON);
 		}
 	gq_gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 0);
 	gtk_widget_show(image);

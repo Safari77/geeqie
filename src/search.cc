@@ -126,10 +126,7 @@ struct SearchUi
 
 	// "Image dimensions" row
 	GtkWidget *menu_dimensions;
-	GtkWidget *spin_width;
-	GtkWidget *spin_height;
-	GtkWidget *spin_width_end;
-	GtkWidget *spin_height_end;
+	GtkWidget *box_dimensions_end;
 
 	// "Image content" row
 	GtkWidget *spin_similarity;
@@ -251,13 +248,11 @@ struct SearchData
 	GetFileDate get_file_date;
 	SearchDate search_date;
 	SearchDate search_date_end;
-	gint   search_width;
-	gint   search_height;
-	gint   search_width_end;
-	gint   search_height_end;
+	GqSize search_dimensions;
+	GqSize search_dimensions_end;
 	gint   search_similarity;
 	gchar *search_similarity_path;
-	CacheData *search_similarity_cd;
+	std::unique_ptr<CacheData> search_similarity_cd;
 	GList *search_keyword_list;
 	gchar *search_comment;
 	GRegex *search_comment_regex;
@@ -316,7 +311,7 @@ struct SearchData
 	guint update_idle_id; /* event source id */
 
 	ImageLoader *img_loader;
-	CacheData   *img_cd;
+	std::unique_ptr<CacheData> img_cd;
 
 	FileData *click_fd;
 
@@ -328,8 +323,7 @@ struct SearchData
 struct MatchFileData
 {
 	FileData *fd;
-	gint width;
-	gint height;
+	GqSize dimensions;
 	gint rank;
 };
 
@@ -406,6 +400,7 @@ constexpr gint SEARCH_BUFFER_FLUSH_SIZE = 99;
 
 constexpr auto FORMAT_CLASS_BROKEN = static_cast<FileFormatClass>(FILE_FORMAT_CLASSES + 1);
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> result_drag_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -415,6 +410,7 @@ constexpr std::array<GtkTargetEntry, 2> result_drop_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 template<typename T>
 bool match_is_between(T val, T a, T b)
@@ -706,8 +702,8 @@ static void search_result_append(SearchData *sd, MatchFileData *mfd)
 	if (!fd) return;
 
 	g_autofree gchar *text_size = text_from_size(fd->size);
-	g_autofree gchar *text_dim = (mfd->width > 0 && mfd->height > 0) ?
-	            g_strdup_printf("%d x %d", mfd->width, mfd->height) : nullptr;
+	g_autofree gchar *text_dim = (mfd->dimensions.width > 0 && mfd->dimensions.height > 0) ?
+	            g_strdup_printf("%d x %d", mfd->dimensions.width, mfd->dimensions.height) : nullptr;
 
 	auto *store = GTK_LIST_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(sd->ui.result_view)));
 	gtk_list_store_append(store, &iter);
@@ -1690,11 +1686,9 @@ static void search_stop(SearchData *sd)
 
 	image_loader_free(sd->img_loader);
 	sd->img_loader = nullptr;
-	cache_sim_data_free(sd->img_cd);
-	sd->img_cd = nullptr;
+	sd->img_cd.reset();
 
-	cache_sim_data_free(sd->search_similarity_cd);
-	sd->search_similarity_cd = nullptr;
+	sd->search_similarity_cd.reset();
 
 	search_buffer_flush(sd);
 
@@ -1742,8 +1736,7 @@ static void search_file_load_process(SearchData *sd, CacheData *cd)
 
 		if (sd->match_similarity_enable && !cd->similarity)
 			{
-			ImageSimilarityData sim{};
-			sim.fill_data(pixbuf);
+			ImageSimilarityData sim{ pixbuf };
 
 			cd->set_similarity(sim);
 			}
@@ -1766,7 +1759,7 @@ static void search_file_load_process(SearchData *sd, CacheData *cd)
 static void search_file_load_done_cb(ImageLoader *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
-	search_file_load_process(sd, sd->img_cd);
+	search_file_load_process(sd, sd->img_cd.get());
 }
 
 static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolean &match)
@@ -1776,7 +1769,7 @@ static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolea
 
 	if (!sd->img_cd)
 		{
-		sd->img_cd = cache_sim_data_new(mfd.fd->path);
+		sd->img_cd = std::make_unique<CacheData>(mfd.fd->path);
 
 		if ((sd->match_dimensions_enable && !sd->img_cd->dimensions) ||
 		    (sd->match_similarity_enable && !sd->img_cd->similarity) ||
@@ -1795,43 +1788,43 @@ static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolea
 			}
 		}
 
-	if (sd->match_broken_enable && sd->img_cd->dimensions)
+	const auto &dimensions = sd->img_cd->dimensions; // prevent clang-tidy bugprone-unchecked-optional-access
+
+	if (sd->match_broken_enable && dimensions)
 		{
 		tested = TRUE;
 		tmatch = FALSE;
-		if (sd->match_class == SEARCH_MATCH_EQUAL && sd->img_cd->dimensions->width == -1)
+		if (sd->match_class == SEARCH_MATCH_EQUAL && dimensions->width == -1)
 			{
 			tmatch = TRUE;
 			}
-		else if (sd->match_class == SEARCH_MATCH_NONE && sd->img_cd->dimensions->width != -1)
+		else if (sd->match_class == SEARCH_MATCH_NONE && dimensions->width != -1)
 			{
 			tmatch = TRUE;
 			}
 		}
 
-	if (tmatch && sd->match_dimensions_enable && sd->img_cd->dimensions)
+	if (tmatch && sd->match_dimensions_enable && dimensions)
 		{
-		const GqSize &dimensions = sd->img_cd->dimensions.value();
-
 		tmatch = FALSE;
 		tested = TRUE;
 
 		if (sd->match_dimensions == SEARCH_MATCH_EQUAL)
 			{
-			tmatch = (dimensions.width == sd->search_width && dimensions.height == sd->search_height);
+			tmatch = (dimensions.value() == sd->search_dimensions);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_UNDER)
 			{
-			tmatch = (dimensions.width < sd->search_width && dimensions.height < sd->search_height);
+			tmatch = (dimensions->width < sd->search_dimensions.width && dimensions->height < sd->search_dimensions.height);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_OVER)
 			{
-			tmatch = (dimensions.width > sd->search_width && dimensions.height > sd->search_height);
+			tmatch = (dimensions->width > sd->search_dimensions.width && dimensions->height > sd->search_dimensions.height);
 			}
 		else if (sd->match_dimensions == SEARCH_MATCH_BETWEEN)
 			{
-			tmatch = match_is_between(dimensions.width, sd->search_width, sd->search_width_end) &&
-			         match_is_between(dimensions.height, sd->search_height, sd->search_height_end);
+			tmatch = match_is_between(dimensions->width, sd->search_dimensions.width, sd->search_dimensions_end.width) &&
+			         match_is_between(dimensions->height, sd->search_dimensions.height, sd->search_dimensions_end.height);
 			}
 		}
 
@@ -1856,14 +1849,12 @@ static gboolean search_file_do_extra(SearchData *sd, MatchFileData &mfd, gboolea
 			}
 		}
 
-	if (sd->img_cd->dimensions)
+	if (dimensions)
 		{
-		mfd.width = sd->img_cd->dimensions->width;
-		mfd.height = sd->img_cd->dimensions->height;
+		mfd.dimensions = dimensions.value();
 		}
 
-	cache_sim_data_free(sd->img_cd);
-	sd->img_cd = nullptr;
+	sd->img_cd.reset();
 
 	match = (tmatch && tested);
 
@@ -2344,7 +2335,7 @@ static gboolean search_step_cb(gpointer data)
 static void search_similarity_load_done_cb(ImageLoader *, gpointer data)
 {
 	auto sd = static_cast<SearchData *>(data);
-	search_file_load_process(sd, sd->search_similarity_cd);
+	search_file_load_process(sd, sd->search_similarity_cd.get());
 }
 
 static GRegex *create_search_regex(const gchar *pattern)
@@ -2425,7 +2416,7 @@ static void search_start(SearchData *sd)
 	    !sd->search_similarity_cd &&
 	    isfile(sd->search_similarity_path))
 		{
-		sd->search_similarity_cd = cache_sim_data_new(sd->search_similarity_path);
+		sd->search_similarity_cd = std::make_unique<CacheData>(sd->search_similarity_path);
 
 		if (!sd->search_similarity_cd->similarity)
 			{
@@ -2716,19 +2707,6 @@ static void search_thumb_toggle_cb(GtkWidget *button, gpointer data)
 	search_result_thumb_enable(sd, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)));
 }
 
-static gint sort_matchdata_dimensions(MatchFileData *a, MatchFileData *b)
-{
-	gint sa;
-	gint sb;
-
-	sa = a->width * a->height;
-	sb = b->width * b->height;
-
-	if (sa > sb) return 1;
-	if (sa < sb) return -1;
-	return 0;
-}
-
 static gint search_result_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b, gpointer data)
 {
 	gint n = GPOINTER_TO_INT(data);
@@ -2764,8 +2742,7 @@ static gint search_result_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 			return 0;
 			break;
 		case SEARCH_COLUMN_DIMENSIONS:
-			return sort_matchdata_dimensions(fda, fdb);
-			break;
+			return fda->dimensions.area() - fdb->dimensions.area();
 		case SEARCH_COLUMN_PATH:
 			return utf8_compare(fda->fd->path, fdb->fd->path, TRUE);
 			break;
@@ -2856,7 +2833,7 @@ static void menu_choice_dimensions_cb(GtkWidget *combo, gpointer data)
 
 	if (!menu_choice_get_match_type(combo, &sd->match_dimensions)) return;
 
-	gtk_widget_set_visible(gtk_widget_get_parent(sd->ui.spin_width_end),
+	gtk_widget_set_visible(sd->ui.box_dimensions_end,
 	                       sd->match_dimensions == SEARCH_MATCH_BETWEEN);
 }
 
@@ -2891,6 +2868,15 @@ static GtkWidget *menu_spin(GtkWidget *box, gdouble min, gdouble max, gpointer d
 	gtk_widget_show(spin);
 
 	return spin;
+}
+
+static void menu_dimensions_spin(GtkWidget *box, GqSize &dimensions)
+{
+	constexpr std::size_t dimension_max = 1000000;
+
+	menu_spin(box, 0, dimension_max, &dimensions.width);
+	pref_label_new(box, "x");
+	menu_spin(box, 0, dimension_max, &dimensions.height);
 }
 
 static void menu_choice_check_cb(GtkWidget *button, gpointer data)
@@ -3039,7 +3025,7 @@ static void search_window_destroy_cb(GtkWidget *, gpointer data)
 
 	file_data_unregister_notify_func(search_notify_cb, sd);
 
-	g_free(sd);
+	delete sd;
 }
 
 static void select_collection_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
@@ -3103,15 +3089,13 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	GtkTreeSortable *sortable;
 	GdkGeometry geometry;
 
-	auto sd = g_new0(SearchData, 1);
+	auto *sd = new SearchData();
 
 	sd->search_dir_fd = file_data_ref(dir_fd);
 	sd->search_path_recurse = TRUE;
 	sd->search_size = 0;
-	sd->search_width = 640;
-	sd->search_height = 480;
-	sd->search_width_end = 1024;
-	sd->search_height_end = 768;
+	sd->search_dimensions = { 640, 480 };
+	sd->search_dimensions_end = { 1024, 768 };
 
 	sd->search_type = SEARCH_MATCH_NONE;
 
@@ -3260,17 +3244,13 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	sd->ui.menu_dimensions = menu_choice_menu(hbox, text_search_menu_dimensions,
 	                                          G_CALLBACK(menu_choice_dimensions_cb), sd);
 	pad_box = pref_box_new(hbox, FALSE, GTK_ORIENTATION_HORIZONTAL, 2);
-	constexpr std::size_t dimension_max = 1000000;
-	sd->ui.spin_width = menu_spin(pad_box, 0, dimension_max, &sd->search_width);
-	pref_label_new(pad_box, "x");
-	sd->ui.spin_height = menu_spin(pad_box, 0, dimension_max, &sd->search_height);
+	menu_dimensions_spin(pad_box, sd->search_dimensions);
 	hbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), hbox2, FALSE, FALSE, 0);
 	pref_label_new(hbox2, _("and"));
 	pref_spacer(hbox2, PREF_PAD_SPACE - (2*2));
-	sd->ui.spin_width_end = menu_spin(hbox2, 0, dimension_max, &sd->search_width_end);
-	pref_label_new(hbox2, "x");
-	sd->ui.spin_height_end = menu_spin(hbox2, 0, dimension_max, &sd->search_height_end);
+	menu_dimensions_spin(hbox2, sd->search_dimensions_end);
+	sd->ui.box_dimensions_end = hbox2;
 
 	/* Search for image similarity */
 	hbox = menu_choice(sd->ui.box_search, _("Image content is"), &sd->match_similarity_enable);

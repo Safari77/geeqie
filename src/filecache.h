@@ -23,15 +23,61 @@
 
 #include <glib.h>
 
-struct FileCacheData;
+#include <list>
+#include <optional>
+
+// From filedata.h
 class FileData;
+enum NotifyType : gint;
 
-using FileCacheReleaseFunc = void (*)(FileData *);
+class FileCache {
+    public:
+	using ReleaseFunc = void (*)(FileData *);
 
-FileCacheData *file_cache_new(FileCacheReleaseFunc release, gulong max_size);
-gboolean file_cache_get(FileCacheData *fc, FileData *fd);
-void file_cache_put(FileCacheData *fc, FileData *fd, gulong size);
-void file_cache_set_max_size(FileCacheData *fc, gulong size);
+	FileCache(ReleaseFunc release, size_t max_size);
+	~FileCache();
+
+	// Not copyable.
+	FileCache(const FileCache &) = delete;
+	FileCache &operator=(const FileCache &) = delete;
+
+	// TODO[xsdg]: The name "get" here is really misleading.  Rename.
+	bool get(FileData *fd);
+	void put(FileData *fd, size_t size);
+	void set_max_size(size_t size);
+
+    private:
+	struct Entry {
+		Entry(FileData *fd, size_t size) : fd(fd), size(size) {}
+
+		// Not copyable.
+		Entry(const Entry &other) = delete;
+		Entry &operator=(const Entry &other) = delete;
+
+		FileData *fd;
+		size_t size;
+		bool checking_if_changed = false;
+	};
+	using ListIterT = std::list<Entry>::iterator;
+
+	void dump();
+	bool remove_entry(ListIterT entry_iter);
+	std::optional<ListIterT> find_by_fd(FileData *fd);
+	static void notify_cb(FileData *fd, NotifyType type, gpointer data);
+	void shrink_to_max_size();
+
+	ReleaseFunc release_;
+	std::list<Entry> contents_;
+	size_t max_size_;
+	size_t size_ = 0;
+};
+
+using FileCacheReleaseFunc = FileCache::ReleaseFunc;
+
+FileCache *file_cache_new(FileCacheReleaseFunc release, size_t max_size);
+bool file_cache_get(FileCache *fc, FileData *fd);
+void file_cache_put(FileCache *fc, FileData *fd, size_t size);
+void file_cache_set_max_size(FileCache *fc, size_t size);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

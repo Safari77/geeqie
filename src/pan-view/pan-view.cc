@@ -79,8 +79,8 @@ namespace
 {
 
 struct PanCacheData {
-	FileData *fd;
-	CacheData *cd;
+	FileDataRef fd_ref{nullptr};
+	std::unique_ptr<CacheData> cd;
 };
 
 struct PanGrid {
@@ -107,15 +107,6 @@ constexpr gint PAN_POPUP_BORDER = 1;
 constexpr guint8 PAN_POPUP_ALPHA = 255;
 constexpr GqColor PAN_POPUP_COLOR{255, 255, 225, PAN_POPUP_ALPHA};
 constexpr GqColor PAN_POPUP_BORDER_COLOR{0, 0, 0, PAN_POPUP_ALPHA};
-
-void pan_cache_data_free(PanCacheData *pc)
-{
-	if (!pc) return;
-
-	cache_sim_data_free(pc->cd);
-	file_data_unref(pc->fd);
-	g_free(pc);
-}
 
 } // namespace
 
@@ -217,8 +208,7 @@ static void pan_queue_thumb_done_cb(ThumbLoader *tl, gpointer data)
 
 	g_clear_pointer(&pw->tl, thumb_loader_free);
 
-	while (pan_queue_step(pw))
-		;
+	while (pan_queue_step(pw)) {}
 }
 
 static void pan_queue_image_done_cb(ImageLoader *il, gpointer data)
@@ -498,7 +488,7 @@ static gint pan_cache_sort_file_cb(gconstpointer a, gconstpointer b, gpointer da
 	auto pca = static_cast<const PanCacheData *>(a);
 	auto pcb = static_cast<const PanCacheData *>(b);
 	auto settings = static_cast<FileData::FileList::SortSettings *>(data);
-	return filelist_sort_compare_filedata(pca->fd, pcb->fd, settings);
+	return filelist_sort_compare_filedata(pca->fd_ref, pcb->fd_ref, settings);
 }
 
 static void pan_cache_sort(PanWindow *pw, FileData::FileList::SortSettings settings)
@@ -508,8 +498,7 @@ static void pan_cache_sort(PanWindow *pw, FileData::FileList::SortSettings setti
 
 static void pan_cache_free(PanWindow *pw)
 {
-	g_list_free_full(pw->cache_list, reinterpret_cast<GDestroyNotify>(pan_cache_data_free));
-	pw->cache_list = nullptr;
+	g_clear_list(&pw->cache_list, delete_cb<PanCacheData>);
 
 	file_data_list_free(pw->cache_todo);
 	pw->cache_todo = nullptr;
@@ -543,8 +532,7 @@ static void pan_cache_step_done_cb(CacheLoader *cl, gint, gpointer data)
 
 		if (!pc->cd)
 			{
-			pc->cd = cl->cd;
-			cl->cd = nullptr;
+			pc->cd.swap(cl->cd);
 			}
 		}
 
@@ -557,7 +545,6 @@ static void pan_cache_step_done_cb(CacheLoader *cl, gint, gpointer data)
 static gboolean pan_cache_step(PanWindow *pw)
 {
 	FileData *fd;
-	PanCacheData *pc;
 	CacheDataType load_mask;
 
 	if (!pw->cache_todo) return TRUE;
@@ -565,10 +552,8 @@ static gboolean pan_cache_step(PanWindow *pw)
 	fd = static_cast<FileData *>(pw->cache_todo->data);
 	pw->cache_todo = g_list_remove(pw->cache_todo, fd);
 
-	pc = g_new0(PanCacheData, 1);
-	pc->fd = file_data_ref(fd);
-
-	pc->cd = nullptr;
+	auto *pc = new PanCacheData();
+	pc->fd_ref.reset(fd);
 
 	pw->cache_list = g_list_prepend(pw->cache_list, pc);
 
@@ -577,7 +562,7 @@ static gboolean pan_cache_step(PanWindow *pw)
 	load_mask = CACHE_LOADER_NONE;
 	if (pw->size > PAN_IMAGE_SIZE_THUMB_LARGE) load_mask = static_cast<CacheDataType>(load_mask | CACHE_LOADER_DIMENSIONS);
 	if (pw->exif_date_enable) load_mask = static_cast<CacheDataType>(load_mask | CACHE_LOADER_DATE);
-	pw->cache_cl = cache_loader_new(pc->fd, load_mask,
+	pw->cache_cl = cache_loader_new(pc->fd_ref, load_mask,
 					pan_cache_step_done_cb, pw);
 	return (pw->cache_cl == nullptr);
 }
@@ -588,7 +573,7 @@ static void pan_cache_sync_date(const PanWindow *pw, GList *list)
 	static const auto pan_cache_data_compare_fd = [](gconstpointer data, gconstpointer user_data)
 	{
 		auto *pc = static_cast<const PanCacheData *>(data);
-		return (pc->fd == user_data) ? 0 : 1;
+		return (*(pc->fd_ref) == user_data) ? 0 : 1;
 	};
 
 	g_autoptr(GList) haystack = g_list_copy(pw->cache_list);
@@ -602,9 +587,14 @@ static void pan_cache_sync_date(const PanWindow *pw, GList *list)
 			{
 			auto *pc = static_cast<PanCacheData *>(needle->data);
 
-			if (pc->cd && pc->cd->date && pc->cd->date >= 0)
+			if (pc->cd)
 				{
-				fd->date = pc->cd->date.value();
+				const time_t date = pc->cd->date.value_or(-1);
+
+				if (date >= 0)
+					{
+					fd->date = date;
+					}
 				}
 
 			haystack = g_list_delete_link(haystack, needle);
@@ -637,7 +627,7 @@ std::optional<GqSize> pan_cache_get_image_size(PanWindow *pw, const FileData *fd
 	const auto pan_cache_data_cd_dimensions_compare_fd = [](gconstpointer data, gconstpointer user_data)
 	{
 		auto *pc = static_cast<const PanCacheData *>(data);
-		return (pc->cd && pc->cd->dimensions && pc->fd == user_data) ? 0 : 1;
+		return (pc->cd && pc->cd->dimensions && *(pc->fd_ref) == user_data) ? 0 : 1;
 	};
 
 	GList *work = g_list_find_custom(pw->cache_list, fd, pan_cache_data_cd_dimensions_compare_fd);
@@ -649,7 +639,7 @@ std::optional<GqSize> pan_cache_get_image_size(PanWindow *pw, const FileData *fd
 	const GqSize size = pc->cd->dimensions.value(); // NOLINT(bugprone-unchecked-optional-access)
 
 	pw->cache_list = g_list_remove(pw->cache_list, pc);
-	pan_cache_data_free(pc);
+	delete pc;
 
 	return size;
 }
@@ -1116,7 +1106,7 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 
 		if (x != 0 || y!= 0)
 			{
-			keyboard_scroll_calc(x, y, event);
+			keyboard_scroll_calc(x, y, static_cast<GdkModifierType>(event->state), event->keyval, event->time);
 			pixbuf_renderer_scroll(pr, x, y);
 			}
 		}
@@ -1354,9 +1344,8 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 
 	if (pw->info_image_size > PAN_IMAGE_SIZE_THUMB_NONE)
 		{
-		gint iw;
-		gint ih;
-		if (image_load_dimensions(pi->fd, &iw, &ih))
+		GqSize size;
+		if (image_load_dimensions(pi->fd, size))
 			{
 			gint scale = 25;
 
@@ -1381,15 +1370,15 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
 					break;
 				}
 
-			iw = std::max(1, iw * scale / 100);
-			ih = std::max(1, ih * scale / 100);
+			size.width = std::max(1, size.width * scale / 100);
+			size.height = std::max(1, size.height * scale / 100);
 
 			pbox = pan_item_box_new(pw, nullptr, pbox->x, pbox->y + pbox->height + 8, 10, 10,
 			                        PAN_POPUP_COLOR, PAN_POPUP_BORDER, PAN_POPUP_BORDER_COLOR);
 			pbox->set_key(PanKey::Info);
 
 			p = pan_item_image_new(pw, file_data_new_group(pi->fd->path),
-					       pbox->x + PREF_PAD_BORDER, pbox->y + PREF_PAD_BORDER, iw, ih);
+			                       pbox->x + PREF_PAD_BORDER, pbox->y + PREF_PAD_BORDER, size.width, size.height);
 			p->set_key(PanKey::Info);
 
 			pbox->set_size_by_item(p, PREF_PAD_BORDER);
@@ -1409,7 +1398,11 @@ void pan_info_update(PanWindow *pw, PanItem *pi)
  *-----------------------------------------------------------------------------
  */
 
+#if HAVE_GTK4
+static void button_cb(PixbufRenderer *pr, GqMouseButtonEvent *event, gpointer data)
+#else
 static void button_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto pw = static_cast<PanWindow *>(data);
 	PanItem *pi = nullptr;
@@ -2248,6 +2241,7 @@ static GtkWidget *pan_popup_menu(PanWindow *pw)
  *-----------------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static void pan_window_get_dnd_data(GtkWidget *, GdkDragContext *context,
 				    gint, gint,
 				    GtkSelectionData *selection_data, guint info,
@@ -2311,6 +2305,12 @@ static void pan_window_dnd_init(PanWindow *pw)
 	gq_drag_g_signal_connect(G_OBJECT(widget), "drag_data_received",
 			 G_CALLBACK(pan_window_get_dnd_data), pw);
 }
+#else
+static void pan_window_dnd_init(PanWindow *pw)
+{
+	(void)pw;
+}
+#endif
 
 FileDataList *pan_list_tree(PanWindow *pw, SortType method)
 {

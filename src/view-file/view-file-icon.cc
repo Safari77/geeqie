@@ -196,7 +196,7 @@ static gint vficon_get_icon_width(ViewFile *vf)
  *-------------------------------------------------------------------
  */
 
-static gboolean vficon_find_position(ViewFile *vf, FileData *fd, gint *row, gint *col)
+static gboolean vficon_find_position(ViewFile *vf, const FileData *fd, gint *row, gint *col)
 {
 	gint n;
 
@@ -210,7 +210,7 @@ static gboolean vficon_find_position(ViewFile *vf, FileData *fd, gint *row, gint
 	return TRUE;
 }
 
-static gboolean vficon_find_iter(ViewFile *vf, FileData *fd, GtkTreeIter *iter, gint *column)
+static gboolean vficon_find_iter(ViewFile *vf, const FileData *fd, GtkTreeIter *iter, gint *column)
 {
 	GtkTreeModel *store;
 	gint row;
@@ -791,23 +791,18 @@ void vficon_select_by_fd(ViewFile *vf, FileData *fd)
 	vficon_set_focus(vf, fd);
 }
 
-void vficon_select_list(ViewFile *vf, GList *list)
+void vficon_select_list(ViewFile *vf, const FileDataList *list)
 {
-	GList *work;
-	FileData *fd;
-
 	if (!list) return;
 
-	work = list;
-	while (work)
+	for (const GList *work = list; work; work = work->next)
 		{
-		fd = static_cast<FileData *>(work->data);
+		auto *fd = static_cast<FileData *>(work->data);
 		if (g_list_find(vf->list, fd))
 			{
 			VFICON(vf)->selection = g_list_append(VFICON(vf)->selection, fd);
 			vficon_selection_add(vf, fd, SELECTION_SELECTED, nullptr);
 			}
-		work = work->next;
 		}
 }
 
@@ -1035,7 +1030,7 @@ static gint page_height(ViewFile *vf)
  *-------------------------------------------------------------------
  */
 
-gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event)
+gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state)
 {
 	gint focus_row = 0;
 	gint focus_col = 0;
@@ -1043,7 +1038,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 	gboolean stop_signal;
 
 	stop_signal = TRUE;
-	switch (event->keyval)
+	switch (keyval)
 		{
 		case GDK_KEY_Left: case GDK_KEY_KP_Left:
 			focus_col = -1;
@@ -1076,7 +1071,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 			if (fd)
 				{
 				vf->click_fd = fd;
-				if (event->state & GDK_CONTROL_MASK)
+				if (state & GDK_CONTROL_MASK)
 					{
 					gint selected;
 
@@ -1125,7 +1120,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 
 		if (new_fd != old_fd)
 			{
-			if (event->state & GDK_SHIFT_MASK)
+			if (state & GDK_SHIFT_MASK)
 				{
 				if (!options->collections.rectangular_selection)
 					{
@@ -1138,7 +1133,7 @@ gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 				vficon_select_region_util(vf, vf->click_fd, new_fd, TRUE);
 				vficon_send_layout_select(vf, new_fd);
 				}
-			else if (event->state & GDK_CONTROL_MASK)
+			else if (state & GDK_CONTROL_MASK)
 				{
 				vf->click_fd = new_fd;
 				}
@@ -1177,21 +1172,33 @@ static gboolean vficon_motion_cb(GtkWidget *, GdkEventMotion *event, gpointer da
 	return FALSE;
 }
 
+#if HAVE_GTK4
+gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *event)
+#else
 gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd;
 
 	tip_unschedule(vf);
 
+#if HAVE_GTK4
+	fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+#else
 	fd = vficon_find_data_by_coord(vf, static_cast<gint>(bevent->x), static_cast<gint>(bevent->y), &iter);
+#endif
 
 	if (fd)
 		{
 		vf->click_fd = fd;
 		vficon_selection_add(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
 
+#if HAVE_GTK4
+		switch (event->button)
+#else
 		switch (bevent->button)
+#endif
 			{
 			case GDK_BUTTON_PRIMARY:
 				if (!gtk_widget_has_focus(vf->listview))
@@ -1199,7 +1206,11 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 					gtk_widget_grab_focus(vf->listview);
 					}
 
+#if HAVE_GTK4
+				if (event->press_count == 2 && vf->layout)
+#else
 				if (bevent->type == GDK_2BUTTON_PRESS && vf->layout)
+#endif
 					{
 					if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
 						{
@@ -1224,7 +1235,11 @@ gboolean vficon_press_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 	return FALSE;
 }
 
+#if HAVE_GTK4
+gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *event)
+#else
 gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
@@ -1232,15 +1247,26 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	tip_schedule(vf);
 
-	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent))
+#if HAVE_GTK4
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, event->button))
+#else
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent->button))
+#endif
 		{
 		return TRUE;
 		}
 
+#if HAVE_GTK4
+	if (static_cast<gint>(event->x) != 0 || static_cast<gint>(event->y) != 0)
+		{
+		fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+		}
+#else
 	if (static_cast<gint>(bevent->x) != 0 || static_cast<gint>(bevent->y) != 0)
 		{
 		fd = vficon_find_data_by_coord(vf, static_cast<gint>(bevent->x), static_cast<gint>(bevent->y), &iter);
 		}
+#endif
 
 	if (vf->click_fd)
 		{
@@ -1251,18 +1277,30 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 
 	was_selected = !!(fd->selected & SELECTION_SELECTED);
 
+#if HAVE_GTK4
+	switch (event->button)
+#else
 	switch (bevent->button)
+#endif
 		{
 		case GDK_BUTTON_PRIMARY:
 			{
 			vficon_set_focus(vf, fd);
 
+#if HAVE_GTK4
+			if (event->state & GDK_CONTROL_MASK)
+#else
 			if (bevent->state & GDK_CONTROL_MASK)
+#endif
 				{
 				gboolean select;
 
 				select = !(fd->selected & SELECTION_SELECTED);
+#if HAVE_GTK4
+				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#else
 				if ((bevent->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#endif
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, select);
 					}
@@ -1275,7 +1313,11 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 				{
 				vficon_select_none(vf);
 
+#if HAVE_GTK4
+				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#else
 				if ((bevent->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+#endif
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, TRUE);
 					}
@@ -1304,12 +1346,18 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, GdkEventButton *bevent)
 	return TRUE;
 }
 
+#if HAVE_GTK4
+static void vficon_leave_cb(GtkEventControllerMotion *, gpointer data)
+#else
 static gboolean vficon_leave_cb(GtkWidget *, GdkEventCrossing *, gpointer data)
+#endif
 {
 	auto vf = static_cast<ViewFile *>(data);
 
 	tip_unschedule(vf);
+#if !HAVE_GTK4
 	return FALSE;
+#endif
 }
 
 /*
@@ -2083,8 +2131,14 @@ ViewFile *vficon_new(ViewFile *vf)
 
 	g_signal_connect(G_OBJECT(vf->listview),"motion_notify_event",
 			 G_CALLBACK(vficon_motion_cb), vf);
+#if HAVE_GTK4
+	GtkEventController *motion_controller = gtk_event_controller_motion_new();
+	g_signal_connect(motion_controller, "leave", G_CALLBACK(vficon_leave_cb), vf);
+	gtk_widget_add_controller(vf->listview, motion_controller);
+#else
 	g_signal_connect(G_OBJECT(vf->listview), "leave_notify_event",
 			 G_CALLBACK(vficon_leave_cb), vf);
+#endif
 
 	/* force VFICON(vf)->columns to be at least 1 (sane) - this will be corrected in the size_cb */
 	vficon_populate_at_new_size(vf, 1, 1, FALSE);

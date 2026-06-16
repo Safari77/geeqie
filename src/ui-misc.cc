@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -502,7 +503,7 @@ GtkWidget *pref_table_box(GtkWidget *table, gint column, gint row,
 		shell = box;
 		}
 
-	gq_gtk_grid_attach(GTK_GRID(table), shell, column, column + 1, row, row + 1, static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), static_cast<GtkAttachOptions>(0), 0, 0);
+	gq_gtk_grid_attach(GTK_GRID(table), shell, column, column + 1, row, row + 1);
 
 	gtk_widget_show(shell);
 
@@ -517,7 +518,7 @@ GtkWidget *pref_table_label(GtkWidget *table, gint column, gint row,
 	label = gtk_label_new(text);
 	gtk_widget_set_halign(label, alignment);
 	gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
-	gq_gtk_grid_attach(GTK_GRID(table), label, column, column + 1, row, row + 1,  GTK_FILL, static_cast<GtkAttachOptions>(0), 0, 0);
+	gq_gtk_grid_attach(GTK_GRID(table), label, column, column + 1, row, row + 1);
 	gtk_widget_show(label);
 
 	return label;
@@ -530,7 +531,7 @@ GtkWidget *pref_table_button(GtkWidget *table, gint column, gint row,
 	GtkWidget *button;
 
 	button = pref_button_new(nullptr, stock_id, text, func, data);
-	gq_gtk_grid_attach(GTK_GRID(table), button, column, column + 1, row, row + 1,  GTK_FILL, static_cast<GtkAttachOptions>(0), 0, 0);
+	gq_gtk_grid_attach(GTK_GRID(table), button, column, column + 1, row, row + 1);
 	gtk_widget_show(button);
 
 	return button;
@@ -575,7 +576,7 @@ GtkWidget *pref_table_spin(GtkWidget *table, gint column, gint row,
 		box = spin;
 		}
 
-	gq_gtk_grid_attach(GTK_GRID(table), box, column, column + 1, row, row + 1, static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), static_cast<GtkAttachOptions>(GTK_EXPAND | GTK_FILL), 0, 0);
+	gq_gtk_grid_attach(GTK_GRID(table), box, column, column + 1, row, row + 1);
 	gtk_widget_show(box);
 
 	return spin;
@@ -627,7 +628,7 @@ GtkWidget *pref_toolbar_button(GtkWidget *toolbar,
 		GtkWidget *icon = nullptr;
 		if (icon_name)
 			{
-			icon = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_LARGE_TOOLBAR); // TODO: TG which size?
+			icon = gq_gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_LARGE_TOOLBAR); // TODO: TG which size?
 			gtk_widget_show(icon);
 			}
 		item = GTK_WIDGET(gtk_tool_button_new(icon, label));
@@ -666,159 +667,108 @@ struct DateSelection
 
 	GtkWidget *button;
 
-	GtkWidget *window;
+	GtkWidget *popover;
 	GtkWidget *calendar;
 };
 
-
 static void date_selection_popup_hide(DateSelection *ds)
 {
-	if (!ds->window) return;
+	if (!ds->popover) return;
 
-	if (gtk_widget_has_grab(ds->window))
-		{
-		widget_input_ungrab(ds->window);
-		}
-
-	gtk_widget_hide(ds->window);
-
-	gq_gtk_widget_destroy(ds->window);
-	ds->window = nullptr;
-	ds->calendar = nullptr;
+#if HAVE_GTK4
+	gtk_popover_popdown(GTK_POPOVER(ds->popover));
+#else
+	gtk_widget_hide(ds->popover);
+#endif
 
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), FALSE);
 }
 
-static gboolean date_selection_popup_release_cb(GtkWidget *, GdkEventButton *, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
-
-	date_selection_popup_hide(ds);
-	return TRUE;
-}
-
-static gboolean date_selection_popup_press_cb(GtkWidget *, GdkEventButton *event, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
-
-	auto xr = static_cast<gint>(event->x_root);
-	auto yr = static_cast<gint>(event->y_root);
-
-	if (!widget_received_event(ds->window, {xr, yr}))
-		{
-		g_signal_connect(G_OBJECT(ds->window), "button_release_event",
-				 G_CALLBACK(date_selection_popup_release_cb), ds);
-		return TRUE;
-		}
-
-	return FALSE;
-}
-
 static void date_selection_popup_sync(DateSelection *ds)
 {
-	guint day;
-	guint month;
-	guint year;
-
 #if HAVE_GTK4
-	GDateTime *date_selected;
+	g_autoptr(GDateTime) date_selected = gtk_calendar_get_date(GTK_CALENDAR(ds->calendar));
 
-	date_selected = gtk_calendar_get_date(GTK_CALENDAR(ds->calendar));
-	g_date_time_get_ymd(date_selected, static_cast<guint>(&year), static_cast<guint>(&month), static_cast<guint>(&day));
+	gint year;
+	gint month;
+	gint day;
 
-	g_date_time_unref(date_selected);
-#else
-	gtk_calendar_get_date(GTK_CALENDAR(ds->calendar), &year, &month, &day);
-	/* month is range 0 to 11 */
-	month = month + 1;
-#endif
+	g_date_time_get_ymd(date_selected, &year, &month, &day);
+
 	date_selection_set(ds->box, day, month, year);
-}
+#else
+	guint year;
+	guint month;
+	guint day;
 
-static gboolean date_selection_popup_keypress_cb(GtkWidget *, GdkEventKey *event, gpointer data)
-{
-	auto ds = static_cast<DateSelection *>(data);
+	gtk_calendar_get_date(GTK_CALENDAR(ds->calendar), &year, &month, &day);
 
-	switch (event->keyval)
-		{
-		case GDK_KEY_Return:
-		case GDK_KEY_KP_Enter:
-		case GDK_KEY_Tab:
-		case GDK_KEY_ISO_Left_Tab:
-			date_selection_popup_sync(ds);
-			date_selection_popup_hide(ds);
-			break;
-		case GDK_KEY_Escape:
-			date_selection_popup_hide(ds);
-			break;
-		default:
-			break;
-		}
-
-	return FALSE;
+	/* GTK3 month is 0..11 */
+	date_selection_set(ds->box, day, month + 1, year);
+#endif
 }
 
 static void date_selection_popup(DateSelection *ds)
 {
-	GDateTime *date;
-	gint wx;
-	gint wy;
-	gint x;
-	gint y;
-	GtkAllocation button_allocation;
-	GtkAllocation window_allocation;
+	if (ds->popover)
+		{
+#if HAVE_GTK4
+		gtk_popover_popup(GTK_POPOVER(ds->popover));
+#else
+		gtk_widget_show(ds->popover);
+#endif
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
+		return;
+		}
 
-	if (ds->window) return;
-
-	ds->window = gtk_window_new(GTK_WINDOW_POPUP);
-	gtk_window_set_resizable(GTK_WINDOW(ds->window), FALSE);
-	g_signal_connect(G_OBJECT(ds->window), "button_press_event",
-			 G_CALLBACK(date_selection_popup_press_cb), ds);
-	g_signal_connect(G_OBJECT(ds->window), "key_press_event",
-			 G_CALLBACK(date_selection_popup_keypress_cb), ds);
+#if HAVE_GTK4
+	ds->popover = gtk_popover_new();
+	gtk_widget_set_parent(ds->popover, ds->button);
+#else
+	ds->popover = gtk_popover_new(ds->button);
+#endif
 
 	ds->calendar = gtk_calendar_new();
-	gq_gtk_container_add(ds->window, ds->calendar);
-	gtk_widget_show(ds->calendar);
 
-	date = date_selection_get(ds->box);
+#if HAVE_GTK4
+	gtk_popover_set_child(GTK_POPOVER(ds->popover), ds->calendar);
+#else
+	gq_gtk_container_add(ds->popover, ds->calendar);
+	gtk_widget_show(ds->calendar);
+#endif
+
+	g_autoptr(GDateTime) date = date_selection_get(ds->box);
+
 #if HAVE_GTK4
 	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar), date);
 #else
-	gtk_calendar_select_month(GTK_CALENDAR(ds->calendar), g_date_time_get_month(date), g_date_time_get_year(date));
-	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar), g_date_time_get_day_of_month(date));
+	gtk_calendar_select_month(GTK_CALENDAR(ds->calendar),
+	                          g_date_time_get_month(date) - 1,
+	                          g_date_time_get_year(date));
+
+	gtk_calendar_select_day(GTK_CALENDAR(ds->calendar),
+	                        g_date_time_get_day_of_month(date));
 #endif
-	g_date_time_unref(date);
 
-	g_signal_connect_swapped(G_OBJECT(ds->calendar), "day-selected",
-	                         G_CALLBACK(date_selection_popup_sync), ds);
-	g_signal_connect_swapped(G_OBJECT(ds->calendar), "day-selected-double-click",
-	                         G_CALLBACK(date_selection_popup_hide), ds);
+	g_signal_connect_swapped(ds->calendar,
+	                         "day-selected",
+	                         G_CALLBACK(date_selection_popup_sync),
+	                         ds);
 
-	gtk_widget_realize(ds->window);
+#if !HAVE_GTK4
+	g_signal_connect_swapped(ds->calendar,
+	                         "day-selected-double-click",
+	                         G_CALLBACK(date_selection_popup_hide),
+	                         ds);
+#endif
 
-	gdk_window_get_origin(gtk_widget_get_window(ds->button), &wx, &wy);
-
-	gtk_widget_get_allocation(ds->button, &button_allocation);
-	gtk_widget_get_allocation(ds->window, &window_allocation);
-
-	x = wx + button_allocation.x + button_allocation.width - window_allocation.width;
-	y = wy + button_allocation.y + button_allocation.height;
-
-	if (y + window_allocation.height > deprecated_gdk_screen_height())
-		{
-		y = wy + button_allocation.y - window_allocation.height;
-		}
-	x = std::max(x, 0);
-	y = std::max(y, 0);
-
-	gq_gtk_window_move(GTK_WINDOW(ds->window), x, y);
-	gtk_widget_show(ds->window);
+#if HAVE_GTK4
+	gtk_popover_popup(GTK_POPOVER(ds->popover));
+#else
+	gtk_widget_show(ds->popover);
+#endif
 
 	gtk_widget_grab_focus(ds->calendar);
-	widget_input_grab(ds->window, GDK_SEAT_CAPABILITY_ALL, TRUE,
-	                  static_cast<GdkEventMask>(GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK));
-
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
 }
 
@@ -826,9 +776,13 @@ static void date_selection_button_cb(GtkWidget *, gpointer data)
 {
 	auto ds = static_cast<DateSelection *>(data);
 
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ds->button)) == (!ds->window))
+	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ds->button)))
 		{
 		date_selection_popup(ds);
+		}
+	else
+		{
+		date_selection_popup_hide(ds);
 		}
 }
 
@@ -908,7 +862,7 @@ GtkWidget *date_selection_new()
 	g_signal_connect(G_OBJECT(ds->button), "size_allocate",
 			 G_CALLBACK(button_size_allocate_cb), ds->spin_y);
 
-	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
+	icon = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 	gq_gtk_container_add(ds->button, icon);
 	gtk_widget_show(icon);
 
@@ -982,73 +936,52 @@ void date_selection_time_set(GtkWidget *widget, time_t t)
 
 #define PREF_LIST_MARKER_INT "[INT]:"
 
-static GList *pref_list_find(const gchar *group, const gchar *token)
+static std::optional<HistoryList::iterator> pref_list_find(const gchar *group, const gchar *token, size_t token_len)
 {
-	GList *work;
-	gint l;
+	HistoryList *history_list = history_list_find_by_key(group);
+	if (!history_list) return {};
 
-	l = strlen(token);
+	auto work = std::find_if(history_list->begin(), history_list->end(),
+	                         [token, token_len](const std::string &text){ return text.compare(0, token_len, token) == 0; });
+	if (work == history_list->end()) return {};
 
-	work = history_list_get_by_key(group);
-	while (work)
-		{
-		auto text = static_cast<const gchar *>(work->data);
-
-		if (strncmp(text, token, l) == 0) return work;
-
-		work = work->next;
-		}
-
-	return nullptr;
+	return work;
 }
 
-static gboolean pref_list_get(const gchar *group, const gchar *key, const gchar *marker, const gchar **result)
+static const gchar *pref_list_get(const gchar *group, const gchar *key, const gchar *marker)
 {
-	GList *work;
-
-	if (!group || !key || !marker)
-		{
-		*result = nullptr;
-		return FALSE;
-		}
+	if (!group || !key || !marker) return nullptr;
 
 	g_autofree gchar *token = g_strconcat(key, marker, NULL);
+	const size_t token_len = strlen(token);
 
-	work = pref_list_find(group, token);
-	if (!work)
-		{
-		*result = nullptr;
-		return FALSE;
-		}
+	auto work = pref_list_find(group, token, token_len);
+	if (!work) return nullptr;
 
-	*result = static_cast<const gchar *>(work->data) + strlen(token);
-	if (*result[0] == '\0') *result = nullptr;
-	return TRUE;
+	const gchar *result = work.value()->c_str() + token_len;
+
+	return (result[0] != '\0') ? result : nullptr;
 }
 
 static void pref_list_set(const gchar *group, const gchar *key, const gchar *marker, const gchar *text)
 {
-	GList *work;
-
 	if (!group || !key || !marker) return;
 
 	g_autofree gchar *token = g_strconcat(key, marker, NULL);
 	g_autofree gchar *path = g_strconcat(token, text, NULL);
 
-	work = pref_list_find(group, token);
+	auto work = pref_list_find(group, token, strlen(token));
 	if (work)
 		{
-		auto old_path = static_cast<gchar *>(work->data);
+		auto &it = work.value();
 
 		if (text)
 			{
-			work->data = g_steal_pointer(&path);
-
-			g_free(old_path);
+			*it = path;
 			}
 		else
 			{
-			history_list_item_remove(group, old_path);
+			history_list_item_remove(group, it->c_str());
 			}
 		}
 	else if (text)
@@ -1066,10 +999,9 @@ gint pref_list_int_get(const gchar *group, const gchar *key, gint fallback)
 {
 	if (!group || !key) return fallback;
 
-	const gchar *text;
-	if (!pref_list_get(group, key, PREF_LIST_MARKER_INT, &text) || !text) return fallback;
+	const gchar *text = pref_list_get(group, key, PREF_LIST_MARKER_INT);
 
-	return static_cast<gint>(strtol(text, nullptr, 10));
+	return text ? static_cast<gint>(strtol(text, nullptr, 10)) : fallback;
 }
 
 GtkWidget *pref_color_button_new(GtkWidget *parent_box, const gchar *title, const GdkRGBA *color, GdkRGBA *result)

@@ -80,7 +80,7 @@ enum {
 
 
 
-static gboolean vflist_row_is_selected(ViewFile *vf, FileData *fd);
+static gboolean vflist_row_is_selected(ViewFile *vf, const FileData *fd);
 static gboolean vflist_row_rename_cb(TreeEditData *td, const gchar *old_name, const gchar *new_name, gpointer data);
 static void vflist_populate_view(ViewFile *vf, gboolean force);
 static gboolean vflist_is_multiline(ViewFile *vf);
@@ -403,18 +403,20 @@ static gboolean vflist_row_rename_cb(TreeEditData *, const gchar *old_name, cons
 	return FALSE;
 }
 
-gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event)
+gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType)
 {
-	if (event->keyval != GDK_KEY_Menu) return FALSE;
+	if (keyval != GDK_KEY_Menu)
+		{
+		return FALSE;
+		}
 
 	g_autoptr(GtkTreePath) tpath = nullptr;
 	gtk_tree_view_get_cursor(GTK_TREE_VIEW(vf->listview), &tpath, nullptr);
 	if (tpath)
 		{
-		GtkTreeModel *store;
+		GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 		GtkTreeIter iter;
 
-		store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &vf->click_fd, -1);
 		}
@@ -424,12 +426,21 @@ gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event
 		}
 
 	vf->popup = vf_pop_menu(vf);
+
+#if HAVE_GTK4
+	popup_menu(G_MENU(vf->popup), widget);
+#else
 	gtk_menu_popup_at_widget(GTK_MENU(vf->popup), widget, GDK_GRAVITY_EAST, GDK_GRAVITY_CENTER, nullptr);
+#endif
 
 	return TRUE;
 }
 
+#if HAVE_GTK4
+gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event)
+#else
 gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
@@ -438,13 +449,21 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 	vf->clicked_mark = 0;
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
+#if HAVE_GTK4
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+#else
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+#endif
 	                                  &tpath, &column, nullptr, nullptr))
 		{
 		GtkTreeModel *store;
 		gint col_idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "column_store_idx"));
 
+#if HAVE_GTK4
+		if (event->button == GDK_BUTTON_PRIMARY &&
+#else
 		if (bevent->button == GDK_BUTTON_PRIMARY &&
+#endif
 		    col_idx >= FILE_COLUMN_MARKS && col_idx <= FILE_COLUMN_MARKS_LAST)
 			return FALSE;
 
@@ -459,7 +478,11 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 
 	vf->click_fd = fd;
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_SECONDARY)
+#else
 	if (bevent->button == GDK_BUTTON_SECONDARY)
+#endif
 		{
 		vf->popup = vf_pop_menu(vf);
 		gtk_menu_popup_at_pointer(GTK_MENU(vf->popup), nullptr);
@@ -468,7 +491,11 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 
 	if (!fd) return FALSE;
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_MIDDLE)
+#else
 	if (bevent->button == GDK_BUTTON_MIDDLE)
+#endif
 		{
 		if (!vflist_row_is_selected(vf, fd))
 			{
@@ -478,9 +505,15 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 		}
 
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_PRIMARY && event->press_count == 1 &&
+	    !(event->state & GDK_SHIFT_MASK ) &&
+	    !(event->state & GDK_CONTROL_MASK ) &&
+#else
 	if (bevent->button == GDK_BUTTON_PRIMARY && bevent->type == GDK_BUTTON_PRESS &&
 	    !(bevent->state & GDK_SHIFT_MASK ) &&
 	    !(bevent->state & GDK_CONTROL_MASK ) &&
+#endif
 	    vflist_row_is_selected(vf, fd))
 		{
 		GtkTreeSelection *selection;
@@ -496,7 +529,11 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 		return (gtk_tree_selection_count_selected_rows(selection) > 1);
 		}
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_PRIMARY && event->press_count == 2)
+#else
 	if (bevent->button == GDK_BUTTON_PRIMARY && bevent->type == GDK_2BUTTON_PRESS)
+#endif
 		{
 		if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
 			{
@@ -511,29 +548,50 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent
 	return FALSE;
 }
 
+#if HAVE_GTK4
+gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event)
+#else
 gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent)
+#endif
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
 
-	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent))
+#if HAVE_GTK4
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, event->button))
+#else
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, bevent->button))
+#endif
 		{
 		return TRUE;
 		}
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_MIDDLE)
+#else
 	if (bevent->button == GDK_BUTTON_MIDDLE)
+#endif
 		{
 		vflist_color_set(vf, vf->click_fd, FALSE);
 		}
 
+#if HAVE_GTK4
+	if (event->button != GDK_BUTTON_PRIMARY && event->button != GDK_BUTTON_MIDDLE)
+#else
 	if (bevent->button != GDK_BUTTON_PRIMARY && bevent->button != GDK_BUTTON_MIDDLE)
+#endif
 		{
 		return TRUE;
 		}
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
+#if HAVE_GTK4
+	    (event->x != 0 || event->y != 0) &&
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+#else
 	    (bevent->x != 0 || bevent->y != 0) &&
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
+#endif
 					  &tpath, nullptr, nullptr, nullptr))
 		{
 		GtkTreeModel *store;
@@ -543,7 +601,11 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &fd, -1);
 		}
 
+#if HAVE_GTK4
+	if (event->button == GDK_BUTTON_MIDDLE)
+#else
 	if (bevent->button == GDK_BUTTON_MIDDLE)
+#endif
 		{
 		if (fd && vf->click_fd == fd)
 			{
@@ -563,8 +625,13 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *beve
 		}
 
 	if (fd && vf->click_fd == fd &&
+#if HAVE_GTK4
+	    !(event->state & GDK_SHIFT_MASK ) &&
+	    !(event->state & GDK_CONTROL_MASK ) &&
+#else
 	    !(bevent->state & GDK_SHIFT_MASK ) &&
 	    !(bevent->state & GDK_CONTROL_MASK ) &&
+#endif
 	    vflist_row_is_selected(vf, fd))
 		{
 		GtkTreeSelection *selection;
@@ -1158,7 +1225,7 @@ gint vflist_index_by_fd(const ViewFile *vf, const FileData *fd)
  *-----------------------------------------------------------------------------
  */
 
-static gboolean vflist_row_is_selected(ViewFile *vf, FileData *fd)
+static gboolean vflist_row_is_selected(ViewFile *vf, const FileData *fd)
 {
 	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(vf->listview));
 	GtkTreeModel *store;
@@ -1378,18 +1445,13 @@ void vflist_select_by_fd(ViewFile *vf, FileData *fd)
 	gtk_tree_view_set_cursor(GTK_TREE_VIEW(vf->listview), tpath, nullptr, FALSE);
 }
 
-void vflist_select_list(ViewFile *vf, GList *list)
+void vflist_select_list(ViewFile *vf, const FileDataList *list)
 {
 	GtkTreeIter iter;
-	GList *work;
 
-	work = list;
-
-	while (work)
+	for (const GList *work = list; work; work = work->next)
 		{
-		FileData *fd;
-
-		fd = static_cast<FileData *>(work->data);
+		const auto *fd = static_cast<const FileData *>(work->data);
 
 		if (!vflist_find_row(vf, fd, &iter)) return;
 
@@ -1400,7 +1462,6 @@ void vflist_select_list(ViewFile *vf, GList *list)
 			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(vf->listview));
 			gtk_tree_selection_select_iter(selection, &iter);
 			}
-		work = work->next;
 		}
 }
 

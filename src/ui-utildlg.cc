@@ -273,7 +273,7 @@ GtkWidget *generic_dialog_add_message(GenericDialog *gd, const gchar *icon_name,
 	hbox = pref_box_new(gd->vbox, expand, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	if (icon_name)
 		{
-		GtkWidget *image = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_DIALOG);
+		GtkWidget *image = gq_gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_DIALOG);
 		gtk_widget_set_halign(image, GTK_ALIGN_CENTER);
 		gtk_widget_set_valign(image, GTK_ALIGN_START);
 		gq_gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 0);

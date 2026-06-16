@@ -26,6 +26,7 @@
 #include "ui-fileops.h"
 #include "ui-utildlg.h"
 
+#if !HAVE_GTK4
 static void warning_dialog_dnd_uri_error(GList *uri_error_list)
 {
 	g_autoptr(GString) msg = g_string_new(nullptr);
@@ -149,5 +150,6 @@ GList *uri_pathlist_from_gtk_selection_data(const GtkSelectionData *selection_da
 
 	return ret;
 }
+#endif
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

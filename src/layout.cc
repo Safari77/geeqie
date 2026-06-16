@@ -575,12 +575,23 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 
 	lw->dir_view = lw->vd->widget;
 	DEBUG_NAME(lw->dir_view);
+
+#if HAVE_GTK4
+	gtk_paned_set_end_child(GTK_PANED(box_folders), lw->dir_view);
+#else
 	gtk_paned_add2(GTK_PANED(box_folders), lw->dir_view);
+#endif
 	gtk_widget_show(lw->dir_view);
 
 	scd = shortcuts_new(lw);
 	DEBUG_NAME(scd);
+
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(box_folders), scd);
+#else
 	gtk_paned_add1(GTK_PANED(box_folders), scd);
+#endif
+
 	gtk_paned_set_position(GTK_PANED(box_folders), lw->options.folder_window.vdivider_pos);
 
 	gtk_widget_show(box_folders);
@@ -663,7 +674,7 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 #if HAVE_GTK4
 	gtk_button_set_icon_name(GTK_BUTTON(button), GQ_ICON_PAN_DOWN);
 #else
-	GtkWidget *image = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
+	GtkWidget *image = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 	gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
 	gtk_button_set_image(GTK_BUTTON(button), image);
 #endif
@@ -742,7 +753,7 @@ static GtkWidget *layout_zoom_button(LayoutWindow *lw, GtkWidget *box, gint size
 #if HAVE_GTK4
 	gtk_button_set_icon_name(GTK_BUTTON(button), GQ_ICON_PAN_DOWN);
 #else
-	GtkWidget *image = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
+	GtkWidget *image = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 	gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
 	gtk_button_set_image(GTK_BUTTON(button), image);
 #endif
@@ -1221,7 +1232,7 @@ void layout_select_invert(LayoutWindow *lw)
 	if (lw->vf) vf_select_invert(lw->vf);
 }
 
-void layout_select_list(LayoutWindow *lw, GList *list)
+void layout_select_list(LayoutWindow *lw, const FileDataList *list)
 {
 	if (!layout_valid(&lw)) return;
 
@@ -1509,13 +1520,22 @@ gboolean layout_geometry_get_dividers(LayoutWindow *lw, gint *h, gint *v)
 
 	if (lw->h_pane)
 		{
+#if HAVE_GTK4
+		GtkWidget *child = gtk_paned_get_start_child(GTK_PANED(lw->h_pane));
+#else
 		GtkWidget *child = gtk_paned_get_child1(GTK_PANED(lw->h_pane));
+#endif
+
 		gtk_widget_get_allocation(child, &h_allocation);
 		}
 
 	if (lw->v_pane)
 		{
+#if HAVE_GTK4
+		GtkWidget *child = gtk_paned_get_start_child(GTK_PANED(lw->v_pane));
+#else
 		GtkWidget *child = gtk_paned_get_child1(GTK_PANED(lw->v_pane));
+#endif
 		gtk_widget_get_allocation(child, &v_allocation);
 		}
 
@@ -1774,8 +1794,16 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 	gq_gtk_box_pack_start(GTK_BOX(vbox), lw->tools_pane, TRUE, TRUE, 0);
 	gtk_widget_show(lw->tools_pane);
 
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(lw->tools_pane), w1);
+#else
 	gtk_paned_pack1(GTK_PANED(lw->tools_pane), w1, FALSE, TRUE);
+#endif
+#if HAVE_GTK4
+	gtk_paned_set_end_child(GTK_PANED(lw->tools_pane), w2);
+#else
 	gtk_paned_pack2(GTK_PANED(lw->tools_pane), w2, TRUE, TRUE);
+#endif
 
 	gtk_widget_show(tools);
 	gtk_widget_show(files);
@@ -1889,7 +1917,12 @@ void layout_split_change(LayoutWindow *lw, ImageSplitMode mode)
 
 	image = layout_image_setup_split(lw, mode);
 
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(lw->utility_paned), image);
+#else
 	gtk_paned_pack1(GTK_PANED(lw->utility_paned), image, TRUE, FALSE);
+#endif
+
 	gtk_widget_show(image);
 	layout_util_sync(lw);
 }
@@ -1983,19 +2016,51 @@ static void layout_grid_setup(LayoutWindow *lw)
 
 	if (!layout_location_first(static_cast<LayoutLocation>(priority_location)))
 		{
+#if HAVE_GTK4
+		gtk_paned_set_start_child(GTK_PANED(v), h);
+#else
 		gtk_paned_pack1(GTK_PANED(v), h, FALSE, TRUE);
+#endif
+#if HAVE_GTK4
+		gtk_paned_set_end_child(GTK_PANED(v), w3);
+#else
 		gtk_paned_pack2(GTK_PANED(v), w3, TRUE, TRUE);
+#endif
 
+#if HAVE_GTK4
+		gtk_paned_set_start_child(GTK_PANED(h), w1);
+#else
 		gtk_paned_pack1(GTK_PANED(h), w1, FALSE, TRUE);
+#endif
+#if HAVE_GTK4
+		gtk_paned_set_end_child(GTK_PANED(h), w2);
+#else
 		gtk_paned_pack2(GTK_PANED(h), w2, TRUE, TRUE);
+#endif
 		}
 	else
 		{
+#if HAVE_GTK4
+		gtk_paned_set_start_child(GTK_PANED(v), w1);
+#else
 		gtk_paned_pack1(GTK_PANED(v), w1, FALSE, TRUE);
+#endif
+#if HAVE_GTK4
+		gtk_paned_set_end_child(GTK_PANED(v), h);
+#else
 		gtk_paned_pack2(GTK_PANED(v), h, TRUE, TRUE);
+#endif
 
+#if HAVE_GTK4
+		gtk_paned_set_start_child(GTK_PANED(h), w2);
+#else
 		gtk_paned_pack1(GTK_PANED(h), w2, FALSE, TRUE);
+#endif
+#if HAVE_GTK4
+		gtk_paned_set_end_child(GTK_PANED(h), w3);
+#else
 		gtk_paned_pack2(GTK_PANED(h), w3, TRUE, TRUE);
+#endif
 		}
 
 	gtk_widget_show(image_sb);

@@ -66,25 +66,6 @@ gboolean md5_update_from_file(GChecksum *md5, const gchar *path)
 } // namespace
 
 /**
- * @brief Get the md5 hash of a buffer
- * @buffer: byte buffer
- * @buffer_size: buffer size (in bytes)
- * @return: hash as a hexadecimal string
- *
- * Get the md5 hash of a buffer. The result is returned
- * as a hexadecimal string.
- **/
-gchar *md5_get_string(const guchar *buffer, gint buffer_size)
-{
-	g_autoptr(GChecksum) md5 = g_checksum_new(G_CHECKSUM_MD5);
-	if (!md5) return nullptr;
-
-	g_checksum_update(md5, buffer, buffer_size);
-
-	return g_strdup(g_checksum_get_string(md5));
-}
-
-/**
  * @brief Get the md5 hash of a file
  * @filename: file name
  * @digest: 16 bytes buffer receiving the hash code.
@@ -115,14 +96,17 @@ gboolean md5_get_digest_from_file(const gchar *path, Md5Digest &digest)
  * Get the md5 hash of a file. The result is returned
  * as a hexadecimal string.
  **/
-gchar *md5_get_string_from_file(const gchar *path)
+std::string md5_get_string_from_file(const gchar *path)
 {
 	g_autoptr(GChecksum) md5 = g_checksum_new(G_CHECKSUM_MD5);
-	if (!md5) return nullptr;
+	if (!md5) return {};
 
-	if (!md5_update_from_file(md5, path)) return nullptr;
+	if (!md5_update_from_file(md5, path)) return {};
 
-	return g_strdup(g_checksum_get_string(md5));
+	const gchar *str = g_checksum_get_string(md5);
+	if (!str) return {};
+
+	return str;
 }
 
 /**
@@ -134,19 +118,17 @@ gchar *md5_get_string_from_file(const gchar *path)
  * and assumes a NULL terminated string.
  */
 
-gchar *md5_digest_to_text(const Md5Digest &digest)
+std::string md5_digest_to_text(const Md5Digest &digest)
 {
 	static gchar hex_digits[] = "0123456789abcdef";
-	gchar *result;
-	constexpr gsize result_size = 2 * MD5_SIZE;
 
-	result = static_cast<gchar *>(g_malloc((result_size + 1) * sizeof(gchar)));
+	std::string result(2 * MD5_SIZE, '\0');
+
 	for (gsize i = 0; i < MD5_SIZE; i++)
 		{
 		result[2*i] = hex_digits[digest[i] >> 4];
 		result[(2*i)+1] = hex_digits[digest[i] & 0xf];
 		}
-	result[result_size] = '\0';
 
 	return result;
 }

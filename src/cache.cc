@@ -159,18 +159,10 @@ gchar *cache_get_location(CacheType type, const gchar *source, gint include_name
  *-------------------------------------------------------------------
  */
 
-CacheData *cache_sim_data_new(const gchar *path)
+CacheData::CacheData(const gchar *path)
+	: CacheData()
 {
-	auto *cd = new CacheData();
-
-	if (path) cd->load(path);
-
-	return cd;
-}
-
-void cache_sim_data_free(CacheData *cd)
-{
-	delete cd;
+	if (path) load(path);
 }
 
 /*
@@ -201,34 +193,18 @@ bool CacheData::write_md5sum(GString *gstring) const
 {
 	if (!md5sum) return false;
 
-	g_autofree gchar *text = md5_digest_to_text(*md5sum);
-
-	g_string_append_printf(gstring, "MD5sum=[%s]\n", text);
+	g_string_append_printf(gstring, "MD5sum=[%s]\n", md5_digest_to_text(*md5sum).c_str());
 
 	return true;
 }
 
 bool CacheData::write_similarity(GString *gstring) const
 {
-	if (!similarity || !similarity->filled) return false;
+	if (!image_sim_filled(similarity.get())) return false;
 
 	g_string_append(gstring, "SimilarityGrid[32 x 32]=");
 
-	guint8 buf[3 * 32];
-	for (guint y = 0; y < 32; y++)
-		{
-		guint s = y * 32;
-		guint n = 0;
-
-		for (guint x = 0; x < 32; x++)
-			{
-			buf[n++] = similarity->avg_r[s + x];
-			buf[n++] = similarity->avg_g[s + x];
-			buf[n++] = similarity->avg_b[s + x];
-			}
-
-		g_string_append_len(gstring, (const gchar *)buf, sizeof(buf));
-		}
+	similarity->to_string(gstring);
 
 	g_string_append(gstring, "\n");
 
@@ -376,7 +352,6 @@ bool CacheData::read_similarity(FILE *f, const gchar *buffer, gint s)
 		if (fread(&b, sizeof(b), 1, f) != 1) return false;
 		}
 
-	guint8 pixel_buf[3];
 	std::unique_ptr<ImageSimilarityData> sd = nullptr;
 
 	if (similarity)
@@ -386,28 +361,15 @@ bool CacheData::read_similarity(FILE *f, const gchar *buffer, gint s)
 		}
 	else
 		{
-		sd.reset(image_sim_new());
+		sd = std::make_unique<ImageSimilarityData>();
 		}
 
-	for (gint y = 0; y < 32; y++)
-		{
-		gint s = y * 32;
-		for (gint x = 0; x < 32; x++)
-			{
-			if (fread(&pixel_buf, sizeof(pixel_buf), 1, f) != 1) return false;
-
-			sd->avg_r[s + x] = pixel_buf[0];
-			sd->avg_g[s + x] = pixel_buf[1];
-			sd->avg_b[s + x] = pixel_buf[2];
-			}
-		}
+	if (!sd->fill_data(f)) return false;
 
 	if (fread(&b, sizeof(b), 1, f) == 1)
 		{
 		if (b != '\n') fseek(f, -1, SEEK_CUR);
 		}
-
-	sd->filled = TRUE;
 
 	set_similarity(*sd);
 

@@ -272,7 +272,7 @@ void setup_default_options(ConfOptions *options)
 		}
 
 	set_default_image_overlay_template_string(options);
-	options->sidecar.ext = g_strdup(".jpg;%raw;.gqv;.xmp;%unknown");
+	options->sidecar.ext = g_strdup("%raw;.jpg;.gqv;.xmp;%unknown");
 
 	options->shell.path = g_strdup(GQ_DEFAULT_SHELL_PATH);
 	options->shell.options = g_strdup(GQ_DEFAULT_SHELL_OPTIONS);

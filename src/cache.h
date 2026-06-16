@@ -32,8 +32,7 @@
 
 #include "geometry.h"
 #include "md5-util.h"
-
-struct ImageSimilarityData;
+#include "similar.h"
 
 #define GQ_CACHE_THUMB		"thumbnails"
 #define GQ_CACHE_METADATA    	"metadata"
@@ -56,6 +55,9 @@ enum class CacheType {
 
 struct CacheData
 {
+	CacheData() = default;
+	CacheData(const gchar *path);
+
 	void save(const gchar *source) const;
 	bool load(const gchar *source);
 
@@ -81,9 +83,6 @@ private:
 };
 
 gboolean cache_time_valid(const gchar *cache, const gchar *path);
-
-CacheData *cache_sim_data_new(const gchar *path);
-void cache_sim_data_free(CacheData *cd);
 
 gchar *cache_create_location(CacheType cache_type, const gchar *source);
 gchar *cache_get_location(CacheType cache_type, const gchar *source);

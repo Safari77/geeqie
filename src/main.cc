@@ -59,6 +59,7 @@
 #include "collect.h"
 #include "command-line-handling.h"
 #include "compat-deprecated.h"
+#include "compat.h"
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
@@ -161,7 +162,7 @@ GOptionEntry command_line_options[] =
 	{ "File"                      ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, nullptr, _("open FILE or URL do not bring Geeqie window to the top")                      , "<FILE>|<URL>" },
 	{ "file-extensions"           ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, _("list known file extensions")                                                  , nullptr },
 	{ "first"                     ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, _("first image")                                                                 , nullptr },
-	{ "fullscreen"                , 'f', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, _("start / toggle in full screen mode")                                          , nullptr },
+	{ "fullscreen"                , 'f', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, _("start / toggle in fullscreen mode")                                          , nullptr },
 	{ "geometry"                  ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, nullptr, _("set main window location and geometry")                                       , "<W>x<H>[+<XOFF>+<YOFF>]" },
 	{ "get-collection"            ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, nullptr, _("get collection content")                                                      , "<COLLECTION>" },
 	{ "get-collection-list"       ,   0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE  , nullptr, _("get collection list")                                                         , nullptr },
@@ -467,11 +468,16 @@ void gq_gtk_css_load()
 	if (access(pathl, R_OK) != 0) return;
 
 	g_autoptr(GtkCssProvider) css_provider = gtk_css_provider_new();
-	if (!gtk_css_provider_load_from_path(css_provider, pathl, nullptr)) return;
-
-	gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
-	                                          GTK_STYLE_PROVIDER(css_provider),
-	                                          GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+#if HAVE_GTK4
+	gtk_css_provider_load_from_path(css_provider, pathl);
+	gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+#else
+	if (!gtk_css_provider_load_from_path(css_provider, pathl, nullptr))
+		{
+		return;
+		}
+	gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+#endif
 }
 
 void exit_program_final()
@@ -524,7 +530,7 @@ void exit_program_final()
 		g_object_unref(archive_file);
 		}
 
-	#ifdef FD_VERBOSE_DEBUG
+	#if FD_VERBOSE_DEBUG
 	DEBUG_FD();  // Comment to disable debug check (see debug_check.sh)
 	#endif
 
@@ -644,25 +650,28 @@ void setup_sig_handler()
 
 void set_theme_bg_color()
 {
-	GdkRGBA bg_color;
-	GdkRGBA theme_color;
-	GtkStyleContext *style_context;
-
 	if (!options->image.use_custom_border_color)
 		{
 		LayoutWindow *lw = layout_window_first();
 
-		style_context = gtk_widget_get_style_context(lw->window);
-		deprecated_gtk_style_context_get_background_color(style_context, GTK_STATE_FLAG_NORMAL, &bg_color);
+		if (lw && lw->window)
+			{
+			GdkRGBA theme_color {};
+			GtkStyleContext *style_context = gtk_widget_get_style_context(lw->window);
 
-		theme_color.red = bg_color.red  ;
-		theme_color.green = bg_color.green  ;
-		theme_color.blue = bg_color.blue ;
+#if HAVE_GTK4
+/** @FIXME This sets the foreground color. CSS should be used.
+ */
+			gtk_style_context_get_color(style_context, &theme_color);
+#else
+			gtk_style_context_get(style_context, GTK_STATE_FLAG_NORMAL, "background-color", &theme_color, nullptr);
+#endif
 
-		layout_window_foreach([&theme_color](LayoutWindow *lw)
-		{
-			image_background_set_color(lw->image, theme_color);
-		});
+			layout_window_foreach([&theme_color](LayoutWindow *lw)
+				{
+				image_background_set_color(lw->image, theme_color);
+				});
+			}
 		}
 
 	view_window_colors_update();
@@ -759,18 +768,19 @@ void startup_common(GtkApplication *, gpointer)
 
 	gq_gtk_css_load();
 
-	if (gtk_major_version < GTK_MAJOR_VERSION ||
-	        (gtk_major_version == GTK_MAJOR_VERSION && gtk_minor_version < GTK_MINOR_VERSION) )
+	const gchar *gtk_version_error = gtk_check_version(GTK_MAJOR_VERSION, GTK_MINOR_VERSION, GTK_MICRO_VERSION);
+
+	if (gtk_version_error)
 		{
 		log_printf("!!! This is a friendly warning.\n");
-		log_printf("!!! The version of GTK+ in use now is older than when %s was compiled.\n", GQ_APPNAME);
-		log_printf("!!!  compiled with GTK+-%d.%d\n", GTK_MAJOR_VERSION, GTK_MINOR_VERSION);
-		log_printf("!!!   running with GTK+-%u.%u\n", gtk_major_version, gtk_minor_version);
+		log_printf("!!! The version of GTK in use now is older than when %s was compiled.\n", GQ_APPNAME);
+		log_printf("!!!  compiled with GTK-%d.%d.%d\n", GTK_MAJOR_VERSION, GTK_MINOR_VERSION, GTK_MICRO_VERSION);
+		log_printf("!!!   running with GTK-%u.%u.%u\n", gtk_get_major_version(),gtk_get_minor_version(),  gtk_get_micro_version());
 		log_printf("!!! %s may quit unexpectedly with a relocation error.\n", GQ_APPNAME);
 		}
 
 	DEBUG_1("%s main: pixbuf_inline_register_stock_icons", get_exec_time());
-	gtk_icon_theme_add_resource_path(gtk_icon_theme_get_default(), GQ_RESOURCE_PATH_ICONS);
+	gtk_icon_theme_add_resource_path(gq_icon_theme_get_default(), GQ_RESOURCE_PATH_ICONS);
 	pixbuf_inline_register_stock_icons();
 
 	DEBUG_1("%s main: setting default options before commandline handling", get_exec_time());

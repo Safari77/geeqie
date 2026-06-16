@@ -31,6 +31,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "compat.h"
 #include "geometry.h"
 
 struct GqColor;
@@ -154,7 +155,7 @@ struct RendererFuncs
 
 struct PixbufRenderer
 {
-	GtkEventBox eventbox;
+	GtkDrawingArea drawing_area;
 
 	gint image_width;	/**< image actual dimensions (pixels) */
 	gint image_height;
@@ -270,10 +271,16 @@ struct PixbufRenderer
 
 struct PixbufRendererClass
 {
-	GtkEventBoxClass parent_class;
+	GtkDrawingAreaClass parent_class;
 
 	void (*zoom)(PixbufRenderer *pr, gdouble zoom);
+#if HAVE_GTK4
+	void (*clicked)(PixbufRenderer *pr, GqMouseButtonEvent *event);
+	void (*button_press)(PixbufRenderer *pr, GqMouseButtonEvent *event);
+	void (*button_release)(PixbufRenderer *pr, GqMouseButtonEvent *event);
+#else
 	void (*clicked)(PixbufRenderer *pr, GdkEventButton *event);
+#endif
 	void (*scroll_notify)(PixbufRenderer *pr);
 	void (*update_pixel)(PixbufRenderer *pr);
 

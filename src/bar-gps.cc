@@ -113,10 +113,12 @@ struct PaneGPSData
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> bar_pane_gps_drop_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 void bar_pane_gps_close_cancel_cb(GenericDialog *, gpointer data)
 {
@@ -264,6 +266,7 @@ void bar_pane_gps_dnd_receive(GtkWidget *pane, GdkDragContext *,
 }
 #endif
 
+#if !HAVE_GTK4
 void bar_pane_gps_dnd_init(gpointer data)
 {
 	auto pgd = static_cast<PaneGPSData *>(data);
@@ -276,6 +279,12 @@ void bar_pane_gps_dnd_init(gpointer data)
 			 G_CALLBACK(bar_pane_gps_dnd_receive), nullptr);
 
 }
+#else
+void bar_pane_gps_dnd_init(gpointer data)
+{
+	(void)data;
+}
+#endif
 
 gboolean bar_gps_draw_direction (ClutterCanvas *, cairo_t *cr, gpointer)
 {
@@ -744,7 +753,7 @@ gint bar_pane_gps_event(GtkWidget *bar, GdkEvent *event)
 
 	if (!gtk_widget_has_focus(pgd->widget)) return FALSE;
 
-	return gtk_widget_event(pgd->widget, event);
+	return gq_gtk_widget_event(pgd->widget, event);
 }
 
 const gchar *bar_pane_gps_get_map_id(const PaneGPSData *pgd)

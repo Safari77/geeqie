@@ -18,15 +18,10 @@ def main(argv) -> int:
     some_class_re = re.compile(r"Class: \S")
 
     script = [
-        ("--get-file-info",         empty_re),
-        (f"--file={imgs_dir}",      None),
-        ("--get-file-info",         some_class_re),
-        (f"--file={container_dir}", None),
-        ("--get-file-info",         empty_re),
-        (f"--file={imgs_dir}",      None),
-        ("--get-file-info",         some_class_re),
-        ("--action=Up",             None),
-        ("--get-file-info",         empty_re),
+        (f"--file={imgs_dir}", None),
+        ("--get-file-info",    some_class_re),
+        ("--action=PanView",   None),
+        ("--get-file-info",    some_class_re),
     ]
 
     test_runner.run(script)

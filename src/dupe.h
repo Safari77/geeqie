@@ -22,9 +22,15 @@
 #ifndef DUPE_H
 #define DUPE_H
 
+#include <memory>
+#include <optional>
+#include <string>
+
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 #include <gtk/gtk.h>
+
+#include "geometry.h"
 
 struct CollectInfo;
 struct CollectionData;
@@ -70,12 +76,11 @@ struct DupeItem
 
 	FileData *fd;
 
-	gchar *md5sum;
-	gint width;
-	gint height;
-	gint dimensions; /**< Computed as (#DupeItem->width << 16) + #DupeItem->height */
+	std::optional<std::string> md5sum;
+	GqSize dimensions;
+	gint dimensions_sum; /**< Computed as (#DupeItem->dimensions.width << 16) + #DupeItem->dimensions.height */
 
-	ImageSimilarityData *simd;
+	std::unique_ptr<ImageSimilarityData> simd;
 
 	GdkPixbuf *pixbuf; /**< thumb */
 
@@ -131,7 +136,6 @@ struct DupeWindow
 
 	ImageLoader *img_loader;
 
-	GtkTreeSortable *sortable;
 	gint set_count; /**< Index/counter for number of duplicate sets found */
 
 	/* second set comparison stuff */

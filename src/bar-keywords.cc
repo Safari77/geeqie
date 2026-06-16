@@ -21,7 +21,9 @@
 
 #include "bar-keywords.h"
 
-#if HAVE_GTK4
+#define DISABLE_FILE_WITH_GTK4 HAVE_GTK4
+
+#if DISABLE_FILE_WITH_GTK4
 #else
 
 #include <array>
@@ -333,11 +335,11 @@ gint bar_pane_keywords_event(GtkWidget *bar, GdkEvent *event)
 	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!pkd) return FALSE;
 
-	if (gtk_widget_has_focus(pkd->keyword_view)) return gtk_widget_event(pkd->keyword_view, event);
+	if (gtk_widget_has_focus(pkd->keyword_view)) return gq_gtk_widget_event(pkd->keyword_view, event);
 
 	if (gtk_widget_has_focus(pkd->autocomplete))
 		{
-		return gtk_widget_event(pkd->autocomplete, event);
+		return gq_gtk_widget_event(pkd->autocomplete, event);
 		}
 	return FALSE;
 }
@@ -498,6 +500,7 @@ void bar_pane_keywords_changed(GtkTextBuffer *, gpointer data)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drag_types{{
 	{ const_cast<gchar *>(TARGET_APP_KEYWORD_PATH_STRING), GTK_TARGET_SAME_WIDGET, TARGET_APP_KEYWORD_PATH },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -507,6 +510,7 @@ constexpr std::array<GtkTargetEntry, 2> bar_pane_keywords_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_KEYWORD_PATH_STRING), GTK_TARGET_SAME_WIDGET, TARGET_APP_KEYWORD_PATH },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
 }};
+#endif
 
 #if !HAVE_GTK4
 void bar_pane_keywords_dnd_get(GtkWidget *tree_view, GdkDragContext *,
@@ -1315,16 +1319,29 @@ void bar_pane_keywords_menu_popup(GtkWidget *, PaneKeywordsData *pkd, gint x, gi
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
 }
 
-gboolean bar_pane_keywords_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+gboolean bar_pane_keywords_menu_common(GtkWidget *widget, gdouble x, gdouble y, guint button, gpointer data)
 {
 	auto pkd = static_cast<PaneKeywordsData *>(data);
-	if (bevent->button == GDK_BUTTON_SECONDARY)
+	if (button == GDK_BUTTON_SECONDARY)
 		{
-		bar_pane_keywords_menu_popup(widget, pkd, bevent->x, bevent->y);
+		bar_pane_keywords_menu_popup(widget, pkd, x, y);
 		return TRUE;
 		}
 	return FALSE;
 }
+
+#if HAVE_GTK4
+static void bar_pane_keywords_gesture_menu_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer data)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	bar_pane_keywords_menu_common(widget, x, y, gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)), data);
+}
+#else
+gboolean bar_pane_keywords_menu_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
+{
+	return bar_pane_keywords_menu_common(widget, bevent->x, bevent->y, bevent->button, data);
+}
+#endif
 
 /*
  *-------------------------------------------------------------------
@@ -1490,6 +1507,7 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	gtk_tree_view_append_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 	gtk_tree_view_set_expander_column(GTK_TREE_VIEW(pkd->keyword_treeview), column);
 
+#if !HAVE_GTK4
 	gq_gtk_drag_source_set(pkd->keyword_treeview,
 	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
 	                    bar_pane_keywords_drag_types.data(), bar_pane_keywords_drag_types.size(),
@@ -1513,9 +1531,17 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 
 	gq_drag_g_signal_connect(G_OBJECT(pkd->keyword_treeview), "drag_motion",
 			 G_CALLBACK(bar_pane_keywords_dnd_motion), pkd);
+#endif
 
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect(gesture, "released", G_CALLBACK(bar_pane_keywords_gesture_menu_cb), pkd);
+	gtk_widget_add_controller(pkd->keyword_treeview, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(G_OBJECT(pkd->keyword_treeview), "button_release_event",
 			 G_CALLBACK(bar_pane_keywords_menu_cb), pkd);
+#endif
 
 	if (options->show_predefined_keyword_tree)
 		{

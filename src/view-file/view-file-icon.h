@@ -26,6 +26,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "compat.h"
 #include "view-file.h"
 
 class FileData;
@@ -52,9 +53,14 @@ struct ViewFileInfoIcon
 
 #define VFICON(_vf_) ((ViewFileInfoIcon *)((_vf_)->info))
 
-gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, GdkEventKey *event);
+gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state);
+#if HAVE_GTK4
+gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
+gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
+#else
 gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
 gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
+#endif
 
 FileData *vficon_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
 
@@ -92,7 +98,7 @@ void vficon_select_all(ViewFile *vf);
 void vficon_select_none(ViewFile *vf);
 void vficon_select_invert(ViewFile *vf);
 void vficon_select_by_fd(ViewFile *vf, FileData *fd);
-void vficon_select_list(ViewFile *vf, GList *list);
+void vficon_select_list(ViewFile *vf, const FileDataList *list);
 
 void vficon_mark_to_selection(ViewFile *vf, gint mark, MarkToSelectionMode mode);
 void vficon_selection_to_mark(ViewFile *vf, gint mark, SelectionToMarkMode mode);

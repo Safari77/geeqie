@@ -21,9 +21,8 @@
 
 #include "dupe.h"
 
-#include <sys/time.h>
-
 #include <array>
+#include <chrono>
 #include <cinttypes>
 #include <cmath>
 #include <cstdlib>
@@ -63,6 +62,8 @@
 #include "uri-utils.h"
 #include "utilops.h"
 #include "window.h"
+
+using namespace std::string_literals;
 
 namespace {
 
@@ -114,6 +115,7 @@ constexpr gint DUPE_DEF_HEIGHT = 400;
 
 constexpr gdouble DUPE_PROGRESS_PULSE_STEP = 0.0001;
 
+#if !HAVE_GTK4
 constexpr std::array<GtkTargetEntry, 2> dupe_drag_types{{
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
 	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
@@ -123,6 +125,7 @@ constexpr std::array<GtkTargetEntry, 2> dupe_drop_types{{
 	{ const_cast<gchar *>(TARGET_APP_COLLECTION_MEMBER_STRING), 0, TARGET_APP_COLLECTION_MEMBER },
 	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST }
 }};
+#endif
 
 DupeMatchType param_match_mask;
 GList *dupe_window_list = nullptr;	/**< list of open DupeWindow *s */
@@ -298,11 +301,9 @@ static void dupe_window_update_count(DupeWindow *dw, gboolean count_only)
  */
 static guint64 msec_time()
 {
-	struct timeval tv;
+	const auto duration = std::chrono::system_clock::now().time_since_epoch();
 
-	if (gettimeofday(&tv, nullptr) == -1) return 0;
-
-	return (static_cast<guint64>(tv.tv_sec) * 1000000) + static_cast<guint64>(tv.tv_usec);
+	return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
 }
 
 static gint dupe_iterations(gint n)
@@ -449,9 +450,7 @@ static void dupe_listview_realign_colors(DupeWindow *dw)
 
 static DupeItem *dupe_item_new(FileData *fd)
 {
-	DupeItem *di;
-
-	di = g_new0(DupeItem, 1);
+	auto *di = new DupeItem();
 
 	di->fd = file_data_ref(fd);
 	di->group_rank = 0.0;
@@ -462,11 +461,9 @@ static DupeItem *dupe_item_new(FileData *fd)
 static void dupe_item_free(DupeItem *di)
 {
 	file_data_unref(di->fd);
-	image_sim_free(di->simd);
-	g_free(di->md5sum);
 	if (di->pixbuf) g_object_unref(di->pixbuf);
 
-	g_free(di);
+	delete di;
 }
 
 /*
@@ -484,14 +481,13 @@ static void dupe_item_read_cache(DupeItem *di)
 
 	if (!di->simd && cd.similarity)
 		{
-		di->simd = cd.similarity.release();
+		di->simd.swap(cd.similarity);
 		}
 
-	if (di->width == 0 && di->height == 0 && cd.dimensions)
+	if (di->dimensions.empty() && cd.dimensions)
 		{
-		di->width = cd.dimensions->width;
-		di->height = cd.dimensions->height;
-		di->dimensions = (di->width << 16) + di->height;
+		di->dimensions = cd.dimensions.value();
+		di->dimensions_sum = (di->dimensions.width << 16) + di->dimensions.height;
 		}
 
 	if (!di->md5sum && cd.md5sum)
@@ -506,11 +502,11 @@ static void dupe_item_write_cache(DupeItem *di)
 
 	CacheData cd{};
 
-	if (di->width != 0) cd.set_dimensions({di->width, di->height});
+	if (!di->dimensions.empty()) cd.set_dimensions(di->dimensions);
 	if (di->md5sum)
 		{
 		Md5Digest digest;
-		if (md5_digest_from_text(di->md5sum, digest)) cd.set_md5sum(digest);
+		if (md5_digest_from_text(di->md5sum->c_str(), digest)) cd.set_md5sum(digest);
 		}
 	if (di->simd) cd.set_similarity(*di->simd);
 
@@ -610,9 +606,9 @@ static void dupe_listview_add(DupeWindow *dw, DupeItem *parent, DupeItem *child)
 	g_autofree gchar *size_text = text_from_size(di->fd->size);
 
 	g_autofree gchar *dimensions_text = nullptr;
-	if (di->width > 0 && di->height > 0)
+	if (di->dimensions.width > 0 && di->dimensions.height > 0)
 		{
-		dimensions_text = g_strdup_printf("%d x %d", di->width, di->height);
+		dimensions_text = g_strdup_printf("%d x %d", di->dimensions.width, di->dimensions.height);
 		}
 	else
 		{
@@ -1326,6 +1322,16 @@ static void dupe_match_rank(DupeWindow *dw)
  * ------------------------------------------------------------------
  */
 
+static gboolean dupe_match_md5sum(DupeItem *a, DupeItem *b)
+{
+	if (!a->md5sum) a->md5sum = md5_text_from_file_utf8(a->fd->path);
+	if (!b->md5sum) b->md5sum = md5_text_from_file_utf8(b->fd->path);
+
+	return !a->md5sum->empty()
+	    && !b->md5sum->empty()
+	    && a->md5sum == b->md5sum;
+}
+
 /**
  * @brief
  * @param[in] a
@@ -1362,38 +1368,15 @@ static gboolean dupe_match(DupeItem *a, DupeItem *b, DupeMatchType mask, gdouble
 		}
 	if (mask & DUPE_MATCH_NAME_CONTENT)
 		{
-		if (strcmp(a->fd->collate_key_name, b->fd->collate_key_name) == 0)
-			{
-			if (!a->md5sum) a->md5sum = md5_text_from_file_utf8(a->fd->path, "");
-			if (!b->md5sum) b->md5sum = md5_text_from_file_utf8(b->fd->path, "");
-			if (a->md5sum[0] == '\0' ||
-			    b->md5sum[0] == '\0' ||
-			    strcmp(a->md5sum, b->md5sum) != 0)
-				{
-				return TRUE;
-				}
+		if (strcmp(a->fd->collate_key_name, b->fd->collate_key_name) != 0) return FALSE;
 
-			return FALSE;
-			}
-		return FALSE;
+		return !dupe_match_md5sum(a, b);
 		}
 	if (mask & DUPE_MATCH_NAME_CI_CONTENT)
 		{
-		if (strcmp(a->fd->collate_key_name_nocase, b->fd->collate_key_name_nocase) == 0)
-			{
-			if (!a->md5sum) a->md5sum = md5_text_from_file_utf8(a->fd->path, "");
-			if (!b->md5sum) b->md5sum = md5_text_from_file_utf8(b->fd->path, "");
-			if (a->md5sum[0] == '\0' ||
-			    b->md5sum[0] == '\0' ||
-			    strcmp(a->md5sum, b->md5sum) != 0)
-				{
-				return TRUE;
-				}
+		if (strcmp(a->fd->collate_key_name_nocase, b->fd->collate_key_name_nocase) != 0) return FALSE;
 
-			return FALSE;
-			}
-		return FALSE;
-
+		return !dupe_match_md5sum(a, b);
 		}
 	if (mask & DUPE_MATCH_SIZE)
 		{
@@ -1405,17 +1388,13 @@ static gboolean dupe_match(DupeItem *a, DupeItem *b, DupeMatchType mask, gdouble
 		}
 	if (mask & DUPE_MATCH_SUM)
 		{
-		if (!a->md5sum) a->md5sum = md5_text_from_file_utf8(a->fd->path, "");
-		if (!b->md5sum) b->md5sum = md5_text_from_file_utf8(b->fd->path, "");
-		if (a->md5sum[0] == '\0' ||
-		    b->md5sum[0] == '\0' ||
-		    strcmp(a->md5sum, b->md5sum) != 0) return FALSE;
+		if (!dupe_match_md5sum(a, b)) return FALSE;
 		}
 	if (mask & DUPE_MATCH_DIM)
 		{
-		if (a->width == 0) image_load_dimensions(a->fd, &a->width, &a->height);
-		if (b->width == 0) image_load_dimensions(b->fd, &b->width, &b->height);
-		if (a->width != b->width || a->height != b->height) return FALSE;
+		if (a->dimensions.empty()) image_load_dimensions(a->fd, a->dimensions);
+		if (b->dimensions.empty()) image_load_dimensions(b->fd, b->dimensions);
+		if (a->dimensions != b->dimensions) return FALSE;
 		}
 	if (mask & DUPE_MATCH_SIM)
 		{
@@ -1429,11 +1408,11 @@ static gboolean dupe_match(DupeItem *a, DupeItem *b, DupeMatchType mask, gdouble
 
 		if (fast)
 			{
-			f = image_sim_compare_fast(a->simd, b->simd, m);
+			f = image_sim_compare_fast(a->simd.get(), b->simd.get(), m);
 			}
 		else
 			{
-			f = image_sim_compare(a->simd, b->simd);
+			f = image_sim_compare(a->simd.get(), b->simd.get());
 			}
 
 		*rank = f * 100.0;
@@ -1493,30 +1472,26 @@ static DUPE_CHECK_RESULT dupe_match_check(DupeItem *di1, DupeItem *di2, gpointer
 		}
 	if (mask & DUPE_MATCH_NAME_CONTENT)
 		{
-		if (g_strcmp0(di1->fd->collate_key_name, di2->fd->collate_key_name) == 0)
-			{
-			if (g_strcmp0(di1->md5sum, di2->md5sum) == 0)
-				{
-				return DUPE_NAME_MATCH;
-				}
-			}
-		else
+		if (g_strcmp0(di1->fd->collate_key_name, di2->fd->collate_key_name) != 0)
 			{
 			return DUPE_NO_MATCH;
+			}
+
+		if (di1->md5sum == di2->md5sum)
+			{
+			return DUPE_NAME_MATCH;
 			}
 		}
 	if (mask & DUPE_MATCH_NAME_CI_CONTENT)
 		{
-		if (strcmp(di1->fd->collate_key_name_nocase, di2->fd->collate_key_name_nocase) == 0)
-			{
-			if (g_strcmp0(di1->md5sum, di2->md5sum) == 0)
-				{
-				return DUPE_NAME_MATCH;
-				}
-			}
-		else
+		if (strcmp(di1->fd->collate_key_name_nocase, di2->fd->collate_key_name_nocase) != 0)
 			{
 			return DUPE_NO_MATCH;
+			}
+
+		if (di1->md5sum == di2->md5sum)
+			{
+			return DUPE_NAME_MATCH;
 			}
 		}
 	if (mask & DUPE_MATCH_SIZE)
@@ -1535,14 +1510,14 @@ static DUPE_CHECK_RESULT dupe_match_check(DupeItem *di1, DupeItem *di2, gpointer
 		}
 	if (mask & DUPE_MATCH_SUM)
 		{
-		if (g_strcmp0(di1->md5sum, di2->md5sum) != 0)
+		if (di1->md5sum != di2->md5sum)
 			{
 			return DUPE_NO_MATCH;
 			}
 		}
 	if (mask & DUPE_MATCH_DIM)
 		{
-		if (di1->dimensions != di2->dimensions)
+		if (di1->dimensions_sum != di2->dimensions_sum)
 			{
 			return DUPE_NO_MATCH;
 			}
@@ -1604,11 +1579,13 @@ static gint dupe_match_binary_search_cb(gconstpointer a, gconstpointer b)
 		}
 	if (mask & DUPE_MATCH_SUM)
 		{
-		return g_strcmp0(di1->md5sum, di2->md5sum);
+		if (di1->md5sum < di2->md5sum) return -1;
+		if (di1->md5sum > di2->md5sum) return 1;
+		return 0;
 		}
 	if (mask & DUPE_MATCH_DIM)
 		{
-		return (di1->dimensions - di2->dimensions);
+		return (di1->dimensions_sum - di2->dimensions_sum);
 		}
 
 	return 0;
@@ -1664,20 +1641,21 @@ static gint dupe_match_sort_cb(gconstpointer a, gconstpointer b, gpointer data)
 		}
 	if (mask & DUPE_MATCH_SUM)
 		{
-		if (di1->md5sum[0] == '\0' || di2->md5sum[0] == '\0')
-		    {
-			return -1;
-			}
-
-		return strcmp(di1->md5sum, di2->md5sum);
-		}
-	if (mask & DUPE_MATCH_DIM)
-		{
-		if (!di1 || !di2 || !di1->width || !di1->height || !di2->width || !di2->height)
+		if (!di1->md5sum || di1->md5sum->empty() ||
+		    !di2->md5sum || di2->md5sum->empty())
 			{
 			return -1;
 			}
-		return (di1->dimensions - di2->dimensions);
+
+		return di1->md5sum->compare(di2->md5sum.value());
+		}
+	if (mask & DUPE_MATCH_DIM)
+		{
+		if (!di1 || !di2 || !di1->dimensions.width || !di1->dimensions.height || !di2->dimensions.width || !di2->dimensions.height)
+			{
+			return -1;
+			}
+		return (di1->dimensions_sum - di2->dimensions_sum);
 		}
 
 	return 0; // should not execute
@@ -2039,22 +2017,22 @@ static void dupe_loader_done_cb(ImageLoader *il, gpointer data)
 
 		if (!di->simd)
 			{
-			di->simd = image_sim_new();
+			di->simd = std::make_unique<ImageSimilarityData>();
 			}
 
 		di->simd->fill_data(pixbuf);
 
-		if (di->width == 0 && di->height == 0 && pixbuf)
+		if (di->dimensions.empty() && pixbuf)
 			{
-			di->width = gdk_pixbuf_get_width(pixbuf);
-			di->height = gdk_pixbuf_get_height(pixbuf);
+			di->dimensions.width = gdk_pixbuf_get_width(pixbuf);
+			di->dimensions.height = gdk_pixbuf_get_height(pixbuf);
 			}
 		if (options->thumbnails.enable_caching)
 			{
 			dupe_item_write_cache(di);
 			}
 
-		image_sim_alternate_processing(di->simd);
+		di->simd->alternate_processing();
 		}
 
 	image_loader_free(dw->img_loader);
@@ -2083,90 +2061,87 @@ static GList *dupe_setup_point_step(DupeWindow *dw, GList *p)
 }
 
 /**
- * @brief Generates the sumcheck or dimensions
+ * @brief Generates the sumcheck or dimensions_sum
  * @param list Set1 or set2
  * @returns TRUE/FALSE = not completed/completed
  *
- * Ensures that the DIs contain the MD5SUM or dimensions for all items in
+ * Ensures that the DIs contain the MD5SUM or dimensions_sum for all items in
  * the list. One item at a time. Re-enters if not completed.
  */
 static gboolean create_checksums_dimensions(DupeWindow *dw, GList *list)
 {
-		if ((dw->match_mask & DUPE_MATCH_SUM) ||
-			(dw->match_mask & DUPE_MATCH_NAME_CONTENT) ||
-			(dw->match_mask & DUPE_MATCH_NAME_CI_CONTENT))
+	static const auto setup_progress = [](const DupeWindow *dw)
+	{
+		return (dw->setup_count == 0) ? 0.0 : static_cast<gdouble>(dw->setup_n - 1) / dw->setup_count;
+	};
+
+	if ((dw->match_mask & DUPE_MATCH_SUM) ||
+	    (dw->match_mask & DUPE_MATCH_NAME_CONTENT) ||
+	    (dw->match_mask & DUPE_MATCH_NAME_CI_CONTENT))
+		{
+		/* MD5SUM only */
+		if (!dw->setup_point) dw->setup_point = list; // setup_point clear on 1st entry
+
+		while (dw->setup_point)
 			{
-			/* MD5SUM only */
-			if (!dw->setup_point) dw->setup_point = list; // setup_point clear on 1st entry
+			auto di = static_cast<DupeItem *>(dw->setup_point->data);
 
-			while (dw->setup_point)
+			dw->setup_point = dupe_setup_point_step(dw, dw->setup_point);
+			dw->setup_n++;
+
+			if (!di->md5sum)
 				{
-				auto di = static_cast<DupeItem *>(dw->setup_point->data);
+				dupe_window_update_progress(dw, _("Reading checksums…"), setup_progress(dw), FALSE);
 
-				dw->setup_point = dupe_setup_point_step(dw, dw->setup_point);
-				dw->setup_n++;
-
-				if (!di->md5sum)
+				if (options->thumbnails.enable_caching)
 					{
-					dupe_window_update_progress(dw, _("Reading checksums…"),
-						dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n - 1) / dw->setup_count, FALSE);
-
-					if (options->thumbnails.enable_caching)
-						{
-						dupe_item_read_cache(di);
-						if (di->md5sum)
-							{
-							return TRUE;
-							}
-						}
-
-					di->md5sum = md5_text_from_file_utf8(di->fd->path, "");
-					if (options->thumbnails.enable_caching)
-						{
-						dupe_item_write_cache(di);
-						}
-					return TRUE;
+					dupe_item_read_cache(di);
+					if (di->md5sum) return TRUE;
 					}
-				}
-			dupe_setup_reset(dw);
-			}
 
-		if ((dw->match_mask & DUPE_MATCH_DIM)  )
+				di->md5sum = md5_text_from_file_utf8(di->fd->path);
+				if (options->thumbnails.enable_caching)
+					{
+					dupe_item_write_cache(di);
+					}
+				return TRUE;
+				}
+			}
+		dupe_setup_reset(dw);
+		}
+
+	if (dw->match_mask & DUPE_MATCH_DIM)
+		{
+		/* Dimensions only */
+		if (!dw->setup_point) dw->setup_point = list;
+
+		while (dw->setup_point)
 			{
-			/* Dimensions only */
-			if (!dw->setup_point) dw->setup_point = list;
+			auto di = static_cast<DupeItem *>(dw->setup_point->data);
 
-			while (dw->setup_point)
+			dw->setup_point = dupe_setup_point_step(dw, dw->setup_point);
+			dw->setup_n++;
+			if (di->dimensions.empty())
 				{
-				auto di = static_cast<DupeItem *>(dw->setup_point->data);
+				dupe_window_update_progress(dw, _("Reading dimensions…"), setup_progress(dw), FALSE);
 
-				dw->setup_point = dupe_setup_point_step(dw, dw->setup_point);
-				dw->setup_n++;
-				if (di->width == 0 && di->height == 0)
+				if (options->thumbnails.enable_caching)
 					{
-					dupe_window_update_progress(dw, _("Reading dimensions…"),
-						dw->setup_count == 0 ? 0.0 : static_cast<gdouble>(dw->setup_n - 1) / dw->setup_count, FALSE);
-
-					if (options->thumbnails.enable_caching)
-						{
-						dupe_item_read_cache(di);
-						if (di->width != 0 || di->height != 0)
-							{
-							return TRUE;
-							}
-						}
-
-					image_load_dimensions(di->fd, &di->width, &di->height);
-					di->dimensions = (di->width << 16) + di->height;
-					if (options->thumbnails.enable_caching)
-						{
-						dupe_item_write_cache(di);
-						}
-					return TRUE;
+					dupe_item_read_cache(di);
+					if (!di->dimensions.empty()) return TRUE;
 					}
+
+				image_load_dimensions(di->fd, di->dimensions);
+				di->dimensions_sum = (di->dimensions.width << 16) + di->dimensions.height;
+				if (options->thumbnails.enable_caching)
+					{
+					dupe_item_write_cache(di);
+					}
+				return TRUE;
 				}
-			dupe_setup_reset(dw);
 			}
+		dupe_setup_reset(dw);
+		}
 
 	return FALSE;
 }
@@ -2239,9 +2214,9 @@ static gboolean dupe_check_cb(gpointer data)
 					if (options->thumbnails.enable_caching)
 						{
 						dupe_item_read_cache(di);
-						if (image_sim_filled(di->simd))
+						if (image_sim_filled(di->simd.get()))
 							{
-							image_sim_alternate_processing(di->simd);
+							di->simd->alternate_processing();
 							return G_SOURCE_CONTINUE;
 							}
 						}
@@ -2253,8 +2228,7 @@ static gboolean dupe_check_cb(gpointer data)
 
 					if (!image_loader_start(dw->img_loader))
 						{
-						image_sim_free(di->simd);
-						di->simd = image_sim_new();
+						di->simd = std::make_unique<ImageSimilarityData>();
 						image_loader_free(dw->img_loader);
 						dw->img_loader = nullptr;
 						return G_SOURCE_CONTINUE;
@@ -2899,10 +2873,10 @@ static void dupe_display_stats(DupeWindow *dw, DupeItem *di)
 
 	dupe_display_label(gd->vbox, "date:", text_from_time(di->fd->date));
 
-	g_autofree gchar *dimensions_buf = g_strdup_printf("%d x %d", di->width, di->height);
+	g_autofree gchar *dimensions_buf = g_strdup_printf("%d x %d", di->dimensions.width, di->dimensions.height);
 	dupe_display_label(gd->vbox, "dimensions:", dimensions_buf);
 
-	dupe_display_label(gd->vbox, "md5sum:", (di->md5sum) ? di->md5sum : "not generated");
+	dupe_display_label(gd->vbox, "md5sum:", di->md5sum.value_or("not generated"s).c_str());
 
 	dupe_display_label(gd->vbox, "thumbprint:", (di->simd) ? "" : "not generated");
 	if (di->simd)
@@ -4114,94 +4088,58 @@ static gint default_sort_cb(GtkTreeModel *, GtkTreeIter *, GtkTreeIter *, gpoint
 
 static gint column_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b, gpointer data)
 {
-	auto sortable = static_cast<GtkTreeSortable *>(data);
-	gint ret = 0;
-	gchar *rank_str_a;
-	gchar *rank_str_b;
-	gint rank_int_a;
-	gint rank_int_b;
-	gint group_a;
-	gint group_b;
 	gint sort_column_id;
 	GtkSortType sort_order;
+	gtk_tree_sortable_get_sort_column_id(static_cast<GtkTreeSortable *>(data), &sort_column_id, &sort_order);
+
+	g_autofree gchar *rank_str_a = nullptr;
+	gint group_a;
 	DupeItem *di_a;
-	DupeItem *di_b;
-
-	gtk_tree_sortable_get_sort_column_id(sortable, &sort_column_id, &sort_order);
-
 	gtk_tree_model_get(model, a, DUPE_COLUMN_RANK, &rank_str_a, DUPE_COLUMN_SET, &group_a, DUPE_COLUMN_POINTER, &di_a, -1);
 
+	g_autofree gchar *rank_str_b = nullptr;
+	gint group_b;
+	DupeItem *di_b;
 	gtk_tree_model_get(model, b, DUPE_COLUMN_RANK, &rank_str_b, DUPE_COLUMN_SET, &group_b, DUPE_COLUMN_POINTER, &di_b, -1);
 
-	if (group_a == group_b)
+	if (group_a != group_b)
 		{
-		switch (sort_column_id)
+		gint ret = group_a - group_b;
+
+		if (sort_order == GTK_SORT_ASCENDING)
 			{
-			case DUPE_COLUMN_NAME:
-				ret = utf8_compare(di_a->fd->name, di_b->fd->name, TRUE);
-				break;
-			case DUPE_COLUMN_SIZE:
-				if (di_a->fd->size == di_b->fd->size)
-					{
-					ret = 0;
-					}
-				else
-					{
-					ret = (di_a->fd->size > di_b->fd->size) ? 1 : -1;
-					}
-				break;
-			case DUPE_COLUMN_DATE:
-				if (di_a->fd->date == di_b->fd->date)
-					{
-					ret = 0;
-					}
-				else
-					{
-					ret = (di_a->fd->date > di_b->fd->date) ? 1 : -1;
-					}
-				break;
-			case DUPE_COLUMN_DIMENSIONS:
-				if ((di_a->width == di_b->width) && (di_a->height == di_b->height))
-					{
-					ret = 0;
-					}
-				else
-					{
-					ret = ((di_a->width * di_a->height) > (di_b->width * di_b->height)) ? 1 : -1;
-					}
-				break;
-			case DUPE_COLUMN_RANK:
-				rank_int_a = atoi(rank_str_a);
-				rank_int_b = atoi(rank_str_b);
-				if (rank_int_a == 0) rank_int_a = 101;
-				if (rank_int_b == 0) rank_int_b = 101;
-
-				if (rank_int_a == rank_int_b)
-					{
-					ret = 0;
-					}
-				else
-					{
-					ret = (rank_int_a > rank_int_b) ? 1 : -1;
-					}
-				break;
-			case DUPE_COLUMN_PATH:
-				ret = utf8_compare(di_a->fd->path, di_b->fd->path, TRUE);
-				break;
-			default:
-				break;
+			ret *= -1;
 			}
-		}
-	else if (group_a < group_b)
-		{
-		ret = (sort_order == GTK_SORT_ASCENDING) ? 1 : -1;
-		}
-	else
-		{
-		ret = (sort_order == GTK_SORT_ASCENDING) ? -1 : 1;
+
+		return ret;
 		}
 
-	return ret;
+	switch (sort_column_id)
+		{
+		case DUPE_COLUMN_NAME:
+			return utf8_compare(di_a->fd->name, di_b->fd->name, TRUE);
+		case DUPE_COLUMN_SIZE:
+			return di_a->fd->size - di_b->fd->size;
+		case DUPE_COLUMN_DATE:
+			return di_a->fd->date - di_b->fd->date;
+		case DUPE_COLUMN_DIMENSIONS:
+			return di_a->dimensions.area() - di_b->dimensions.area();
+		case DUPE_COLUMN_RANK:
+			{
+			gint rank_int_a = atoi(rank_str_a);
+			gint rank_int_b = atoi(rank_str_b);
+			if (rank_int_a == 0) rank_int_a = 101;
+			if (rank_int_b == 0) rank_int_b = 101;
+
+			return rank_int_a - rank_int_b;
+			}
+		case DUPE_COLUMN_PATH:
+			return utf8_compare(di_a->fd->path, di_b->fd->path, TRUE);
+		default:
+			break;
+		}
+
+	return 0;
 }
 
 static void column_clicked_cb(GtkWidget *,  gpointer data)
@@ -4297,16 +4235,15 @@ DupeWindow *dupe_window_new()
 	dw->listview = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
 	g_object_unref(store);
 
-	dw->sortable = GTK_TREE_SORTABLE(store);
-
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_RANK, column_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_SET, default_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_THUMB, default_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_NAME, column_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_SIZE, column_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_DATE, column_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_DIMENSIONS, column_sort_cb, dw->sortable, nullptr);
-	gtk_tree_sortable_set_sort_func(dw->sortable, DUPE_COLUMN_PATH, column_sort_cb, dw->sortable, nullptr);
+	GtkTreeSortable *sortable = GTK_TREE_SORTABLE(store);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_RANK, column_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_SET, default_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_THUMB, default_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_NAME, column_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_SIZE, column_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_DATE, column_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_DIMENSIONS, column_sort_cb, sortable, nullptr);
+	gtk_tree_sortable_set_sort_func(sortable, DUPE_COLUMN_PATH, column_sort_cb, sortable, nullptr);
 
 	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(dw->listview));
 	gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
@@ -4334,8 +4271,16 @@ DupeWindow *dupe_window_new()
 
 	dw->second_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(dw->paned), scrolled);
+#else
 	gtk_paned_pack1(GTK_PANED(dw->paned), scrolled, TRUE, FALSE);
+#endif
+#if HAVE_GTK4
+	gtk_paned_set_end_child(GTK_PANED(dw->paned), dw->second_vbox);
+#else
 	gtk_paned_pack2(GTK_PANED(dw->paned), dw->second_vbox, TRUE, FALSE);
+#endif
 
 	if (dw->second_set)
 		{
@@ -4592,6 +4537,7 @@ static GtkWidget *dupe_confirm_dir_list(DupeWindow *dw, GList *list)
  *-------------------------------------------------------------------
  */
 
+#if !HAVE_GTK4
 static void dupe_dnd_data_set(GtkWidget *widget, GdkDragContext *,
                               GtkSelectionData *selection_data, guint info,
                               guint, gpointer)
@@ -4746,6 +4692,12 @@ static void dupe_dnd_init(DupeWindow *dw)
 	gq_drag_g_signal_connect(G_OBJECT(dw->second_listview), "drag_data_received",
 			 G_CALLBACK(dupe_dnd_data_get), dw);
 }
+#else
+static void dupe_dnd_init(DupeWindow *dw)
+{
+	(void)dw;
+}
+#endif
 
 /*
  *-------------------------------------------------------------------
@@ -4874,9 +4826,9 @@ static GString *export_duplicates_data(DupeWindow *dw, const gchar *sep)
 		output_string = g_string_append(output_string, sep);
 		output_string = g_string_append(output_string, text_from_time(di->fd->date));
 		output_string = g_string_append(output_string, sep);
-		g_string_append_printf(output_string, "%d", di->width);
+		g_string_append_printf(output_string, "%d", di->dimensions.width);
 		output_string = g_string_append(output_string, sep);
-		g_string_append_printf(output_string, "%d", di->height);
+		g_string_append_printf(output_string, "%d", di->dimensions.height);
 		output_string = g_string_append(output_string, sep);
 		output_string = g_string_append(output_string, di->fd->path);
 		output_string = g_string_append_c(output_string, '\n');

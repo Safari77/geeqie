@@ -247,6 +247,7 @@ static void height_spin_changed_cb(GtkSpinButton *spin, gpointer data)
 	gtk_widget_set_size_request(static_cast<GtkWidget *>(data), -1, gtk_spin_button_get_value_as_int(spin));
 }
 
+#if HAVE_GTK4
 static void height_spin_key_press_cb(GtkEventControllerKey *, gint keyval, guint, GdkModifierType, gpointer data)
 {
 	if ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_Escape))
@@ -254,6 +255,18 @@ static void height_spin_key_press_cb(GtkEventControllerKey *, gint keyval, guint
 		gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
 		}
 }
+#else
+static gboolean height_spin_key_press_cb(GtkWidget *, GdkEventKey *event, gpointer data)
+{
+	if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter || event->keyval == GDK_KEY_Escape)
+		{
+		gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
+		return TRUE;
+		}
+
+	return FALSE;
+}
+#endif
 
 static void expander_height_cb(GtkWidget *widget, GdkEvent *, gpointer)
 {
@@ -271,7 +284,6 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	GdkDisplay *display;
 	GdkSeat *seat;
 	GdkDevice *device;
-	GtkEventController *controller;
 
 	display = gdk_display_get_default();
 	seat = gdk_display_get_default_seat(display);
@@ -300,8 +312,13 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 
 	GtkWidget *spin = gtk_spin_button_new_with_range(1, 1000, 1);
 	g_signal_connect(G_OBJECT(spin), "value-changed", G_CALLBACK(height_spin_changed_cb), data_box);
-	controller = gtk_event_controller_key_new(spin);
+#if HAVE_GTK4
+	GtkEventController *controller = gtk_event_controller_key_new();
 	g_signal_connect(controller, "key-pressed", G_CALLBACK(height_spin_key_press_cb), window);
+	gtk_widget_add_controller(spin, controller);
+#else
+	g_signal_connect(G_OBJECT(spin), "key_press_event", G_CALLBACK(height_spin_key_press_cb), window);
+#endif
 
 	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), h);
 	gq_gtk_container_add(window, spin);
@@ -350,15 +367,28 @@ static void bar_menu_popup(GtkWidget *widget)
 }
 
 
-static gboolean bar_menu_expander_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+static gboolean bar_menu_expander_common(GtkWidget *widget, guint button)
 {
-	if (bevent->button == GDK_BUTTON_SECONDARY)
+	if (button == GDK_BUTTON_SECONDARY)
 		{
 		bar_menu_popup(widget);
 		return TRUE;
 		}
 	return FALSE;
 }
+
+#if HAVE_GTK4
+static void bar_menu_expander_gesture_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer)
+{
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	bar_menu_expander_common(widget, gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
+}
+#else
+static gboolean bar_menu_expander_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
+{
+	return bar_menu_expander_common(widget, bevent->button);
+}
+#endif
 
 static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 {
@@ -378,7 +408,7 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 		}
 }
 
-static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
+static void bar_menu_add_cb(GtkWidget *, gpointer)
 {
 	GtkWidget *menu = popup_menu_short_lived();
 
@@ -389,7 +419,6 @@ static gboolean bar_menu_add_cb(GtkWidget *, GdkEventButton *, gpointer)
 		}
 
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
-	return TRUE;
 }
 
 
@@ -403,17 +432,24 @@ static void bar_pane_set_fd_cb(GtkWidget *expander, gpointer data)
 
 void bar_set_fd(GtkWidget *bar, FileData *fd)
 {
-	BarData *bd;
-	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
+	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
 	file_data_unref(bd->fd);
 	bd->fd = file_data_ref(fd);
 
+#if HAVE_GTK4
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		bar_pane_set_fd_cb(child, fd);
+		}
+#else
 	gtk_container_foreach(GTK_CONTAINER(bd->vbox), bar_pane_set_fd_cb, fd);
+#endif
 
-	gtk_label_set_text(GTK_LABEL(bd->label_file_name), (bd->fd) ? bd->fd->name : "");
-
+	gtk_label_set_text(GTK_LABEL(bd->label_file_name), bd->fd ? bd->fd->name : "");
 }
 
 static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
@@ -426,11 +462,19 @@ static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
 
 void bar_notify_selection(GtkWidget *bar, gint count)
 {
-	BarData *bd;
-	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
+	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	gtk_container_foreach(GTK_CONTAINER(bd->vbox), bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+#if HAVE_GTK4
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		bar_pane_notify_selection_cb(child, GINT_TO_POINTER(count));
+		}
+#else
+	gtk_container_foreach(GTK_CONTAINER(bd->vbox),  bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+#endif
 }
 
 gboolean bar_event(GtkWidget *bar, GdkEvent *event)
@@ -560,7 +604,14 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 
 	gq_gtk_box_pack_start(GTK_BOX(bd->vbox), expander, FALSE, TRUE, 0);
 
+#if HAVE_GTK4
+	GtkGesture *gesture = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect(gesture, "released", G_CALLBACK(bar_menu_expander_gesture_cb), bd);
+	gtk_widget_add_controller(expander, GTK_EVENT_CONTROLLER(gesture));
+#else
 	g_signal_connect(expander, "button_release_event", G_CALLBACK(bar_menu_expander_cb), bd);
+#endif
 	g_signal_connect(expander, "notify::expanded", G_CALLBACK(bar_expander_cb), pd);
 
 	gq_gtk_container_add(expander, pane);

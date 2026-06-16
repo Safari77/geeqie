@@ -43,7 +43,7 @@ struct HistMap;
 #define DEBUG_FILEDATA
 #endif
 
-#ifdef FD_VERBOSE_DEBUG
+#if FD_VERBOSE_DEBUG
 #include <sstream>
 #include <vector>
 #endif
@@ -161,7 +161,7 @@ class GlobalFileDataContext
 	FileDataContext context_;
 };
 
-#ifdef FD_VERBOSE_DEBUG
+#if FD_VERBOSE_DEBUG
 struct FileDataDebugInfo {
 	std::vector<std::string> ref_unref_history;
 
@@ -188,6 +188,42 @@ struct FileDataDebugInfo {
 	};
 };
 #endif
+
+class FileData;
+
+/**
+ * @class FileDataRef
+ * @brief RAII object that holds a ref to the specified FileData.
+ */
+class FileDataRef
+{
+    public:
+	explicit FileDataRef(FileData *fd);
+	// Not copyable or copy-assignable.
+	FileDataRef(FileDataRef &) = delete;
+	FileDataRef &operator=(const FileDataRef &) = delete;
+
+	// Allow move and move-assignment.
+	FileDataRef(FileDataRef &&) noexcept;
+	FileDataRef &operator=(FileDataRef &&) noexcept;
+
+	~FileDataRef();
+
+	// Allow implicit conversion directly to FileData*.
+	// This allows a FileDataRef to be used anywhere a FileData* is expected.
+	operator FileData*() const { return fd_; }
+
+	// In a boolean context, return whether or not we're holding nullptr.
+	operator bool() const { return fd_ != nullptr; }
+
+	void reset(FileData *new_fd);
+	FileData *release();
+	FileData* operator*() const { return fd_; }
+	FileData* operator->() const { return fd_; }
+
+    private:
+	FileData *fd_ = nullptr;
+};
 
 class FileData {
 private:
@@ -264,7 +300,7 @@ public:
 	static gchar *text_from_size_abrev(gint64 size);
 	static const gchar *text_from_time(time_t t);
 
-	#ifdef FD_VERBOSE_DEBUG
+	#if FD_VERBOSE_DEBUG
 	FileDataDebugInfo debug_info;
 	#endif
 
@@ -272,21 +308,21 @@ public:
 	 * @headerfile file_data_new_group
 	 * scan for sidecar files - expensive
 	 */
-	static FileData *file_data_new_group(const gchar *path_utf8, FileDataContext *context = nullptr);
+	static FileDataRef new_group(const gchar *path_utf8, FileDataContext *context = nullptr);
 
 	/**
 	 * @headerfile file_data_new_no_grouping
 	 * should be used on helper files which can't have sidecars
 	 */
-	static FileData *file_data_new_no_grouping(const gchar *path_utf8, FileDataContext *context = nullptr);
+	static FileDataRef new_no_grouping(const gchar *path_utf8, FileDataContext *context = nullptr);
 
 	/**
 	 * @headerfile file_data_new_dir
 	 * should be used on dirs
 	 */
-	static FileData *file_data_new_dir(const gchar *path_utf8, FileDataContext *context = nullptr);
+	static FileDataRef new_dir(const gchar *path_utf8, FileDataContext *context = nullptr);
 
-	static FileData *file_data_new_simple(const gchar *path_utf8, FileDataContext *context = nullptr);
+	static FileDataRef new_simple(const gchar *path_utf8, FileDataContext *context = nullptr);
 
 #ifdef DEBUG_FILEDATA
 	FileData *file_data_ref(const gchar *file = __builtin_FILE(), gint line = __builtin_LINE());
@@ -409,8 +445,9 @@ public:
 	static void file_data_dump();
 
 protected:
-	static FileData *file_data_new(const gchar *path_utf8, struct stat *st, gboolean disable_sidecars, FileDataContext *context = nullptr);
-	static FileData *file_data_new_local(const gchar *path, struct stat *st, gboolean disable_sidecars, FileDataContext *context = nullptr);
+        // TODO[xsdg]: Renamed this to avoid conflict with "new" keyword.  Better options?
+	static FileDataRef make_new(const gchar *path_utf8, struct stat *st, gboolean disable_sidecars, FileDataContext *context = nullptr);
+	static FileDataRef make_new_local(const gchar *path, struct stat *st, gboolean disable_sidecars, FileDataContext *context = nullptr);
 
 	static GHashTable *file_data_basename_hash_new();
 	static GList *file_data_basename_hash_insert(GHashTable *basename_hash, FileData *fd);
@@ -482,21 +519,6 @@ class FileData::FileList
 	static void recursive_append_full(GList **list, GList *dirs, SortSettings settings);
 };
 
-/**
- * @class FileDataRef
- * @brief RAII object that holds a ref to the specified FileData.
- */
-class FileDataRef
-{
-    public:
-	explicit FileDataRef(FileData &fd, gboolean skip_ref = FALSE);
-	FileDataRef(FileDataRef &) = delete;  // Not copyable.
-	FileDataRef &operator=(const FileDataRef &) = delete;  // Not assignable.
-	~FileDataRef();
-
-    private:
-	FileData &fd_;
-};
 
 // C-style compatibility API.
 gchar *text_from_size(gint64 size);

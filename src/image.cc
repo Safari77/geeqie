@@ -50,7 +50,7 @@
 #include "ui-fileops.h"
 
 struct ExifData;
-struct FileCacheData;
+class FileCache;
 
 namespace
 {
@@ -128,7 +128,11 @@ static void image_cache_set(ImageWindow *imd, FileData *fd);
  *-------------------------------------------------------------------
  */
 
+#if HAVE_GTK4
+static void image_click_cb(PixbufRenderer *, GqMouseButtonEvent *event, gpointer data)
+#else
 static void image_click_cb(PixbufRenderer *, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	if (!options->image_lm_click_nav && event->button == GDK_BUTTON_MIDDLE)
@@ -194,7 +198,11 @@ static void switch_coords_orientation(ImageWindow *imd, gint x, gint y, gint wid
 		}
 }
 
+#if HAVE_GTK4
+static void image_press_cb(PixbufRenderer *pr, GqMouseButtonEvent *event, gpointer data)
+#else
 static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	LayoutWindow *lw;
@@ -218,14 +226,22 @@ static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer d
 		lw = get_current_layout();
 		}
 
+#if HAVE_GTK4
+	if (lw && event->button == GDK_BUTTON_PRIMARY && event->press_count == 2
+#else
 	if (lw && event->button == GDK_BUTTON_PRIMARY && event->type == GDK_2BUTTON_PRESS
+#endif
 												&& !options->image_lm_click_nav)
 		{
 		layout_image_full_screen_toggle(lw);
 		}
 }
 
+#if HAVE_GTK4
+static void image_release_cb(PixbufRenderer *, GqMouseButtonEvent *event, gpointer data)
+#else
 static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer data)
+#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	LayoutWindow *lw;
@@ -236,7 +252,7 @@ static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer d
 		lw = get_current_layout();
 		}
 
-	layout_handle_user_defined_mouse_buttons(lw, event);
+	layout_handle_user_defined_mouse_buttons(lw, event->button);
 }
 
 static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer data)
@@ -769,9 +785,9 @@ static void image_cache_release_cb(FileData *fd)
 	fd->pixbuf = nullptr;
 }
 
-static FileCacheData *image_get_cache()
+static FileCache *image_get_cache()
 {
-	static FileCacheData *cache = file_cache_new(image_cache_release_cb, 1);
+	static FileCache *cache = file_cache_new(image_cache_release_cb, 1);
 	file_cache_set_max_size(cache, static_cast<gulong>(options->image.image_cache_max) * 1048576); /* update from options */
 	return cache;
 }
@@ -1227,9 +1243,15 @@ void image_set_state_func(ImageWindow *imd,
 }
 
 
+#if HAVE_GTK4
+void image_set_button_func(ImageWindow *imd,
+			   void (*func)(ImageWindow *, GqMouseButtonEvent *event, gpointer),
+			   gpointer data)
+#else
 void image_set_button_func(ImageWindow *imd,
 			   void (*func)(ImageWindow *, GdkEventButton *event, gpointer),
 			   gpointer data)
+#endif
 {
 	imd->func_button = func;
 	imd->data_button = data;
@@ -2106,10 +2128,17 @@ ImageWindow *image_new(gboolean frame)
 
 	g_signal_connect(G_OBJECT(imd->pr), "clicked",
 			 G_CALLBACK(image_click_cb), imd);
+#if HAVE_GTK4
+	g_signal_connect(G_OBJECT(imd->pr), "button-press",
+			 G_CALLBACK(image_press_cb), imd);
+	g_signal_connect(G_OBJECT(imd->pr), "button-release",
+			 G_CALLBACK(image_release_cb), imd);
+#else
 	g_signal_connect(G_OBJECT(imd->pr), "button_press_event",
 			 G_CALLBACK(image_press_cb), imd);
 	g_signal_connect(G_OBJECT(imd->pr), "button_release_event",
 			 G_CALLBACK(image_release_cb), imd);
+#endif
 	g_signal_connect(G_OBJECT(imd->pr), "scroll_notify",
 			 G_CALLBACK(image_scroll_notify_cb), imd);
 

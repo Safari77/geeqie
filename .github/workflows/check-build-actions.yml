@@ -110,6 +110,7 @@ jobs:
           -Dexr=disabled
           -Dfits=disabled
           -Dgit=disabled
+          -Dglib-types=disabled
           -Dgps-map=disabled
           -Dgtk4=disabled
           -Dheif=disabled

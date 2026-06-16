@@ -231,15 +231,31 @@ static gboolean tab_completion_popup_key_press(GtkWidget *widget, GdkEventKey *e
 		const gchar *entry_text = gq_gtk_entry_get_text(GTK_ENTRY(td->entry));
 		const gchar *prefix = filename_from_path(entry_text);
 		TabCompPrefix tp{ prefix, strlen(prefix), 0 };
+
+#if HAVE_GTK4
+		for (GtkWidget *child = gtk_widget_get_first_child(widget);
+		     child != nullptr;
+		     child = gtk_widget_get_next_sibling(child))
+			{
+			tab_completion_iter_menu_items(child, &tp);
+			}
+#else
 		gtk_container_foreach(GTK_CONTAINER(widget), tab_completion_iter_menu_items, &tp);
+#endif
+
 		if (tp.choices > 1) return TRUE; /* multiple choices */
 		if (tp.choices > 0) tab_completion_do(td); /* one choice */
 		}
 
 	/* close the menu */
+#if HAVE_GTK4
+	gtk_popover_popdown(GTK_POPOVER(widget));
+#else
 	gtk_menu_popdown(GTK_MENU(widget));
 	/* doing this does not emit the "selection done" signal, unref it ourselves */
 	g_object_unref(widget);
+#endif
+
 	return TRUE;
 }
 
@@ -569,8 +585,6 @@ GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *t
 	GtkWidget *combo;
 	GtkWidget *combo_entry;
 	GtkWidget *button;
-	GList *work;
-	gint n = 0;
 
 	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
@@ -590,12 +604,15 @@ GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *t
 	td->history_key = g_strdup(history_key);
 	td->history_levels = max_levels;
 
-	work = history_list_get_by_key(history_key);
-	while (work)
+	gint n = 0;
+	const HistoryList *history_list = history_list_find_by_key(history_key);
+	if (history_list)
 		{
-		gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), static_cast<gchar *>(work->data));
-		work = work->next;
-		n++;
+		n = history_list->size();
+		for (const std::string &item : *history_list)
+			{
+			gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), item.c_str());
+			}
 		}
 
 	if (text)
@@ -617,8 +634,6 @@ GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *t
 void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
 {
 	GtkTreeModel *store;
-	GList *work;
-	gint n = 0;
 
 	if (!path) return;
 
@@ -632,12 +647,15 @@ void tab_completion_append_to_history(GtkWidget *entry, const gchar *path)
 	store = gtk_combo_box_get_model(GTK_COMBO_BOX(td->combo));
 	gtk_list_store_clear(GTK_LIST_STORE(store));
 
-	work = history_list_get_by_key(td->history_key);
-	while (work)
+	gint n = 0;
+	const HistoryList *history_list = history_list_find_by_key(td->history_key);
+	if (history_list)
 		{
-		gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(td->combo), static_cast<gchar *>(work->data));
-		work = work->next;
-		n++;
+		n = history_list->size();
+		for (const std::string &item : *history_list)
+			{
+			gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(td->combo), item.c_str());
+			}
 		}
 
 	if (td->tab_append_func) td->tab_append_func(path, n);

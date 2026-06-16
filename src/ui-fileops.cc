@@ -824,13 +824,11 @@ gboolean md5_get_digest_from_file_utf8(const gchar *path, Md5Digest &digest)
  * @brief Generate md5 string from file,
  * on failure returns newly allocated copy of error_text, error_text may be NULL
  */
-gchar *md5_text_from_file_utf8(const gchar *path, const gchar *error_text)
+std::string md5_text_from_file_utf8(const gchar *path)
 {
 	g_autofree gchar *pathl = path_from_utf8(path);
 
-	auto md5_text = md5_get_string_from_file(pathl);
-
-	return md5_text ? md5_text : g_strdup(error_text);
+	return md5_get_string_from_file(pathl);
 }
 
 /* Download web file
@@ -903,7 +901,7 @@ gchar *download_web_file(const gchar *text, gboolean minimized, gpointer data)
 	g_autofree gchar *scheme = g_uri_parse_scheme(text);
 	if (g_strcmp0("http", scheme) != 0 && g_strcmp0("https", scheme) != 0)
 		{
-		return FALSE;
+		return nullptr;
 		}
 
 	FileFormatClass format_class = filter_file_get_class(text);
@@ -912,7 +910,7 @@ gchar *download_web_file(const gchar *text, gboolean minimized, gpointer data)
 	    format_class != FORMAT_CLASS_VIDEO &&
 	    format_class != FORMAT_CLASS_DOCUMENT)
 		{
-		return FALSE;
+		return nullptr;
 		}
 
 	g_autoptr(GError) error = nullptr;
