@@ -57,6 +57,7 @@ struct GqMouseButtonEvent
 	#define gq_gtk_window_set_keep_above(window, setting) ;
 	#define gq_gtk_window_set_position(window, position) ;
 	#define gq_gtk_window_fullscreen_on_monitor(window, monitor) ;
+	#define gq_icon_theme_get_default() gtk_icon_theme_get_for_display(gdk_display_get_default())
 #else
 	#define gq_gtk_box_pack_end(box, child, expand, fill, padding) gtk_box_pack_end(box, child, expand, fill, padding)
 	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_pack_start(box, child, expand, fill, padding)
@@ -72,6 +73,7 @@ struct GqMouseButtonEvent
 	#define gq_gtk_window_set_keep_above(window, setting) gtk_window_set_keep_above(window, setting)
 	#define gq_gtk_window_set_position(window, position) gtk_window_set_position(window, position)
 	#define gq_gtk_window_fullscreen_on_monitor(window, screen, monitor) gtk_window_fullscreen_on_monitor(window, screen, monitor)
+	#define gq_icon_theme_get_default() gtk_icon_theme_get_default()
 #endif
 
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
