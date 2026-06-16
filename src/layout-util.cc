@@ -3910,7 +3910,11 @@ void layout_bar_set(LayoutWindow *lw, GtkWidget *bar)
 	g_signal_connect(G_OBJECT(lw->bar), "destroy",
 			 G_CALLBACK(layout_bar_destroyed), lw);
 
+#if HAVE_GTK4
+	gtk_paned_set_end_child(GTK_PANED(lw->utility_paned), lw->bar);
+#else
 	gtk_paned_pack2(GTK_PANED(lw->utility_paned), lw->bar, FALSE, TRUE);
+#endif
 
 	bar_set_fd(lw->bar, layout_image_get_fd(lw));
 }
@@ -4092,7 +4096,12 @@ GtkWidget *layout_bars_prepare(LayoutWindow *lw, GtkWidget *image)
 	 */
 	gtk_paned_set_wide_handle(GTK_PANED(lw->utility_paned), TRUE);
 
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(lw->utility_paned), image);
+#else
 	gtk_paned_pack1(GTK_PANED(lw->utility_paned), image, TRUE, FALSE);
+#endif
+
 	gtk_widget_show(lw->utility_paned);
 
 	gtk_widget_show(image);

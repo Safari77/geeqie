@@ -4271,8 +4271,16 @@ DupeWindow *dupe_window_new()
 
 	dw->second_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
+#if HAVE_GTK4
+	gtk_paned_set_start_child(GTK_PANED(dw->paned), scrolled);
+#else
 	gtk_paned_pack1(GTK_PANED(dw->paned), scrolled, TRUE, FALSE);
+#endif
+#if HAVE_GTK4
+	gtk_paned_set_end_child(GTK_PANED(dw->paned), dw->second_vbox);
+#else
 	gtk_paned_pack2(GTK_PANED(dw->paned), dw->second_vbox, TRUE, FALSE);
+#endif
 
 	if (dw->second_set)
 		{
