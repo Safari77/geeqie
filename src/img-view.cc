@@ -874,7 +874,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 	gtk_window_set_geometry_hints(GTK_WINDOW(vw->window), nullptr, &geometry, GDK_HINT_MIN_SIZE);
 
 	gtk_window_set_resizable(GTK_WINDOW(vw->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(vw->window), 0);
+	gq_gtk_widget_set_border_width(vw->window, 0);
 
 	vw->imd = image_new(FALSE);
 	image_color_profile_set(vw->imd,

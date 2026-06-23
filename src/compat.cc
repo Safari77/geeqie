@@ -73,6 +73,14 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 		}
 }
 
+void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
+{
+	gtk_widget_set_margin_top(widget, width);
+	gtk_widget_set_margin_bottom(widget, width);
+	gtk_widget_set_margin_start(widget, width);
+	gtk_widget_set_margin_end(widget, width);
+}
+
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 {
 	return nullptr;
@@ -130,6 +138,11 @@ void gq_gtk_drag_dest_unset(GtkWidget *widget)
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
 	gtk_container_add(GTK_CONTAINER(container), widget);
+}
+
+void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
+{
+	gtk_container_set_border_width(GTK_CONTAINER(widget), width);
 }
 
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)

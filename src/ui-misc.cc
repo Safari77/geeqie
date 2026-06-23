@@ -164,7 +164,7 @@ GtkWidget *pref_frame_new(GtkWidget *parent_box, gboolean fill,
 
 	box = gtk_box_new(orientation, padding);
 	gq_gtk_container_add(frame, box);
-	gtk_container_set_border_width(GTK_CONTAINER(box), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(box, PREF_PAD_BORDER);
 	gtk_widget_show(box);
 
 	return box;

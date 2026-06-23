@@ -297,7 +297,7 @@ GtkWidget *osd_new(gint max_cols, GtkWidget *template_view)
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gq_gtk_box_pack_start(GTK_BOX(vbox), scrolled, FALSE, FALSE, 0);
-	gtk_container_set_border_width(GTK_CONTAINER(scrolled), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(scrolled, PREF_PAD_BORDER);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 	gtk_widget_show(scrolled);

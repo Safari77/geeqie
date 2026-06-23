@@ -386,7 +386,7 @@ static void generic_dialog_setup(GenericDialog *gd,
 			 G_CALLBACK(generic_dialog_key_press_cb), gd);
 
 	gtk_window_set_resizable(GTK_WINDOW(gd->dialog), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(gd->dialog), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(gd->dialog, PREF_PAD_BORDER);
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled), TRUE);

@@ -1281,7 +1281,7 @@ CollectWindow *collection_window_new(const gchar *path)
 
 	gtk_window_set_resizable(GTK_WINDOW(cw->window), TRUE);
 	collection_window_update_title(cw);
-	gtk_container_set_border_width(GTK_CONTAINER(cw->window), 0);
+	gq_gtk_widget_set_border_width(cw->window, 0);
 
 	g_signal_connect(G_OBJECT(cw->window), "delete_event",
 			 G_CALLBACK(collection_window_delete), cw);

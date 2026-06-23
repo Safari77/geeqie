@@ -524,7 +524,7 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 	gtk_window_set_decorated(GTK_WINDOW(fs->window), FALSE);
 
 #if !HAVE_GTK4
-	gtk_container_set_border_width(GTK_CONTAINER(fs->window), 0);
+	gq_gtk_widget_set_border_width(fs->window, 0);
 #endif
 
 #if !HAVE_GTK4

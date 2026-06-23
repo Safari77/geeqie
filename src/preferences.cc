@@ -1688,7 +1688,7 @@ static GtkWidget *scrolled_notebook_page(GtkWidget *notebook, const gchar *title
 	GtkWidget *vbox;
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
-	gtk_container_set_border_width(GTK_CONTAINER(scrolled), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(scrolled, PREF_PAD_BORDER);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 	label = gtk_label_new(title);
@@ -2181,7 +2181,7 @@ static GtkWidget *create_popover(GtkWidget *parent, GtkWidget *child, GtkPositio
 
 	gtk_popover_set_position(GTK_POPOVER (popover), pos);
 	gq_gtk_container_add(popover, child);
-	gtk_container_set_border_width(GTK_CONTAINER (popover), 6);
+	gq_gtk_widget_set_border_width(popover, 6);
 	gtk_widget_show (child);
 
 	return popover;
@@ -3770,7 +3770,7 @@ static void config_window_create(LayoutWindow *lw)
 		gtk_window_set_default_size(GTK_WINDOW(configwindow), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 		}
 	gtk_window_set_resizable(GTK_WINDOW(configwindow), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(configwindow), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(configwindow, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	gq_gtk_container_add(configwindow, win_vbox);
