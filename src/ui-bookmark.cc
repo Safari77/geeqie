@@ -512,7 +512,7 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 			gint h = 16;
 			gtk_icon_size_lookup(GTK_ICON_SIZE_BUTTON, &w, &h);
 
-			pixbuf = gtk_icon_theme_load_icon(gtk_icon_theme_get_default(), b->icon.c_str(), w, GTK_ICON_LOOKUP_NO_SVG, nullptr);
+			pixbuf = gtk_icon_theme_load_icon(gq_icon_theme_get_default(), b->icon.c_str(), w, GTK_ICON_LOOKUP_NO_SVG, nullptr);
 			}
 
 		if (pixbuf)

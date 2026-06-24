@@ -110,7 +110,7 @@ GdkPixbuf *file_util_get_error_icon(FileData *fd, GList *list, GtkWidget *)
 {
 	static PixmapErrors pe = []() -> PixmapErrors
 	{
-		GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+		GtkIconTheme *icon_theme = gq_icon_theme_get_default();
 
 		gint size;
 		if (!gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))

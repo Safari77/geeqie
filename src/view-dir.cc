@@ -99,7 +99,7 @@ GdkPixbuf *create_folder_icon_with_emblem(GtkIconTheme *icon_theme, const gchar 
 PixmapFolders *folder_icons_new()
 {
 	auto pf = g_new0(PixmapFolders, 1);
-	GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+	GtkIconTheme *icon_theme = gq_icon_theme_get_default();
 
 	gint size;
 	if (!gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))
