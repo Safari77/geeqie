@@ -240,7 +240,7 @@ static gboolean tab_completion_popup_key_press(GtkWidget *widget, GdkEventKey *e
 			tab_completion_iter_menu_items(child, &tp);
 			}
 #else
-		gtk_container_foreach(GTK_CONTAINER(widget), tab_completion_iter_menu_items, &tp);
+		gq_gtk_container_foreach(widget, tab_completion_iter_menu_items, &tp);
 #endif
 
 		if (tp.choices > 1) return TRUE; /* multiple choices */

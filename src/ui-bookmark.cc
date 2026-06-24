@@ -578,7 +578,7 @@ static void bookmark_populate(BookMarkData *bm)
 	{
 		gq_gtk_widget_destroy(widget);
 	};
-	gtk_container_foreach(GTK_CONTAINER(bm->box), destroy_widget, nullptr);
+	gq_gtk_container_foreach(bm->box, destroy_widget, nullptr);
 #endif
 
 	if (!bm->no_defaults && !history_list_find_by_key(bm->key.c_str()))

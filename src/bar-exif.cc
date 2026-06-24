@@ -324,7 +324,7 @@ void bar_pane_exif_update(PaneExifData *ped)
 		bar_pane_exif_update_entry(ped, entry, FALSE);
 	};
 
-	gtk_container_foreach(GTK_CONTAINER(ped->vbox), update_entry, ped);
+	gq_gtk_container_foreach(ped->vbox, update_entry, ped);
 #endif
 
 	gtk_widget_set_sensitive(ped->pane.title, !ped->all_hidden);
@@ -889,7 +889,7 @@ GList *bar_pane_exif_list()
 		*list = g_list_append(*list, g_strdup(ee->key));
 	};
 
-	gtk_container_foreach(GTK_CONTAINER(ped->vbox), exif_entry_to_list, &exif_list);
+	gq_gtk_container_foreach(ped->vbox, exif_entry_to_list, &exif_list);
 #endif
 
 	return exif_list;

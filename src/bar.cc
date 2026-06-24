@@ -446,7 +446,7 @@ void bar_set_fd(GtkWidget *bar, FileData *fd)
 		bar_pane_set_fd_cb(child, fd);
 		}
 #else
-	gtk_container_foreach(GTK_CONTAINER(bd->vbox), bar_pane_set_fd_cb, fd);
+	gq_gtk_container_foreach(bd->vbox, bar_pane_set_fd_cb, fd);
 #endif
 
 	gtk_label_set_text(GTK_LABEL(bd->label_file_name), bd->fd ? bd->fd->name : "");
@@ -473,7 +473,7 @@ void bar_notify_selection(GtkWidget *bar, gint count)
 		bar_pane_notify_selection_cb(child, GINT_TO_POINTER(count));
 		}
 #else
-	gtk_container_foreach(GTK_CONTAINER(bd->vbox),  bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+	gq_gtk_container_foreach(bd->vbox,  bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
 #endif
 }
 
