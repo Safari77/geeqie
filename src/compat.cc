@@ -243,10 +243,12 @@ gboolean gq_gtk_widget_event(GtkWidget *, GdkEvent *)
 
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
+	g_signal_connect(instance, detailed_signal, c_handler, data);
 }
 
 void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
+	g_signal_connect_swapped(instance, detailed_signal, c_handler, data);
 }
 
 void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, gpointer, gint n_targets, GdkDragAction actions)
@@ -319,7 +321,7 @@ void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, G
 
 void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
-	g_signal_connect(instance, detailed_signal, c_handler, data);
+	g_signal_connect_swapped(instance, detailed_signal, c_handler, data);
 }
 
 void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions)
