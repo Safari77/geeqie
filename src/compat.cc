@@ -191,6 +191,23 @@ void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpoint
 		}
 }
 
+void gq_gtk_widget_destroy(GtkWidget *widget)
+{
+	if (!widget) return;
+
+	if (GTK_IS_WINDOW(widget))
+		{
+		gtk_window_destroy(GTK_WINDOW(widget));
+		return;
+		}
+
+	GtkWidget *parent = gtk_widget_get_parent(widget);
+	if (parent)
+		{
+		gq_gtk_container_remove(parent, widget);
+		}
+}
+
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
 {
 	gtk_widget_set_margin_top(widget, width);
@@ -316,6 +333,11 @@ void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
 void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data)
 {
 	gtk_container_foreach(GTK_CONTAINER(container), callback, callback_data);
+}
+
+void gq_gtk_widget_destroy(GtkWidget *widget)
+{
+	gtk_widget_destroy(widget);
 }
 
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
