@@ -28,6 +28,8 @@
 namespace
 {
 
+constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-controller";
+
 const gchar *stock_id_to_icon_name(const gchar *stock_id)
 {
 	if (!stock_id) return GQ_ICON_MISSING_IMAGE;
@@ -257,10 +259,26 @@ void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask
 
 void gq_gtk_drag_dest_set(GtkWidget *widget, gpointer, gpointer, gint n_targets, GdkDragAction actions)
 {
+	(void)n_targets;
+
+	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
+	if (controller)
+		{
+		gtk_widget_remove_controller(widget, controller);
+		}
+
+	auto *drop_target = gtk_drop_target_async_new(actions);
+	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drop_target));
+	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, drop_target);
 }
 
 void gq_gtk_drag_dest_unset(GtkWidget *widget)
 {
+	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
+	if (!controller) return;
+
+	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, nullptr);
+	gtk_widget_remove_controller(widget, controller);
 }
 
 #else
