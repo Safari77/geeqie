@@ -43,7 +43,6 @@ struct GqMouseButtonEvent
 };
 
 #if HAVE_GTK4
-	#define gq_gtk_frame_set_shadow_type(frame, type) ;
 	#define gq_gtk_image_new_from_icon_name(icon_name, size) gtk_image_new_from_icon_name(icon_name)
 	#define gq_gtk_icon_theme_has_icon(icon_theme, icon_name) gtk_icon_theme_has_icon(icon_theme, icon_name)
 	#define gq_gtk_scrolled_window_new(hadjustment, vadjustment) gtk_scrolled_window_new()
@@ -81,6 +80,7 @@ void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolea
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data);
+void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type);
 void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type);
 gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y);
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y);

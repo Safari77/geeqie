@@ -182,6 +182,18 @@ void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 		}
 }
 
+void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
+{
+	if (type == GTK_SHADOW_NONE)
+		{
+		gtk_widget_remove_css_class(GTK_WIDGET(frame), "frame");
+		}
+	else
+		{
+		gtk_widget_add_css_class(GTK_WIDGET(frame), "frame");
+		}
+}
+
 void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
 {
 	gtk_scrolled_window_set_has_frame(scrolled_window, type != GTK_SHADOW_NONE);
@@ -467,6 +479,11 @@ gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 {
 	gtk_window_move(window, x, y);
+}
+
+void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
+{
+	gtk_frame_set_shadow_type(frame, type);
 }
 
 void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
