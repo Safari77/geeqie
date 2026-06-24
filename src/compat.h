@@ -82,6 +82,7 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data);
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
+gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height);
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size);
 GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget);
 GList *gq_gtk_widget_get_children(GtkWidget *widget);

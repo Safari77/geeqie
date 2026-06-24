@@ -148,6 +148,26 @@ void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
 	gtk_widget_set_margin_end(widget, width);
 }
 
+gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height)
+{
+	gint dimension = 16;
+
+	switch (size)
+		{
+		case GTK_ICON_SIZE_MENU:
+		case GTK_ICON_SIZE_BUTTON:
+			dimension = 16;
+			break;
+		default:
+			break;
+		}
+
+	if (width) *width = dimension;
+	if (height) *height = dimension;
+
+	return TRUE;
+}
+
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 {
 	return nullptr;
@@ -220,6 +240,11 @@ void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpoint
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
 {
 	gtk_container_set_border_width(GTK_CONTAINER(widget), width);
+}
+
+gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height)
+{
+	return gtk_icon_size_lookup(size, width, height);
 }
 
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
