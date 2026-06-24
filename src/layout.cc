@@ -1768,7 +1768,7 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 
 		gtk_window_set_resizable(GTK_WINDOW(lw->tools), TRUE);
 		gq_gtk_widget_set_border_width(lw->tools, 0);
-		if (options->expand_menu_toolbar) gtk_container_remove(GTK_CONTAINER(lw->main_box), lw->menu_tool_bar);
+		if (options->expand_menu_toolbar) gq_gtk_container_remove(lw->main_box, lw->menu_tool_bar);
 
 		new_window = TRUE;
 		}
@@ -1913,7 +1913,7 @@ void layout_split_change(LayoutWindow *lw, ImageSplitMode mode)
 				widget_remove_from_parent(lw->split_images[i]->widget);
 			}
 		}
-	gtk_container_remove(GTK_CONTAINER(lw->utility_paned), lw->split_image_widget);
+	gq_gtk_container_remove(lw->utility_paned, lw->split_image_widget);
 
 	image = layout_image_setup_split(lw, mode);
 
@@ -2157,7 +2157,7 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 	lw->info_pixel = nullptr;
 	lw->info_zoom = nullptr;
 
-	gtk_container_remove(GTK_CONTAINER(lw->main_box), lw->group_box);
+	gq_gtk_container_remove(lw->main_box, lw->group_box);
 	lw->group_box = nullptr;
 
 	/* re-fill */

@@ -1408,7 +1408,7 @@ gboolean widget_received_event(GtkWidget *widget, GqPoint event)
 
 void widget_remove_from_parent(GtkWidget *widget)
 {
-	gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(widget)), widget);
+	gq_gtk_container_remove(gtk_widget_get_parent(widget), widget);
 }
 
 void widget_remove_from_parent_cb(GtkWidget *, gpointer data)

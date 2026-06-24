@@ -73,6 +73,63 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 		}
 }
 
+void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
+{
+	if (!widget || gtk_widget_get_parent(widget) != container) return;
+
+	if (GTK_IS_BOX(container))
+		{
+		gtk_box_remove(GTK_BOX(container), widget);
+		}
+	else if (GTK_IS_BUTTON(container))
+		{
+		gtk_button_set_child(GTK_BUTTON(container), nullptr);
+		}
+	else if (GTK_IS_EXPANDER(container))
+		{
+		gtk_expander_set_child(GTK_EXPANDER(container), nullptr);
+		}
+	else if (GTK_IS_FRAME(container))
+		{
+		gtk_frame_set_child(GTK_FRAME(container), nullptr);
+		}
+	else if (GTK_IS_PANED(container))
+		{
+		if (gtk_paned_get_start_child(GTK_PANED(container)) == widget)
+			{
+			gtk_paned_set_start_child(GTK_PANED(container), nullptr);
+			}
+		else if (gtk_paned_get_end_child(GTK_PANED(container)) == widget)
+			{
+			gtk_paned_set_end_child(GTK_PANED(container), nullptr);
+			}
+		else
+			{
+			g_abort();
+			}
+		}
+	else if (GTK_IS_POPOVER(container))
+		{
+		gtk_popover_set_child(GTK_POPOVER(container), nullptr);
+		}
+	else if (GTK_IS_SCROLLED_WINDOW(container))
+		{
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(container), nullptr);
+		}
+	else if (GTK_IS_VIEWPORT(container))
+		{
+		gtk_viewport_set_child(GTK_VIEWPORT(container), nullptr);
+		}
+	else if (GTK_IS_WINDOW(container))
+		{
+		gtk_window_set_child(GTK_WINDOW(container), nullptr);
+		}
+	else
+		{
+		g_abort();
+		}
+}
+
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
 {
 	gtk_widget_set_margin_top(widget, width);
@@ -138,6 +195,11 @@ void gq_gtk_drag_dest_unset(GtkWidget *widget)
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
 	gtk_container_add(GTK_CONTAINER(container), widget);
+}
+
+void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
+{
+	gtk_container_remove(GTK_CONTAINER(container), widget);
 }
 
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)

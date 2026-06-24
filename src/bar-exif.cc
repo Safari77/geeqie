@@ -248,7 +248,7 @@ void bar_pane_exif_reparent_entry(GtkWidget *entry, GtkWidget *pane)
 	g_object_ref(entry);
 
 	gtk_size_group_remove_widget(old_ped->size_group, ee->title_label);
-	gtk_container_remove(GTK_CONTAINER(old_ped->vbox), entry);
+	gq_gtk_container_remove(old_ped->vbox, entry);
 
 	ee->ped = ped;
 	gtk_size_group_add_widget(ped->size_group, ee->title_label);

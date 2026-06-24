@@ -424,7 +424,7 @@ void preview_file_cb(GtkFileChooser *chooser, gpointer)
 
 	if (GtkWidget *child = gq_gtk_bin_get_child(GTK_WIDGET(preview_box)))
 		{
-		gtk_container_remove(GTK_CONTAINER(preview_box), child);
+		gq_gtk_container_remove(preview_box, child);
 		}
 
 	GtkWidget *new_preview = nullptr;
