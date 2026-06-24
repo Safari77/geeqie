@@ -202,6 +202,20 @@ void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
 		}
 }
 
+void gq_gtk_widget_show_all(GtkWidget *widget)
+{
+	if (!widget) return;
+
+	gtk_widget_set_visible(widget, TRUE);
+
+	for (GtkWidget *child = gtk_widget_get_first_child(widget);
+	     child != nullptr;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		gq_gtk_widget_show_all(child);
+		}
+}
+
 void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
 {
 	if (type == GTK_SHADOW_NONE)
@@ -504,6 +518,11 @@ void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
 {
 	gtk_window_set_position(window, position);
+}
+
+void gq_gtk_widget_show_all(GtkWidget *widget)
+{
+	gtk_widget_show_all(widget);
 }
 
 void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
