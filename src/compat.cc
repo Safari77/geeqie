@@ -32,6 +32,7 @@ constexpr auto GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY = "gq-gtk4-drag-source-contr
 constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-controller";
 constexpr auto GTK4_BOX_PACK_END_DATA_KEY = "gq-gtk4-box-pack-end";
 constexpr auto GTK4_WINDOW_POSITION_DATA_KEY = "gq-gtk4-window-position";
+constexpr auto GTK4_WINDOW_POSITION_POLICY_DATA_KEY = "gq-gtk4-window-position-policy";
 
 struct GqWindowPosition
 {
@@ -179,6 +180,25 @@ void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 	if (gtk_widget_get_visible(GTK_WIDGET(window)))
 		{
 		gtk_window_present(window);
+		}
+}
+
+void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
+{
+	g_object_set_data(G_OBJECT(window), GTK4_WINDOW_POSITION_POLICY_DATA_KEY, GINT_TO_POINTER(static_cast<gint>(position)));
+
+	switch (position)
+		{
+		case GTK_WIN_POS_CENTER:
+		case GTK_WIN_POS_CENTER_ON_PARENT:
+		case GTK_WIN_POS_MOUSE:
+			if (gtk_widget_get_visible(GTK_WIDGET(window)))
+				{
+				gtk_window_present(window);
+				}
+			break;
+		default:
+			break;
 		}
 }
 
@@ -479,6 +499,11 @@ gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 {
 	gtk_window_move(window, x, y);
+}
+
+void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
+{
+	gtk_window_set_position(window, position);
 }
 
 void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)

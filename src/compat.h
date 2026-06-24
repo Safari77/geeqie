@@ -50,7 +50,6 @@ struct GqMouseButtonEvent
 	#define gq_gtk_widget_show_all(widget) ;
 	#define gq_gtk_window_resize(window, width, height) gtk_window_set_default_size(window, width, height)
 	#define gq_gtk_window_set_keep_above(window, setting) ;
-	#define gq_gtk_window_set_position(window, position) ;
 	#define gq_gtk_window_fullscreen_on_monitor(window, monitor) ;
 	#define gq_icon_theme_get_default() gtk_icon_theme_get_for_display(gdk_display_get_default())
 #else
@@ -64,7 +63,6 @@ struct GqMouseButtonEvent
 	#define gq_gtk_widget_show_all(widget) gtk_widget_show_all(widget)
 	#define gq_gtk_window_resize(window, width, height)gtk_window_resize(window, width, height)
 	#define gq_gtk_window_set_keep_above(window, setting) gtk_window_set_keep_above(window, setting)
-	#define gq_gtk_window_set_position(window, position) gtk_window_set_position(window, position)
 	#define gq_gtk_window_fullscreen_on_monitor(window, screen, monitor) gtk_window_fullscreen_on_monitor(window, screen, monitor)
 	#define gq_icon_theme_get_default() gtk_icon_theme_get_default()
 #endif
@@ -84,6 +82,7 @@ void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type);
 void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type);
 gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y);
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y);
+void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position);
 void gq_gtk_widget_destroy(GtkWidget *widget);
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
 gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height);
