@@ -261,8 +261,16 @@ GList *gq_gtk_widget_get_children(GtkWidget *widget)
 	return g_list_reverse(list);
 }
 
-void gq_gtk_viewport_set_shadow_type(GtkWidget *, int)
+void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
 {
+	if (type == GTK_SHADOW_NONE)
+		{
+		gtk_widget_remove_css_class(viewport, "frame");
+		}
+	else
+		{
+		gtk_widget_add_css_class(viewport, "frame");
+		}
 }
 
 gboolean gq_gtk_widget_event(GtkWidget *, GdkEvent *)
