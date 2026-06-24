@@ -33,6 +33,7 @@ constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-contr
 constexpr auto GTK4_BOX_PACK_END_DATA_KEY = "gq-gtk4-box-pack-end";
 constexpr auto GTK4_WINDOW_POSITION_DATA_KEY = "gq-gtk4-window-position";
 constexpr auto GTK4_WINDOW_POSITION_POLICY_DATA_KEY = "gq-gtk4-window-position-policy";
+constexpr auto GTK4_WINDOW_KEEP_ABOVE_DATA_KEY = "gq-gtk4-window-keep-above";
 
 struct GqWindowPosition
 {
@@ -178,6 +179,16 @@ void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 	g_object_set_data_full(G_OBJECT(window), GTK4_WINDOW_POSITION_DATA_KEY, position, g_free);
 
 	if (gtk_widget_get_visible(GTK_WIDGET(window)))
+		{
+		gtk_window_present(window);
+		}
+}
+
+void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting)
+{
+	g_object_set_data(G_OBJECT(window), GTK4_WINDOW_KEEP_ABOVE_DATA_KEY, GINT_TO_POINTER(setting));
+
+	if (setting && gtk_widget_get_visible(GTK_WIDGET(window)))
 		{
 		gtk_window_present(window);
 		}
@@ -513,6 +524,11 @@ gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 {
 	gtk_window_move(window, x, y);
+}
+
+void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting)
+{
+	gtk_window_set_keep_above(window, setting);
 }
 
 void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
