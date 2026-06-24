@@ -159,6 +159,11 @@ void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 		}
 }
 
+void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
+{
+	gtk_scrolled_window_set_has_frame(scrolled_window, type != GTK_SHADOW_NONE);
+}
+
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
 	if (GTK_IS_BUTTON(container))
@@ -439,6 +444,11 @@ gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
 {
 	gtk_window_move(window, x, y);
+}
+
+void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
+{
+	gtk_scrolled_window_set_shadow_type(scrolled_window, type);
 }
 
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
