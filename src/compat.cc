@@ -30,6 +30,7 @@ namespace
 
 constexpr auto GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY = "gq-gtk4-drag-source-controller";
 constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-controller";
+constexpr auto GTK4_BOX_PACK_END_DATA_KEY = "gq-gtk4-box-pack-end";
 
 guint start_button_mask_to_button(GdkModifierType start_button_mask)
 {
@@ -76,6 +77,43 @@ const gchar *stock_id_to_icon_name(const gchar *stock_id)
 } // namespace
 
 #if HAVE_GTK4
+void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
+{
+	(void)expand;
+	(void)fill;
+	(void)padding;
+
+	g_object_set_data(G_OBJECT(child), GTK4_BOX_PACK_END_DATA_KEY, GINT_TO_POINTER(TRUE));
+
+	GtkWidget *first_end_child = nullptr;
+	for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
+	     work != nullptr;
+	     work = gtk_widget_get_next_sibling(work))
+		{
+		if (g_object_get_data(G_OBJECT(work), GTK4_BOX_PACK_END_DATA_KEY))
+			{
+			first_end_child = work;
+			break;
+			}
+		}
+
+	if (!first_end_child)
+		{
+		gtk_box_append(box, child);
+		return;
+		}
+
+	GtkWidget *previous = gtk_widget_get_prev_sibling(first_end_child);
+	if (previous)
+		{
+		gtk_box_insert_child_after(box, child, previous);
+		}
+	else
+		{
+		gtk_box_prepend(box, child);
+		}
+}
+
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
 	if (GTK_IS_BUTTON(container))
