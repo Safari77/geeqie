@@ -81,15 +81,36 @@ const gchar *stock_id_to_icon_name(const gchar *stock_id)
 	return stock_id;
 }
 
+void gtk4_box_apply_child_packing(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
+{
+	GtkOrientation orientation = gtk_orientable_get_orientation(GTK_ORIENTABLE(box));
+
+	gtk_widget_set_hexpand(child, orientation == GTK_ORIENTATION_HORIZONTAL ? expand : FALSE);
+	gtk_widget_set_vexpand(child, orientation == GTK_ORIENTATION_VERTICAL ? expand : FALSE);
+
+	if (orientation == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_halign(child, fill ? GTK_ALIGN_FILL : GTK_ALIGN_START);
+		gtk_widget_set_margin_end(child, padding);
+		}
+	else
+		{
+		gtk_widget_set_valign(child, fill ? GTK_ALIGN_FILL : GTK_ALIGN_START);
+		gtk_widget_set_margin_bottom(child, padding);
+		}
+}
+
 } // namespace
 
 #if HAVE_GTK4
+void gq_gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
+{
+	gtk_box_append(box, child);
+	gtk4_box_apply_child_packing(box, child, expand, fill, padding);
+}
+
 void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
 {
-	(void)expand;
-	(void)fill;
-	(void)padding;
-
 	g_object_set_data(G_OBJECT(child), GTK4_BOX_PACK_END_DATA_KEY, GINT_TO_POINTER(TRUE));
 
 	GtkWidget *first_end_child = nullptr;
@@ -119,6 +140,8 @@ void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolea
 		{
 		gtk_box_prepend(box, child);
 		}
+
+	gtk4_box_apply_child_packing(box, child, expand, fill, padding);
 }
 
 gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)

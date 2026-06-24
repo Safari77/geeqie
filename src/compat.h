@@ -43,7 +43,6 @@ struct GqMouseButtonEvent
 };
 
 #if HAVE_GTK4
-	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_append(box, child)
 	#define gq_gtk_frame_set_shadow_type(frame, type) ;
 	#define gq_gtk_image_new_from_icon_name(icon_name, size) gtk_image_new_from_icon_name(icon_name)
 	#define gq_gtk_icon_theme_has_icon(icon_theme, icon_name) gtk_icon_theme_has_icon(icon_theme, icon_name)
@@ -72,9 +71,11 @@ struct GqMouseButtonEvent
 #endif
 
 #if HAVE_GTK4
+void gq_gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
 void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
 #else
 	#define gq_gtk_box_pack_end(box, child, expand, fill, padding) gtk_box_pack_end(box, child, expand, fill, padding)
+	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_pack_start(box, child, expand, fill, padding)
 #endif
 
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
