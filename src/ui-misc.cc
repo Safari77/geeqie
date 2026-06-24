@@ -1327,7 +1327,14 @@ GdkRectangle widget_get_position_geometry(GtkWidget *widget)
 		return rect;
 		}
 
-	gdk_surface_get_position(surface, &rect.x, &rect.y);
+	if (GTK_IS_WINDOW(widget) && !gq_gtk_window_get_position(GTK_WINDOW(widget), &rect.x, &rect.y))
+		{
+		gdk_surface_get_position(surface, &rect.x, &rect.y);
+		}
+	else if (!GTK_IS_WINDOW(widget))
+		{
+		gdk_surface_get_position(surface, &rect.x, &rect.y);
+		}
 	rect.width  = gdk_surface_get_width(surface);
 	rect.height = gdk_surface_get_height(surface);
 
@@ -1354,6 +1361,11 @@ GdkRectangle widget_get_root_origin_geometry(GtkWidget *widget)
 	if (!surface)
 		{
 		return rect;
+		}
+
+	if (GTK_IS_WINDOW(widget))
+		{
+		gq_gtk_window_get_position(GTK_WINDOW(widget), &rect.x, &rect.y);
 		}
 
 	rect.width  = gdk_surface_get_width(surface);

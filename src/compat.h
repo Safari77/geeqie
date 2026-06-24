@@ -51,7 +51,6 @@ struct GqMouseButtonEvent
 	#define gq_gtk_scrolled_window_set_shadow_type(scrolled_window, type) gtk_scrolled_window_set_has_frame(scrolled_window, TRUE)
 	#define gq_gtk_widget_queue_draw_area(widget, x, y, width, height) gtk_widget_queue_draw(widget);
 	#define gq_gtk_widget_show_all(widget) ;
-	#define gq_gtk_window_move(window, x, y) ;
 	#define gq_gtk_window_resize(window, width, height) gtk_window_set_default_size(window, width, height)
 	#define gq_gtk_window_set_keep_above(window, setting) ;
 	#define gq_gtk_window_set_position(window, position) ;
@@ -67,7 +66,6 @@ struct GqMouseButtonEvent
 	#define gq_gtk_scrolled_window_set_shadow_type(scrolled_window, type) gtk_scrolled_window_set_shadow_type(scrolled_window, type)
 	#define gq_gtk_widget_queue_draw_area(widget, x, y, width, height) gtk_widget_queue_draw_area(widget, x, y, width, height);
 	#define gq_gtk_widget_show_all(widget) gtk_widget_show_all(widget)
-	#define gq_gtk_window_move(window, x, y) gtk_window_move(window, x, y)
 	#define gq_gtk_window_resize(window, width, height)gtk_window_resize(window, width, height)
 	#define gq_gtk_window_set_keep_above(window, setting) gtk_window_set_keep_above(window, setting)
 	#define gq_gtk_window_set_position(window, position) gtk_window_set_position(window, position)
@@ -84,6 +82,8 @@ void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolea
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget);
 void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data);
+gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y);
+void gq_gtk_window_move(GtkWindow *window, gint x, gint y);
 void gq_gtk_widget_destroy(GtkWidget *widget);
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
 gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height);
