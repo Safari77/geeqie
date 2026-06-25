@@ -269,7 +269,7 @@ static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModi
 	GtkWidget *focused = nullptr;
 
 #if !HAVE_GTK4
-	focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
+	focused = gq_gtk_widget_get_focus_child(lw->image->widget);
 #endif
 
 	gboolean stop_signal = FALSE;

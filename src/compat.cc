@@ -419,6 +419,20 @@ GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
 	return gtk_widget_get_first_child(widget);
 }
 
+GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget)
+{
+	GtkRoot *root = gtk_widget_get_root(widget);
+	if (!root) return nullptr;
+
+	GtkWidget *focus = gtk_root_get_focus(root);
+	for (GtkWidget *work = focus; work; work = gtk_widget_get_parent(work))
+		{
+		if (work == widget) return focus;
+		}
+
+	return nullptr;
+}
+
 GList *gq_gtk_widget_get_children(GtkWidget *widget)
 {
 	GList *list = NULL;
@@ -593,6 +607,11 @@ GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
 GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
 {
 	return gtk_bin_get_child(GTK_BIN(widget));
+}
+
+GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget)
+{
+	return gtk_container_get_focus_child(GTK_CONTAINER(widget));
 }
 
 GList *gq_gtk_widget_get_children(GtkWidget *widget)

@@ -1064,7 +1064,7 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 	pr = PIXBUF_RENDERER(pw->imd->pr);
 	fd = pan_menu_click_fd(pw);
 
-	imd_widget = gtk_container_get_focus_child(GTK_CONTAINER(pw->imd->widget));
+	imd_widget = gq_gtk_widget_get_focus_child(pw->imd->widget);
 	focused = (pw->fs || (imd_widget && gtk_widget_has_focus(imd_widget)));
 	on_entry = (gtk_widget_has_focus(pw->path_entry) ||
 		    gtk_widget_has_focus(pw->search_ui->search_entry) ||
