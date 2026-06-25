@@ -746,6 +746,11 @@ void bar_pane_gps_set_fd(GtkWidget *bar, FileData *fd)
 
 gint bar_pane_gps_event(GtkWidget *bar, GdkEvent *event)
 {
+#if HAVE_GTK4
+	(void)bar;
+	(void)event;
+	return FALSE;
+#else
 	PaneGPSData *pgd;
 
 	pgd = static_cast<PaneGPSData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
@@ -753,7 +758,8 @@ gint bar_pane_gps_event(GtkWidget *bar, GdkEvent *event)
 
 	if (!gtk_widget_has_focus(pgd->widget)) return FALSE;
 
-	return gq_gtk_widget_event(pgd->widget, event);
+	return gq_gtk_widget_key_event(pgd->widget, reinterpret_cast<GdkEventKey *>(event));
+#endif
 }
 
 const gchar *bar_pane_gps_get_map_id(const PaneGPSData *pgd)

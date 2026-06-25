@@ -507,19 +507,6 @@ void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
 		}
 }
 
-gboolean gq_gtk_widget_event(GtkWidget *, GdkEvent *)
-{
-	static gsize warned = 0;
-
-	if (g_once_init_enter(&warned))
-		{
-		g_warning("gq_gtk_widget_event() has no generic GTK4 event-dispatch equivalent; unexpected GTK4 call will be ignored");
-		g_once_init_leave(&warned, 1);
-		}
-
-	return FALSE;
-}
-
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
 	g_signal_connect(instance, detailed_signal, c_handler, data);
@@ -684,9 +671,9 @@ void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
 	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), static_cast<GtkShadowType>(type));
 }
 
-gboolean gq_gtk_widget_event(GtkWidget *widget, GdkEvent *event)
+gboolean gq_gtk_widget_key_event(GtkWidget *widget, GdkEventKey *event)
 {
-	return gtk_widget_event(widget, event);
+	return gtk_widget_event(widget, reinterpret_cast<GdkEvent *>(event));
 }
 
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)

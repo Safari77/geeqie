@@ -330,18 +330,24 @@ void bar_pane_keywords_write_config(GtkWidget *pane, GString *outstr, gint inden
 
 gint bar_pane_keywords_event(GtkWidget *bar, GdkEvent *event)
 {
+#if HAVE_GTK4
+	(void)bar;
+	(void)event;
+	return FALSE;
+#else
 	PaneKeywordsData *pkd;
 
 	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!pkd) return FALSE;
 
-	if (gtk_widget_has_focus(pkd->keyword_view)) return gq_gtk_widget_event(pkd->keyword_view, event);
+	if (gtk_widget_has_focus(pkd->keyword_view)) return gq_gtk_widget_key_event(pkd->keyword_view, reinterpret_cast<GdkEventKey *>(event));
 
 	if (gtk_widget_has_focus(pkd->autocomplete))
 		{
-		return gq_gtk_widget_event(pkd->autocomplete, event);
+		return gq_gtk_widget_key_event(pkd->autocomplete, reinterpret_cast<GdkEventKey *>(event));
 		}
 	return FALSE;
+#endif
 }
 
 void bar_pane_keywords_keyword_toggle(GtkCellRendererToggle *, const gchar *path, gpointer data)

@@ -90,7 +90,9 @@ GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget);
 GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget);
 GList *gq_gtk_widget_get_children(GtkWidget *widget);
 void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type);
-gboolean gq_gtk_widget_event(GtkWidget *widget, GdkEvent *event);
+#if !HAVE_GTK4
+gboolean gq_gtk_widget_key_event(GtkWidget *widget, GdkEventKey *event);
+#endif
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
 void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
 void gq_gtk_drag_dest_unset(GtkWidget *widget);

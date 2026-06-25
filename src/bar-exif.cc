@@ -345,6 +345,11 @@ void bar_pane_exif_set_fd(GtkWidget *widget, FileData *fd)
 
 gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 {
+#if HAVE_GTK4
+	(void)bar;
+	(void)event;
+	return FALSE;
+#else
 	auto *ped = static_cast<PaneExifData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!ped) return FALSE;
 
@@ -355,10 +360,11 @@ gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 		auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(work->data), "entry_data"));
 
 		if (ee->editable && gtk_widget_has_focus(ee->value_widget))
-			ret = gq_gtk_widget_event(ee->value_widget, event);
+			ret = gq_gtk_widget_key_event(ee->value_widget, reinterpret_cast<GdkEventKey *>(event));
 		}
 
 	return ret;
+#endif
 }
 
 void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data)
