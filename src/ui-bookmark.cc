@@ -296,7 +296,7 @@ static void bookmark_move(BookMarkData *bm, GtkWidget *button, gint direction)
 	bookmark_populate_all(key_holder);
 	bm->key = key_holder;
 
-	gtk_box_reorder_child(GTK_BOX(bm->box), button, p + direction);
+	gq_gtk_box_reorder_child(GTK_BOX(bm->box), button, p + direction);
 }
 
 static void bookmark_menu_prop_cb(GtkWidget *widget, gpointer data)

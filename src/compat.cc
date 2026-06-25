@@ -150,6 +150,54 @@ void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolea
 	gtk4_box_apply_child_packing(box, child, expand, fill, padding);
 }
 
+gint gq_gtk_box_get_child_position(GtkBox *box, GtkWidget *child)
+{
+	gint position = 0;
+
+	for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
+	     work != nullptr;
+	     work = gtk_widget_get_next_sibling(work), position++)
+		{
+		if (work == child) return position;
+		}
+
+	return -1;
+}
+
+void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position)
+{
+	if (!GTK_IS_BOX(box) || !child) return;
+	if (gq_gtk_box_get_child_position(box, child) < 0) return;
+
+	GtkWidget *previous = nullptr;
+	if (position >= 0)
+		{
+		gint index = 0;
+
+		for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
+		     work != nullptr;
+		     work = gtk_widget_get_next_sibling(work))
+			{
+			if (work == child) continue;
+			if (index >= position) break;
+
+			previous = work;
+			index++;
+			}
+		}
+	else
+		{
+		for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
+		     work != nullptr;
+		     work = gtk_widget_get_next_sibling(work))
+			{
+			if (work != child) previous = work;
+			}
+		}
+
+	gtk_box_reorder_child_after(box, child, previous);
+}
+
 gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 {
 	auto *position = static_cast<GqWindowPosition *>(g_object_get_data(G_OBJECT(window), GTK4_WINDOW_POSITION_DATA_KEY));
@@ -522,6 +570,18 @@ void gq_gtk_drag_dest_unset(GtkWidget *widget)
 }
 
 #else
+gint gq_gtk_box_get_child_position(GtkBox *box, GtkWidget *child)
+{
+	gint position = -1;
+	gtk_container_child_get(GTK_CONTAINER(box), child, "position", &position, NULL);
+	return position;
+}
+
+void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position)
+{
+	gtk_box_reorder_child(box, child, position);
+}
+
 gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
 {
 	GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));

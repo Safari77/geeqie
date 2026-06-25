@@ -278,8 +278,8 @@ static void widget_move_cb(GtkWidget *, gpointer data)
 	GtkWidget *box = gtk_widget_get_ancestor(widget, GTK_TYPE_BOX);
 	if (!box) return;
 
-	gint pos = 0;
-	gtk_container_child_get(GTK_CONTAINER(box), widget, "position", &pos, NULL);
+	gint pos = gq_gtk_box_get_child_position(GTK_BOX(box), widget);
+	if (pos < 0) return;
 
 	if (single_step)
 		{
@@ -291,7 +291,7 @@ static void widget_move_cb(GtkWidget *, gpointer data)
 		pos = up ? 0 : -1;
 		}
 
-	gtk_box_reorder_child(GTK_BOX(box), widget, pos);
+	gq_gtk_box_reorder_child(GTK_BOX(box), widget, pos);
 }
 
 void popup_menu_bar(GtkWidget *widget, GCallback expander_height_cb)

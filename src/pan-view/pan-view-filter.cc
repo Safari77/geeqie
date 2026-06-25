@@ -139,7 +139,7 @@ void pan_filter_ui_replace_filter_button_arrow(PanViewFilterUi *ui, const gchar 
 	ui->filter_button_arrow = gq_gtk_image_new_from_icon_name(new_icon_name, GTK_ICON_SIZE_BUTTON);
 
 	gq_gtk_box_pack_start(GTK_BOX(parent), ui->filter_button_arrow, FALSE, FALSE, 0);
-	gtk_box_reorder_child(GTK_BOX(parent), ui->filter_button_arrow, 0);
+	gq_gtk_box_reorder_child(GTK_BOX(parent), ui->filter_button_arrow, 0);
 
 	gtk_widget_show(ui->filter_button_arrow);
 };

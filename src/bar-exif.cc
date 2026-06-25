@@ -458,7 +458,7 @@ void bar_pane_exif_dnd_receive(GtkWidget *pane, GdkDragContext *,
 		pos++;
 		}
 
-	gtk_box_reorder_child(GTK_BOX(ped->vbox), new_entry, pos);
+	gq_gtk_box_reorder_child(GTK_BOX(ped->vbox), new_entry, pos);
 }
 
 void bar_pane_exif_entry_dnd_begin(GtkWidget *entry, GdkDragContext *context, gpointer)

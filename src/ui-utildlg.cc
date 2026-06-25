@@ -184,7 +184,7 @@ static void generic_dialog_show_cb(GtkWidget *widget, gpointer data)
 	auto gd = static_cast<GenericDialog *>(data);
 	if (gd->cancel_button)
 		{
-		gtk_box_reorder_child(GTK_BOX(gd->hbox), gd->cancel_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), gd->cancel_button, -1);
 		}
 
 	g_signal_handlers_disconnect_by_func(G_OBJECT(widget), (gpointer)(generic_dialog_show_cb), gd);
@@ -212,11 +212,11 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
 		gtk_widget_grab_focus(button);
 		gd->default_cb = func_cb;
 
-		if (!alternative_order) gtk_box_reorder_child(GTK_BOX(gd->hbox), button, -1);
+		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, -1);
 		}
 	else
 		{
-		if (!alternative_order) gtk_box_reorder_child(GTK_BOX(gd->hbox), button, 0);
+		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, 0);
 		}
 
 	gtk_widget_show(button);

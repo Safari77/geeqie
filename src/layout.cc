@@ -2434,7 +2434,7 @@ void layout_show_config_window(LayoutWindow *lw)
 
 	if (!get_alternative_button_order(lc->configwindow))
 		{
-		gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
 		}
 
 	frame = pref_frame_new(win_vbox, TRUE, nullptr, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);

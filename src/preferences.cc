@@ -3827,7 +3827,7 @@ static void config_window_create(LayoutWindow *lw)
 
 	if (!get_alternative_button_order(configwindow))
 		{
-		gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
 		}
 
 	gtk_widget_show(notebook);

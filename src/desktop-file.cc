@@ -242,7 +242,7 @@ void editor_window_new(const gchar *src_path, const gchar *desktop_name)
 
 	if (!get_alternative_button_order(ew->window))
 		{
-		gtk_box_reorder_child(GTK_BOX(button_hbox), ct_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(button_hbox), ct_button, -1);
 		}
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
