@@ -194,7 +194,7 @@ The master branch is, temporarily, unstable and for use by developers to impleme
 
 To find the latest stable branch, use:
 
-```
+```sh
 git tag --sort=-v:refname | head -n1
 ```
 
