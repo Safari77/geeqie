@@ -199,7 +199,7 @@ void editor_window_new(const gchar *src_path, const gchar *desktop_name)
 
 	gtk_window_set_default_size(GTK_WINDOW(ew->window), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(ew->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(ew->window), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(ew->window, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	gq_gtk_container_add(ew->window, win_vbox);
@@ -240,9 +240,9 @@ void editor_window_new(const gchar *src_path, const gchar *desktop_name)
 	gtk_widget_set_can_default(button, TRUE);
 	gtk_widget_show(button);
 
-	if (!generic_dialog_get_alternative_button_order(ew->window))
+	if (!get_alternative_button_order(ew->window))
 		{
-		gtk_box_reorder_child(GTK_BOX(button_hbox), ct_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(button_hbox), ct_button, -1);
 		}
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
@@ -498,7 +498,7 @@ void editor_list_window_create()
 			 G_CALLBACK(editor_list_window_delete), NULL);
 	gtk_window_set_default_size(GTK_WINDOW(ewl->window), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(ewl->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(ewl->window), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(ewl->window, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	gq_gtk_container_add(ewl->window, win_vbox);

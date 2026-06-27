@@ -4207,7 +4207,7 @@ DupeWindow *dupe_window_new()
 		}
 
 	gtk_window_set_resizable(GTK_WINDOW(dw->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(dw->window), 0);
+	gq_gtk_widget_set_border_width(dw->window, 0);
 
 	g_signal_connect(G_OBJECT(dw->window), "delete_event",
 			 G_CALLBACK(dupe_window_delete), dw);

@@ -40,6 +40,7 @@
 #include <config.h>
 
 #include "compat-deprecated.h"
+#include "compat.h"
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
@@ -47,6 +48,7 @@
 #include "gq-color.h"
 #include "main-defines.h"
 #include "ui-fileops.h"
+#include "ui-misc.h"
 
 namespace
 {
@@ -278,39 +280,20 @@ gboolean register_theme_icon_as_stock(const gchar *key, const gchar *icon)
 	GdkPixbuf *pixbuf;
 	GError *error = nullptr;
 
-	icon_theme = gtk_icon_theme_get_default();
+	icon_theme = gq_icon_theme_get_default();
 
-	if (gtk_icon_theme_has_icon(icon_theme, key)) return FALSE;
+	if (gq_gtk_icon_theme_has_icon(icon_theme, key)) return FALSE;
 
-	pixbuf = gtk_icon_theme_load_icon(icon_theme,
-                           icon, /* icon name */
-                           64, /* size */
-                           static_cast<GtkIconLookupFlags>(0),  /* flags */
-                           &error);
+	pixbuf = gq_gtk_icon_theme_load_icon_copy(icon_theme, icon, 64, static_cast<GtkIconLookupFlags>(0));
 	if (!pixbuf)
 		{
-		if (error)
-			{
-			DEBUG_1("Couldn't load icon %s: %s", icon, error->message);
-			g_error_free(error);
-			error = nullptr;
-			}
-
 		if (strchr(icon, '.'))
 			{
 			/* try again without extension */
 			g_autofree gchar *icon2 = remove_extension_from_path(icon);
-			pixbuf = gtk_icon_theme_load_icon(icon_theme,
-		                           icon2, /* icon name */
-		                           64, /* size */
-		                           static_cast<GtkIconLookupFlags>(0),  /* flags */
-		                           &error);
-			if (error)
+			pixbuf = gq_gtk_icon_theme_load_icon_copy(icon_theme, icon2, 64, static_cast<GtkIconLookupFlags>(0));
+			if (!pixbuf)
 				{
-				DEBUG_1("Couldn't load icon %s: %s", icon2, error->message);
-				g_error_free(error);
-				error = nullptr;
-
 				/* try as an absolute path */
 				pixbuf = gdk_pixbuf_new_from_file(icon, &error);
 				if (error)
@@ -328,9 +311,7 @@ gboolean register_theme_icon_as_stock(const gchar *key, const gchar *icon)
 	return TRUE;
 }
 
-gboolean pixbuf_scale_aspect(gint req_w, gint req_h,
-                             gint old_w, gint old_h,
-                             gint &new_w, gint &new_h)
+gboolean pixbuf_scale_aspect(gint req_w, gint req_h, gint old_w, gint old_h, gint &new_w, gint &new_h)
 {
 	auto ratio_w = static_cast<gdouble>(req_w) / old_w;
 	auto ratio_h = static_cast<gdouble>(req_h) / old_h;

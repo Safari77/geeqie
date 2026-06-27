@@ -21,11 +21,10 @@
 
 #include "ui-utildlg.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <ctime>
+#include <map>
 #include <string>
-#include <vector>
 
 #include <gdk/gdk.h>
 #include <gio/gio.h>
@@ -45,28 +44,19 @@
 namespace
 {
 
-struct DialogWindow
+using DialogWindowKey = std::pair<std::string, std::string>;
+
+DialogWindowKey dialog_window_key_create(const gchar *title, const gchar *role)
 {
-	GdkRectangle rect;
-	gchar *title;
-	gchar *role;
-};
+	DialogWindowKey key{};
 
-DialogWindow *dialog_window_find_by_title_and_role(const std::vector<DialogWindow *> &dialog_windows,
-                                                   const gchar *title, const gchar *role)
-{
-	const auto dialog_window_has_title_and_role = [title, role](const DialogWindow *dw)
-	{
-		return g_strcmp0(dw->title, title) == 0 && g_strcmp0(dw->role, role) == 0;
-	};
+	if (title) key.first = title;
+	if (role) key.second = role;
 
-	auto it = std::find_if(dialog_windows.begin(), dialog_windows.end(),
-	                       dialog_window_has_title_and_role);
-
-	return (it != dialog_windows.end()) ? *it : nullptr;
+	return key;
 }
 
-std::vector<DialogWindow *> dialog_windows;
+std::map<DialogWindowKey, GdkRectangle> dialog_windows;
 
 } // namespace
 
@@ -78,28 +68,26 @@ std::vector<DialogWindow *> dialog_windows;
 
 static void generic_dialog_save_window(const gchar *title, const gchar *role, GdkRectangle rect)
 {
-	DialogWindow *dw = dialog_window_find_by_title_and_role(dialog_windows, title, role);
-	if (dw)
+	DialogWindowKey key = dialog_window_key_create(title, role);
+
+	auto it = dialog_windows.find(key);
+	if (it != dialog_windows.end())
 		{
-		dw->rect = rect;
+		it->second = rect;
 		return;
 		}
 
-	dw = g_new0(DialogWindow, 1);
-	dw->rect = rect;
-	dw->title = g_strdup(title);
-	dw->role = g_strdup(role);
-
-	dialog_windows.push_back(dw);
+	dialog_windows[key] = rect;
 }
 
-gboolean generic_dialog_find_window(const gchar *title, const gchar *role, GdkRectangle &rect)
+std::optional<GdkRectangle> generic_dialog_find_window(const gchar *title, const gchar *role)
 {
-	DialogWindow *dw = dialog_window_find_by_title_and_role(dialog_windows, title, role);
-	if (!dw) return FALSE;
+	DialogWindowKey key = dialog_window_key_create(title, role);
 
-	rect = dw->rect;
-	return TRUE;
+	auto it = dialog_windows.find(key);
+	if (it == dialog_windows.end()) return {};
+
+	return it->second;
 }
 
 void generic_dialog_close(GenericDialog *gd)
@@ -196,26 +184,10 @@ static void generic_dialog_show_cb(GtkWidget *widget, gpointer data)
 	auto gd = static_cast<GenericDialog *>(data);
 	if (gd->cancel_button)
 		{
-		gtk_box_reorder_child(GTK_BOX(gd->hbox), gd->cancel_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), gd->cancel_button, -1);
 		}
 
 	g_signal_handlers_disconnect_by_func(G_OBJECT(widget), (gpointer)(generic_dialog_show_cb), gd);
-}
-
-gboolean generic_dialog_get_alternative_button_order(GtkWidget *widget)
-{
-	GtkSettings *settings;
-	GObjectClass *klass;
-	gboolean alternative_order = FALSE;
-
-	settings = gtk_settings_get_for_screen(gtk_widget_get_screen(widget));
-	klass = G_OBJECT_CLASS(GTK_SETTINGS_GET_CLASS(settings));
-	if (g_object_class_find_property(klass, "gtk-alternative-button-order"))
-		{
-		g_object_get(settings, "gtk-alternative-button-order", &alternative_order, NULL);
-		}
-
-	return alternative_order;
 }
 
 GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, const gchar *text,
@@ -232,7 +204,7 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
 
 	gq_gtk_container_add(gd->hbox, button);
 
-	alternative_order = generic_dialog_get_alternative_button_order(gd->hbox);
+	alternative_order = get_alternative_button_order(gd->hbox);
 
 	if (is_default)
 		{
@@ -240,11 +212,11 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
 		gtk_widget_grab_focus(button);
 		gd->default_cb = func_cb;
 
-		if (!alternative_order) gtk_box_reorder_child(GTK_BOX(gd->hbox), button, -1);
+		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, -1);
 		}
 	else
 		{
-		if (!alternative_order) gtk_box_reorder_child(GTK_BOX(gd->hbox), button, 0);
+		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, 0);
 		}
 
 	gtk_widget_show(button);
@@ -301,31 +273,27 @@ GtkWidget *generic_dialog_add_message(GenericDialog *gd, const gchar *icon_name,
 
 void generic_dialog_windows_load_config(const gchar **attribute_names, const gchar **attribute_values)
 {
-	auto dw = g_new0(DialogWindow, 1);
+	g_autofree gchar *title = nullptr;
+	g_autofree gchar *role = nullptr;
+	GdkRectangle rect;
 
 	while (*attribute_names)
 		{
 		const gchar *option = *attribute_names++;
 		const gchar *value = *attribute_values++;
-		if (READ_CHAR(*dw, title)) continue;
-		if (READ_CHAR(*dw, role)) continue;
-		if (READ_INT(dw->rect, x)) continue;
-		if (READ_INT(dw->rect, y)) continue;
-		if (READ_INT_FULL("w", dw->rect.width)) continue;
-		if (READ_INT_FULL("h", dw->rect.height)) continue;
+		if (READ_CHAR_FULL("title", title)) continue;
+		if (READ_CHAR_FULL("role", role)) continue;
+		if (READ_INT(rect, x)) continue;
+		if (READ_INT(rect, y)) continue;
+		if (READ_INT_FULL("w", rect.width)) continue;
+		if (READ_INT_FULL("h", rect.height)) continue;
 
 		config_file_error((std::string("Unknown attribute: ") + option + " = " + value).c_str());
 		}
 
-	if (dw->title && dw->title[0] != 0)
+	if (title && title[0] != 0)
 		{
-		dialog_windows.push_back(dw);
-		}
-	else
-		{
-		g_free(dw->title);
-		g_free(dw->role);
-		g_free(dw);
+		generic_dialog_save_window(title, role, rect);
 		}
 }
 
@@ -336,15 +304,15 @@ void generic_dialog_windows_write_config(GString *outstr, gint indent)
 	WRITE_NL(); WRITE_STRING("<dialogs>");
 	indent++;
 
-	for (const DialogWindow *dw : dialog_windows)
+	for (const auto &[key, rect] : dialog_windows)
 		{
 		WRITE_NL(); WRITE_STRING("<window ");
-		WRITE_CHAR(*dw, title);
-		WRITE_CHAR(*dw, role);
-		WRITE_INT(dw->rect, x);
-		WRITE_INT(dw->rect, y);
-		WRITE_INT_FULL("w", dw->rect.width);
-		WRITE_INT_FULL("h", dw->rect.height);
+		WRITE_CHAR_FULL("title", key.first.c_str());
+		WRITE_CHAR_FULL("role", key.second.c_str());
+		WRITE_INT(rect, x);
+		WRITE_INT(rect, y);
+		WRITE_INT_FULL("w", rect.width);
+		WRITE_INT_FULL("h", rect.height);
 		WRITE_STRING("/>");
 		}
 
@@ -370,11 +338,10 @@ static void generic_dialog_setup(GenericDialog *gd,
 
 	if (options->save_dialog_window_positions)
 		{
-		GdkRectangle rect;
-		if (generic_dialog_find_window(title, role, rect))
+		if (auto rect = generic_dialog_find_window(title, role); rect)
 			{
-			gtk_window_set_default_size(GTK_WINDOW(gd->dialog), rect.width, rect.height);
-			gq_gtk_window_move(GTK_WINDOW(gd->dialog), rect.x, rect.y);
+			gtk_window_set_default_size(GTK_WINDOW(gd->dialog), rect->width, rect->height);
+			gq_gtk_window_move(GTK_WINDOW(gd->dialog), rect->x, rect->y);
 			}
 		}
 
@@ -403,7 +370,7 @@ static void generic_dialog_setup(GenericDialog *gd,
 			 G_CALLBACK(generic_dialog_key_press_cb), gd);
 
 	gtk_window_set_resizable(GTK_WINDOW(gd->dialog), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(gd->dialog), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(gd->dialog, PREF_PAD_BORDER);
 
 	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled), TRUE);
@@ -434,7 +401,7 @@ static void generic_dialog_setup(GenericDialog *gd,
 		gd->cancel_button = nullptr;
 		}
 
-	if (generic_dialog_get_alternative_button_order(gd->hbox))
+	if (get_alternative_button_order(gd->hbox))
 		{
 		g_signal_connect(G_OBJECT(gd->dialog), "show",
 				 G_CALLBACK(generic_dialog_show_cb), gd);

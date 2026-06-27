@@ -99,10 +99,10 @@ GdkPixbuf *create_folder_icon_with_emblem(GtkIconTheme *icon_theme, const gchar 
 PixmapFolders *folder_icons_new()
 {
 	auto pf = g_new0(PixmapFolders, 1);
-	GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+	GtkIconTheme *icon_theme = gq_icon_theme_get_default();
 
 	gint size;
-	if (!gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))
+	if (!gq_gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))
 		{
 		size = 16;
 		}
@@ -173,23 +173,22 @@ static void vd_destroy_cb(GtkWidget *widget, gpointer data)
 		}
 
 	switch (vd->type)
-	{
-	case DIRVIEW_LIST: vdlist_destroy_cb(widget, data); break;
-	case DIRVIEW_TREE: vdtree_destroy_cb(widget, data); break;
-	}
+		{
+		case DIRVIEW_LIST: vdlist_destroy_cb(widget, data); break;
+		case DIRVIEW_TREE: vdtree_destroy_cb(widget, data); break;
+		}
 
 	folder_icons_free(vd->pf);
 	file_data_list_free(vd->drop_list);
 
-	file_data_unref(vd->dir_fd);
-	g_free(vd->info);
+	g_clear_pointer(&vd->info, g_free);
 
-	g_free(vd);
+	delete vd;
 }
 
 ViewDir *vd_new(LayoutWindow *lw)
 {
-	auto vd = g_new0(ViewDir, 1);
+	auto *vd = new ViewDir();
 
 	vd->widget = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(vd->widget), GTK_SHADOW_IN);
@@ -201,8 +200,8 @@ ViewDir *vd_new(LayoutWindow *lw)
 
 	switch (lw->options.dir_view_type)
 		{
-		case DIRVIEW_LIST: vd = vdlist_new(vd, lw->dir_fd); break;
-		case DIRVIEW_TREE: vd = vdtree_new(vd, lw->dir_fd); break;
+		case DIRVIEW_LIST: vd = vdlist_new(vd); break;
+		case DIRVIEW_TREE: vd = vdtree_new(vd); break;
 		}
 
 	gq_gtk_container_add(vd->widget, vd->view);
@@ -337,15 +336,13 @@ static gboolean vd_rename_cb(TreeEditData *td, const gchar *, const gchar *new_n
 	{
 		if (!success) return;
 
-		FileData *fd = file_data_new_dir(new_path);
+		auto fd_ref = FileData::new_dir(new_path);
 
 		GtkTreeIter iter;
-		if (vd_find_row(vd, fd, &iter))
+		if (vd_find_row(vd, fd_ref, &iter))
 			{
 			tree_view_row_make_visible(GTK_TREE_VIEW(vd->view), &iter, TRUE);
 			}
-
-		file_data_unref(fd);
 	};
 	file_util_rename_dir(fd, new_path, vd->view, vd_rename_finished_cb);
 
@@ -497,9 +494,8 @@ static void vd_pop_menu_up_cb(GtkWidget *, gpointer data)
 	if (vd->select_func)
 		{
 		g_autofree gchar *path = remove_level_from_path(vd->dir_fd->path);
-		FileData *fd = file_data_new_dir(path);
-		vd->select_func(vd, fd, vd->select_data);
-		file_data_unref(fd);
+		auto fd_ref = FileData::new_dir(path);
+		vd->select_func(vd, fd_ref, vd->select_data);
 		}
 }
 
@@ -791,9 +787,8 @@ void vd_new_folder(ViewDir *vd, FileData *dir_fd)
 				break;
 			case DIRVIEW_TREE:
 				{
-				FileData *new_fd = file_data_new_dir(new_path);
-				fd = vdtree_populate_path(vd, new_fd, TRUE, TRUE);
-				file_data_unref(new_fd);
+				auto new_fd_ref = FileData::new_dir(new_path);
+				fd = vdtree_populate_path(vd, new_fd_ref, TRUE, TRUE);
 				}
 				break;
 			}
@@ -1289,8 +1284,8 @@ static void vd_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble x, gdoub
 static void vd_notify_cb(FileData *fd, NotifyType type, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
-	gboolean refresh;
 
+	if (!vd->dir_fd) return;
 	if (!S_ISDIR(fd->mode)) return; /* this gives correct results even on recently deleted files/directories */
 
 	DEBUG_1("Notify vd: %s %04x", fd->path, type);
@@ -1299,42 +1294,41 @@ static void vd_notify_cb(FileData *fd, NotifyType type, gpointer data)
 
 	if (vd->type == DIRVIEW_LIST)
 		{
-		refresh = (fd == vd->dir_fd);
+		bool should_refresh = (fd == vd->dir_fd);
 
-		if (!refresh)
+		if (!should_refresh)
 			{
-			refresh = (strcmp(base, vd->dir_fd->path) == 0);
+			should_refresh = (strcmp(base, vd->dir_fd->path) == 0);
 			}
 
 		if ((type & NOTIFY_CHANGE) && fd->change)
 			{
-			if (!refresh && fd->change->dest)
+			if (!should_refresh && fd->change->dest)
 				{
 				g_autofree gchar *dest_base = remove_level_from_path(fd->change->dest);
-				refresh = (strcmp(dest_base, vd->dir_fd->path) == 0);
+				should_refresh = (strcmp(dest_base, vd->dir_fd->path) == 0);
 				}
 
-			if (!refresh && fd->change->source)
+			if (!should_refresh && fd->change->source)
 				{
 				g_autofree gchar *source_base = remove_level_from_path(fd->change->source);
-				refresh = (strcmp(source_base, vd->dir_fd->path) == 0);
+				should_refresh = (strcmp(source_base, vd->dir_fd->path) == 0);
 				}
 			}
 
-		if (refresh) vd_refresh(vd);
+		if (should_refresh) vd_refresh(vd);
 		}
 
 	if (vd->type == DIRVIEW_TREE)
 		{
 		GtkTreeIter iter;
-		FileData *base_fd = file_data_new_dir(base);
+		auto base_fd_ref = FileData::new_dir(base);
 
-		if (vd_find_row(vd, base_fd, &iter))
+		if (vd_find_row(vd, base_fd_ref, &iter))
 			{
 			vdtree_populate_path_by_iter(vd, &iter, TRUE, vd->dir_fd);
 			}
-
-		file_data_unref(base_fd);
 		}
 }
+
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

@@ -248,7 +248,7 @@ void bar_pane_exif_reparent_entry(GtkWidget *entry, GtkWidget *pane)
 	g_object_ref(entry);
 
 	gtk_size_group_remove_widget(old_ped->size_group, ee->title_label);
-	gtk_container_remove(GTK_CONTAINER(old_ped->vbox), entry);
+	gq_gtk_container_remove(old_ped->vbox, entry);
 
 	ee->ped = ped;
 	gtk_size_group_add_widget(ped->size_group, ee->title_label);
@@ -310,22 +310,13 @@ void bar_pane_exif_update(PaneExifData *ped)
 {
 	ped->all_hidden = TRUE;
 
-#if HAVE_GTK4
-	for (GtkWidget *entry = gtk_widget_get_first_child(ped->vbox);
-	     entry != nullptr;
-	     entry = gtk_widget_get_next_sibling(entry))
-		{
-		bar_pane_exif_update_entry(ped, entry, FALSE);
-		}
-#else
 	static const auto update_entry = [](GtkWidget *entry, gpointer data)
 	{
 		auto *ped = static_cast<PaneExifData *>(data);
 		bar_pane_exif_update_entry(ped, entry, FALSE);
 	};
 
-	gtk_container_foreach(GTK_CONTAINER(ped->vbox), update_entry, ped);
-#endif
+	gq_gtk_container_foreach(ped->vbox, update_entry, ped);
 
 	gtk_widget_set_sensitive(ped->pane.title, !ped->all_hidden);
 }
@@ -345,6 +336,11 @@ void bar_pane_exif_set_fd(GtkWidget *widget, FileData *fd)
 
 gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 {
+#if HAVE_GTK4
+	(void)bar;
+	(void)event;
+	return FALSE;
+#else
 	auto *ped = static_cast<PaneExifData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
 	if (!ped) return FALSE;
 
@@ -355,10 +351,11 @@ gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
 		auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(work->data), "entry_data"));
 
 		if (ee->editable && gtk_widget_has_focus(ee->value_widget))
-			ret = gq_gtk_widget_event(ee->value_widget, event);
+			ret = gq_gtk_widget_key_event(ee->value_widget, reinterpret_cast<GdkEventKey *>(event));
 		}
 
 	return ret;
+#endif
 }
 
 void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data)
@@ -458,7 +455,7 @@ void bar_pane_exif_dnd_receive(GtkWidget *pane, GdkDragContext *,
 		pos++;
 		}
 
-	gtk_box_reorder_child(GTK_BOX(ped->vbox), new_entry, pos);
+	gq_gtk_box_reorder_child(GTK_BOX(ped->vbox), new_entry, pos);
 }
 
 void bar_pane_exif_entry_dnd_begin(GtkWidget *entry, GdkDragContext *context, gpointer)
@@ -867,18 +864,6 @@ GList *bar_pane_exif_list()
 
 	GList *exif_list = nullptr;
 
-#if HAVE_GTK4
-	for (GtkWidget *child = gtk_widget_get_first_child(ped->vbox);
-	     child != nullptr;
-	     child = gtk_widget_get_next_sibling(child))
-		{
-		auto *ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(child), "entry_data"));
-		if (!ee) continue;
-
-		exif_list = g_list_append(exif_list, g_strdup(ee->title));
-		exif_list = g_list_append(exif_list, g_strdup(ee->key));
-		}
-#else
 	static const auto exif_entry_to_list = [](GtkWidget *widget, gpointer data)
 	{
 		auto *ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(widget), "entry_data"));
@@ -889,8 +874,7 @@ GList *bar_pane_exif_list()
 		*list = g_list_append(*list, g_strdup(ee->key));
 	};
 
-	gtk_container_foreach(GTK_CONTAINER(ped->vbox), exif_entry_to_list, &exif_list);
-#endif
+	gq_gtk_container_foreach(ped->vbox, exif_entry_to_list, &exif_list);
 
 	return exif_list;
 }

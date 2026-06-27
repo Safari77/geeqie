@@ -313,8 +313,7 @@ gboolean vdlist_set_fd(ViewDir *vd, FileData *dir_fd)
 			}
 		}
 
-	file_data_unref(vd->dir_fd);
-	vd->dir_fd = file_data_ref(dir_fd);
+	vd->dir_fd.reset(dir_fd);
 
 	ret = vdlist_populate(vd, TRUE);
 
@@ -426,7 +425,7 @@ void vdlist_destroy_cb(GtkWidget *, gpointer data)
 	file_data_list_free(VDLIST(vd)->list);
 }
 
-ViewDir *vdlist_new(ViewDir *vd, FileData *)
+ViewDir *vdlist_new(ViewDir *vd)
 {
 	GtkListStore *store;
 	GtkTreeSelection *selection;

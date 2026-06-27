@@ -1953,7 +1953,7 @@ void image_set_selectable(ImageWindow *imd, gboolean selectable)
 	if (!imd->has_frame) return;
 
 	gq_gtk_frame_set_shadow_type(GTK_FRAME(imd->frame), GTK_SHADOW_NONE);
-	gtk_container_set_border_width(GTK_CONTAINER(imd->frame), selectable ? 4 : 0);
+	gq_gtk_widget_set_border_width(imd->frame, selectable ? 4 : 0);
 }
 
 void image_grab_focus(ImageWindow *imd)
@@ -2069,7 +2069,7 @@ void image_set_frame(ImageWindow *imd, gboolean frame)
 		imd->frame = gtk_frame_new(nullptr);
 		DEBUG_NAME(imd->frame);
 		g_object_ref(imd->pr);
-		if (imd->has_frame != -1) gtk_container_remove(GTK_CONTAINER(imd->widget), imd->pr);
+		if (imd->has_frame != -1) gq_gtk_container_remove(imd->widget, imd->pr);
 		gq_gtk_container_add(imd->frame, imd->pr);
 
 		g_object_unref(imd->pr);
@@ -2089,8 +2089,8 @@ void image_set_frame(ImageWindow *imd, gboolean frame)
 		g_object_ref(imd->pr);
 		if (imd->frame)
 			{
-			gtk_container_remove(GTK_CONTAINER(imd->frame), imd->pr);
-			gtk_container_remove(GTK_CONTAINER(imd->widget), imd->frame);
+			gq_gtk_container_remove(imd->frame, imd->pr);
+			gq_gtk_container_remove(imd->widget, imd->frame);
 			imd->frame = nullptr;
 			}
 		gq_gtk_box_pack_start(GTK_BOX(imd->widget), imd->pr, TRUE, TRUE, 0);

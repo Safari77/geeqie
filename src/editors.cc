@@ -45,12 +45,21 @@
 namespace
 {
 
-struct EditorVerboseData {
+struct EditorData;
+
+struct EditorVerboseWindow {
+	EditorVerboseWindow(EditorData *ed, const gchar *text);
+
+	void enable_close() const;
+	void fill(const gchar *text, gint len) const;
+	void progress(const EditorData *ed, const gchar *text) const;
+	void watch_channel(int fd);
+
 	GenericDialog *gd;
 	GtkWidget *button_close;
 	GtkWidget *button_stop;
-	GtkWidget *text;
-	GtkWidget *progress;
+	GtkWidget *text_view;
+	GtkWidget *progress_bar;
 	GtkWidget *spinner;
 };
 
@@ -61,7 +70,7 @@ struct EditorData {
 	gint count;
 	gint total;
 	gboolean stopping;
-	EditorVerboseData *vd;
+	std::unique_ptr<EditorVerboseWindow> vw;
 	EditorCallback callback;
 	gpointer data;
 	const EditorDescription *editor;
@@ -75,7 +84,6 @@ GHashTable *editors = nullptr;
 
 } // namespace
 
-static void editor_verbose_window_progress(EditorData *ed, const gchar *text);
 static EditorFlags editor_command_next_start(EditorData *ed);
 static EditorFlags editor_command_next_finish(EditorData *ed, gint status);
 static EditorFlags editor_command_done(EditorData *ed);
@@ -194,12 +202,11 @@ gboolean editor_read_desktop_file(const gchar *path)
 {
 	GKeyFile *key_file;
 	EditorDescription *editor;
-	gchar *extensions;
-	const gchar *key = filename_from_path(path);
 	GtkTreeIter iter;
 	gboolean category_geeqie = FALSE;
 
-	if (g_hash_table_lookup(editors, key)) return FALSE; /* the file found earlier wins */
+	const gchar *key = filename_from_path(path);
+	if (is_valid_editor_command(key)) return FALSE; /* the file found earlier wins */
 
 	key_file = g_key_file_new();
 	if (!g_key_file_load_from_file(key_file, path, static_cast<GKeyFileFlags>(0), nullptr))
@@ -315,7 +322,7 @@ gboolean editor_read_desktop_file(const gchar *path)
 
 	editor->comment = g_key_file_get_string(key_file, DESKTOP_GROUP, "Comment", nullptr);
 
-	extensions = g_key_file_get_string(key_file, DESKTOP_GROUP, "X-Geeqie-File-Extensions", nullptr);
+	g_autofree gchar *extensions = g_key_file_get_string(key_file, DESKTOP_GROUP, "X-Geeqie-File-Extensions", nullptr);
 	if (extensions)
 		editor->ext_list = filter_to_list(extensions);
 	else
@@ -432,6 +439,33 @@ GList *editor_get_desktop_files()
 	return list;
 }
 
+std::vector<std::string> editor_get_disabled_plugins()
+{
+	if (!desktop_file_list) return {};
+
+	static const auto get_disabled_plugins = [](GtkTreeModel *model, GtkTreePath *, GtkTreeIter *iter, gpointer data)
+	{
+		gboolean disabled;
+		gtk_tree_model_get(model, iter, DESKTOP_FILE_COLUMN_DISABLED, &disabled, -1);
+
+		if (disabled)
+			{
+			g_autofree gchar *desktop_path = nullptr;
+			gtk_tree_model_get(model, iter, DESKTOP_FILE_COLUMN_PATH, &desktop_path, -1);
+
+			auto *list = static_cast<std::vector<std::string> *>(data);
+			list->emplace_back(desktop_path);
+			}
+
+		return FALSE;
+	};
+
+	std::vector<std::string> result;
+	gtk_tree_model_foreach(GTK_TREE_MODEL(desktop_file_list), get_disabled_plugins, &result);
+
+	return result;
+}
+
 static void editor_list_add_cb(gpointer, gpointer value, gpointer data)
 {
 	auto editor = static_cast<EditorDescription *>(value);
@@ -476,18 +510,10 @@ EditorsList editor_list_get()
 /* ------------------------------ */
 
 
-static void editor_verbose_data_free(EditorData *ed)
-{
-	if (!ed->vd) return;
-	g_free(ed->vd);
-	ed->vd = nullptr;
-}
-
 static void editor_data_free(EditorData *ed)
 {
-	editor_verbose_data_free(ed);
 	g_free(ed->working_directory);
-	g_free(ed);
+	delete ed;
 }
 
 static void editor_verbose_window_close(GenericDialog *gd, gpointer data)
@@ -495,7 +521,7 @@ static void editor_verbose_window_close(GenericDialog *gd, gpointer data)
 	auto ed = static_cast<EditorData *>(data);
 
 	generic_dialog_close(gd);
-	editor_verbose_data_free(ed);
+	ed->vw.reset();
 	if (ed->pid == -1) editor_data_free(ed); /* the process has already terminated */
 }
 
@@ -504,132 +530,124 @@ static void editor_verbose_window_stop(GenericDialog *, gpointer data)
 	auto ed = static_cast<EditorData *>(data);
 	ed->stopping = TRUE;
 	ed->count = 0;
-	editor_verbose_window_progress(ed, _("stopping…"));
+	if (ed->vw) ed->vw->progress(ed, _("stopping…"));
 }
 
-static void editor_verbose_window_enable_close(EditorVerboseData *vd)
+void EditorVerboseWindow::enable_close() const
 {
-	vd->gd->cancel_cb = editor_verbose_window_close;
+	gd->cancel_cb = editor_verbose_window_close;
 
-	gtk_spinner_stop(GTK_SPINNER(vd->spinner));
-	gtk_widget_set_sensitive(vd->button_stop, FALSE);
-	gtk_widget_set_sensitive(vd->button_close, TRUE);
+	gtk_spinner_stop(GTK_SPINNER(spinner));
+	gtk_widget_set_sensitive(button_stop, FALSE);
+	gtk_widget_set_sensitive(button_close, TRUE);
 }
 
-static EditorVerboseData *editor_verbose_window(EditorData *ed, const gchar *text)
+EditorVerboseWindow::EditorVerboseWindow(EditorData *ed, const gchar *text)
 {
-	EditorVerboseData *vd;
-	GtkWidget *scrolled;
-	GtkWidget *hbox;
-
-	vd = g_new0(EditorVerboseData, 1);
-
-	vd->gd = file_util_gen_dlg(_("Edit command results"), "editor_results",
-				   nullptr, FALSE,
-				   nullptr, ed);
+	gd = file_util_gen_dlg(_("Edit command results"), "editor_results",
+	                       nullptr, FALSE,
+	                       nullptr, ed);
 	g_autofree gchar *buf = g_strdup_printf(_("Output of %s"), text);
-	generic_dialog_add_message(vd->gd, nullptr, buf, nullptr, FALSE);
-	vd->button_stop = generic_dialog_add_button(vd->gd, GQ_ICON_STOP, nullptr,
-						   editor_verbose_window_stop, FALSE);
-	gtk_widget_set_sensitive(vd->button_stop, FALSE);
+	generic_dialog_add_message(gd, nullptr, buf, nullptr, FALSE);
+	button_stop = generic_dialog_add_button(gd, GQ_ICON_STOP, nullptr,
+	                                        editor_verbose_window_stop, FALSE);
+	gtk_widget_set_sensitive(button_stop, FALSE);
 
-	vd->button_close = generic_dialog_add_button(vd->gd, GQ_ICON_CLOSE, _("Close"),
-						    editor_verbose_window_close, TRUE);
-	gtk_widget_set_sensitive(vd->button_close, FALSE);
+	button_close = generic_dialog_add_button(gd, GQ_ICON_CLOSE, _("Close"),
+	                                         editor_verbose_window_close, TRUE);
+	gtk_widget_set_sensitive(button_close, FALSE);
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
 	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(vd->gd->vbox), scrolled, TRUE, TRUE, 5);
+	gq_gtk_box_pack_start(GTK_BOX(gd->vbox), scrolled, TRUE, TRUE, 5);
 	gtk_widget_show(scrolled);
 
-	vd->text = gtk_text_view_new();
-	gtk_text_view_set_editable(GTK_TEXT_VIEW(vd->text), FALSE);
-	gtk_widget_set_size_request(vd->text, EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT);
-	gq_gtk_container_add(scrolled, vd->text);
-	gtk_widget_show(vd->text);
+	text_view = gtk_text_view_new();
+	gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), FALSE);
+	gtk_widget_set_size_request(text_view, EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT);
+	gq_gtk_container_add(scrolled, text_view);
+	gtk_widget_show(text_view);
 
-	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vd->gd->vbox), hbox, FALSE, FALSE, 0);
+	GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gq_gtk_box_pack_start(GTK_BOX(gd->vbox), hbox, FALSE, FALSE, 0);
 	gtk_widget_show(hbox);
 
-	vd->progress = gtk_progress_bar_new();
-	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(vd->progress), 0.0);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), vd->progress, TRUE, TRUE, 0);
-	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(vd->progress), "");
-	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(vd->progress), TRUE);
-	gtk_widget_show(vd->progress);
+	progress_bar = gtk_progress_bar_new();
+	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), 0.0);
+	gq_gtk_box_pack_start(GTK_BOX(hbox), progress_bar, TRUE, TRUE, 0);
+	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "");
+	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
+	gtk_widget_show(progress_bar);
 
-	vd->spinner = gtk_spinner_new();
-	gtk_spinner_start(GTK_SPINNER(vd->spinner));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), vd->spinner, FALSE, FALSE, 0);
-	gtk_widget_show(vd->spinner);
+	spinner = gtk_spinner_new();
+	gtk_spinner_start(GTK_SPINNER(spinner));
+	gq_gtk_box_pack_start(GTK_BOX(hbox), spinner, FALSE, FALSE, 0);
+	gtk_widget_show(spinner);
 
-	gtk_widget_show(vd->gd->dialog);
-
-	ed->vd = vd;
-	return vd;
+	gtk_widget_show(gd->dialog);
 }
 
-static void editor_verbose_window_fill(EditorVerboseData *vd, const gchar *text, gint len)
+void EditorVerboseWindow::fill(const gchar *text, gint len) const
 {
-	GtkTextBuffer *buffer;
-	GtkTextIter iter;
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
 
-	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(vd->text));
+	GtkTextIter iter;
 	gtk_text_buffer_get_iter_at_offset(buffer, &iter, -1);
+
 	gtk_text_buffer_insert(buffer, &iter, text, len);
 }
 
-static void editor_verbose_window_progress(EditorData *ed, const gchar *text)
+void EditorVerboseWindow::progress(const EditorData *ed, const gchar *text) const
 {
-	if (!ed->vd) return;
-
 	if (ed->total)
 		{
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ed->vd->progress), static_cast<gdouble>(ed->count) / ed->total);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), static_cast<gdouble>(ed->count) / ed->total);
 		}
 
-	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(ed->vd->progress), (text) ? text : "");
+	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), text ? text : "");
 }
 
 static gboolean editor_verbose_io_cb(GIOChannel *source, GIOCondition condition, gpointer data)
 {
-	auto ed = static_cast<EditorData *>(data);
-	gchar buf[512];
-	gsize count;
-
-	if (condition & G_IO_IN)
-		{
-		while (g_io_channel_read_chars(source, buf, sizeof(buf), &count, nullptr) == G_IO_STATUS_NORMAL)
-			{
-			if (!g_utf8_validate(buf, count, nullptr))
-				{
-				g_autofree gchar *utf8 = g_locale_to_utf8(buf, count, nullptr, nullptr, nullptr);
-				if (utf8)
-					{
-					editor_verbose_window_fill(ed->vd, utf8, -1);
-					}
-				else
-					{
-					editor_verbose_window_fill(ed->vd, "Error converting text to valid utf8\n", -1);
-					}
-				}
-			else
-				{
-				editor_verbose_window_fill(ed->vd, buf, count);
-				}
-			}
-		}
-
 	if (condition & (G_IO_ERR | G_IO_HUP))
 		{
 		g_io_channel_shutdown(source, TRUE, nullptr);
 		return FALSE;
 		}
 
+	if (condition & G_IO_IN)
+		{
+		auto *vw = static_cast<EditorVerboseWindow *>(data);
+		gchar buf[512];
+		gsize count;
+
+		while (g_io_channel_read_chars(source, buf, sizeof(buf), &count, nullptr) == G_IO_STATUS_NORMAL)
+			{
+			if (!g_utf8_validate(buf, count, nullptr))
+				{
+				g_autofree gchar *utf8 = g_locale_to_utf8(buf, count, nullptr, nullptr, nullptr);
+				vw->fill(utf8 ? utf8 : "Error converting text to valid utf8\n", -1);
+				}
+			else
+				{
+				vw->fill(buf, count);
+				}
+			}
+		}
+
 	return TRUE;
+}
+
+void EditorVerboseWindow::watch_channel(int fd)
+{
+	g_autoptr(GIOChannel) channel = g_io_channel_unix_new(fd);
+	g_io_channel_set_flags(channel, G_IO_FLAG_NONBLOCK, nullptr);
+	g_io_channel_set_encoding(channel, nullptr, nullptr);
+
+	g_io_add_watch_full(channel, G_PRIORITY_HIGH, static_cast<GIOCondition>(G_IO_IN | G_IO_ERR | G_IO_HUP),
+	                    editor_verbose_io_cb, this, nullptr);
 }
 
 enum PathType {
@@ -986,18 +1004,17 @@ static void editor_child_exit_cb(GPid pid, gint status, gpointer data)
 }
 
 
-static EditorFlags editor_command_one(const EditorDescription *editor, GList *list, EditorData *ed)
+static EditorFlags editor_command_one(EditorData *ed)
 {
 	g_autofree gchar *command = nullptr;
-	auto fd = static_cast<FileData *>((ed->flags & EDITOR_NO_PARAM) ? nullptr : list->data);;
+	auto *fd = static_cast<FileData *>((ed->flags & EDITOR_NO_PARAM) ? nullptr : ed->list->data);
 	GPid pid;
 	gint standard_output;
 	gint standard_error;
 	gboolean ok;
 
 	ed->pid = -1;
-	ed->flags = editor->flags;
-	ed->flags = static_cast<EditorFlags>(ed->flags | editor_command_parse(editor, list, TRUE, &command));
+	ed->flags = static_cast<EditorFlags>(ed->editor->flags | editor_command_parse(ed->editor, ed->list, TRUE, &command));
 
 	ok = !editor_errors(ed->flags);
 
@@ -1037,13 +1054,13 @@ static EditorFlags editor_command_one(const EditorDescription *editor, GList *li
 			}
 
 		ok = g_spawn_async_with_pipes(working_directory, args, nullptr,
-				      G_SPAWN_DO_NOT_REAP_CHILD, /* GSpawnFlags */
-				      nullptr, nullptr,
-				      &pid,
-				      nullptr,
-				      ed->vd ? &standard_output : nullptr,
-				      ed->vd ? &standard_error : nullptr,
-				      nullptr);
+		                              G_SPAWN_DO_NOT_REAP_CHILD, /* GSpawnFlags */
+		                              nullptr, nullptr,
+		                              &pid,
+		                              nullptr,
+		                              ed->vw ? &standard_output : nullptr,
+		                              ed->vw ? &standard_error : nullptr,
+		                              nullptr);
 
 		if (!ok) ed->flags = static_cast<EditorFlags>(ed->flags | EDITOR_ERROR_CANT_EXEC);
 		}
@@ -1054,36 +1071,18 @@ static EditorFlags editor_command_one(const EditorDescription *editor, GList *li
 		ed->pid = pid;
 		}
 
-	if (ed->vd)
+	if (ed->vw)
 		{
 		if (!ok)
 			{
-			g_autofree gchar *buf = g_strdup_printf(_("Failed to run command:\n%s\n"), editor->file);
+			g_autofree gchar *buf = g_strdup_printf(_("Failed to run command:\n%s\n"), ed->editor->file);
 
-			editor_verbose_window_fill(ed->vd, buf, -1);
+			ed->vw->fill(buf, -1);
 			}
 		else
 			{
-			GIOChannel *channel_output;
-			GIOChannel *channel_error;
-
-			channel_output = g_io_channel_unix_new(standard_output);
-			g_io_channel_set_flags(channel_output, G_IO_FLAG_NONBLOCK, nullptr);
-			g_io_channel_set_encoding(channel_output, nullptr, nullptr);
-
-			g_io_add_watch_full(channel_output, G_PRIORITY_HIGH, static_cast<GIOCondition>(G_IO_IN | G_IO_ERR | G_IO_HUP),
-					    editor_verbose_io_cb, ed, nullptr);
-			g_io_add_watch_full(channel_output, G_PRIORITY_HIGH, static_cast<GIOCondition>(G_IO_IN | G_IO_ERR | G_IO_HUP),
-					    editor_verbose_io_cb, ed, nullptr);
-			g_io_channel_unref(channel_output);
-
-			channel_error = g_io_channel_unix_new(standard_error);
-			g_io_channel_set_flags(channel_error, G_IO_FLAG_NONBLOCK, nullptr);
-			g_io_channel_set_encoding(channel_error, nullptr, nullptr);
-
-			g_io_add_watch_full(channel_error, G_PRIORITY_HIGH, static_cast<GIOCondition>(G_IO_IN | G_IO_ERR | G_IO_HUP),
-					    editor_verbose_io_cb, ed, nullptr);
-			g_io_channel_unref(channel_error);
+			ed->vw->watch_channel(standard_output);
+			ed->vw->watch_channel(standard_error);
 			}
 		}
 
@@ -1092,7 +1091,7 @@ static EditorFlags editor_command_one(const EditorDescription *editor, GList *li
 
 static EditorFlags editor_command_next_start(EditorData *ed)
 {
-	if (ed->vd) editor_verbose_window_fill(ed->vd, "\n", 1);
+	if (ed->vw) ed->vw->fill("\n", 1);
 
 	if ((ed->list || (ed->flags & EDITOR_NO_PARAM)) && ed->count < ed->total)
 		{
@@ -1101,23 +1100,20 @@ static EditorFlags editor_command_next_start(EditorData *ed)
 
 		fd = static_cast<FileData *>((ed->flags & EDITOR_NO_PARAM) ? nullptr : ed->list->data);
 
-		if (ed->vd)
+		if (ed->vw)
 			{
-			if ((ed->flags & EDITOR_FOR_EACH) && fd)
-				editor_verbose_window_progress(ed, fd->path);
-			else
-				editor_verbose_window_progress(ed, _("running…"));
+			ed->vw->progress(ed, ((ed->flags & EDITOR_FOR_EACH) && fd) ? fd->path : _("running…"));
 			}
 		ed->count++;
 
-		error = editor_command_one(ed->editor, ed->list, ed);
-		if (!error && ed->vd)
+		error = editor_command_one(ed);
+		if (!error && ed->vw)
 			{
-			gtk_widget_set_sensitive(ed->vd->button_stop, (ed->list != nullptr) );
+			gtk_widget_set_sensitive(ed->vw->button_stop, ed->list != nullptr);
 			if ((ed->flags & EDITOR_FOR_EACH) && fd)
 				{
-				editor_verbose_window_fill(ed->vd, fd->path, -1);
-				editor_verbose_window_fill(ed->vd, "\n", 1);
+				ed->vw->fill(fd->path, -1);
+				ed->vw->fill("\n", 1);
 				}
 			}
 
@@ -1177,17 +1173,10 @@ static EditorFlags editor_command_done(EditorData *ed)
 {
 	EditorFlags flags;
 
-	if (ed->vd)
+	if (ed->vw)
 		{
-		if (ed->count == ed->total)
-			{
-			editor_verbose_window_progress(ed, _("done"));
-			}
-		else
-			{
-			editor_verbose_window_progress(ed, _("stopped by user"));
-			}
-		editor_verbose_window_enable_close(ed->vd);
+		ed->vw->progress(ed, (ed->count == ed->total) ? _("done") : _("stopped by user"));
+		ed->vw->enable_close();
 		}
 
 	/* free the not-handled items */
@@ -1203,7 +1192,7 @@ static EditorFlags editor_command_done(EditorData *ed)
 
 	flags = static_cast<EditorFlags>(editor_errors(ed->flags));
 
-	if (!ed->vd) editor_data_free(ed);
+	if (!ed->vw) editor_data_free(ed);
 
 	return flags;
 }
@@ -1218,14 +1207,13 @@ void editor_skip(gpointer ed)
 	editor_command_done(static_cast<EditorData *>(ed));
 }
 
-static EditorFlags editor_command_start(const EditorDescription *editor, const gchar *text, GList *list, const gchar *working_directory, EditorCallback cb, gpointer data)
+static EditorFlags editor_command_start(const EditorDescription *editor, GList *list, const gchar *working_directory, EditorCallback cb, gpointer data)
 {
-	EditorData *ed;
 	EditorFlags flags = editor->flags;
 
 	if (editor_errors(flags)) return static_cast<EditorFlags>(editor_errors(flags));
 
-	ed = g_new0(EditorData, 1);
+	auto *ed = new EditorData();
 	ed->list = filelist_copy(list);
 	ed->flags = flags;
 	ed->editor = editor;
@@ -1238,7 +1226,7 @@ static EditorFlags editor_command_start(const EditorDescription *editor, const g
 		flags = static_cast<EditorFlags>(flags | EDITOR_VERBOSE);
 
 	if (flags & EDITOR_VERBOSE)
-		editor_verbose_window(ed, text);
+		ed->vw = std::make_unique<EditorVerboseWindow>(ed, editor->name);
 
 	editor_command_next_start(ed);
 	/* errors from editor_command_next_start will be handled via callback */
@@ -1258,20 +1246,15 @@ bool is_valid_editor_command(const gchar *key)
 
 EditorFlags start_editor_from_filelist_full(const gchar *key, GList *list, const gchar *working_directory, EditorCallback cb, gpointer data)
 {
-	EditorFlags error;
-	EditorDescription *editor;
-	if (!key) return EDITOR_ERROR_EMPTY;
-
-	editor = static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
-
+	EditorDescription *editor = get_editor_by_command(key);
 	if (!editor) return EDITOR_ERROR_EMPTY;
+
 	if (!list && !(editor->flags & EDITOR_NO_PARAM)) return EDITOR_ERROR_NO_FILE;
 
-	error = editor_command_parse(editor, list, TRUE, nullptr);
-
+	EditorFlags error = editor_command_parse(editor, list, TRUE, nullptr);
 	if (editor_errors(error)) return error;
 
-	error = static_cast<EditorFlags>(error | editor_command_start(editor, editor->name, list, working_directory, cb, data));
+	error = static_cast<EditorFlags>(error | editor_command_start(editor, list, working_directory, cb, data));
 
 	if (editor_errors(error))
 		{
@@ -1313,10 +1296,7 @@ EditorFlags start_editor(const gchar *key, const gchar *working_directory)
 
 gboolean editor_window_flag_set(const gchar *key)
 {
-	EditorDescription *editor;
-	if (!key) return TRUE;
-
-	editor = static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
+	EditorDescription *editor = get_editor_by_command(key);
 	if (!editor) return TRUE;
 
 	return !!(editor->flags & EDITOR_KEEP_FS);
@@ -1324,10 +1304,7 @@ gboolean editor_window_flag_set(const gchar *key)
 
 gboolean editor_is_filter(const gchar *key)
 {
-	EditorDescription *editor;
-	if (!key) return TRUE;
-
-	editor = static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
+	EditorDescription *editor = get_editor_by_command(key);
 	if (!editor) return TRUE;
 
 	return !!(editor->flags & EDITOR_DEST);
@@ -1335,10 +1312,7 @@ gboolean editor_is_filter(const gchar *key)
 
 gboolean editor_no_param(const gchar *key)
 {
-	EditorDescription *editor;
-	if (!key) return FALSE;
-
-	editor = static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
+	EditorDescription *editor = get_editor_by_command(key);
 	if (!editor) return FALSE;
 
 	return !!(editor->flags & EDITOR_NO_PARAM);
@@ -1346,10 +1320,7 @@ gboolean editor_no_param(const gchar *key)
 
 gboolean editor_blocks_file(const gchar *key)
 {
-	EditorDescription *editor;
-	if (!key) return FALSE;
-
-	editor = static_cast<EditorDescription *>(g_hash_table_lookup(editors, key));
+	EditorDescription *editor = get_editor_by_command(key);
 	if (!editor) return FALSE;
 
 	/* Decide if the image file should be blocked during editor execution

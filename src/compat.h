@@ -43,45 +43,56 @@ struct GqMouseButtonEvent
 };
 
 #if HAVE_GTK4
-	#define gq_gtk_box_pack_end(box, child, expand, fill, padding) gtk_box_append(box, child)
-	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_prepend(box, child)
-	#define gq_gtk_frame_set_shadow_type(frame, type) ;
 	#define gq_gtk_image_new_from_icon_name(icon_name, size) gtk_image_new_from_icon_name(icon_name)
+	#define gq_gtk_icon_theme_has_icon(icon_theme, icon_name) gtk_icon_theme_has_icon(icon_theme, icon_name)
 	#define gq_gtk_scrolled_window_new(hadjustment, vadjustment) gtk_scrolled_window_new()
-	#define gq_gtk_scrolled_window_set_shadow_type(scrolled_window, type) gtk_scrolled_window_set_has_frame(scrolled_window, TRUE)
-	#define gq_gtk_widget_destroy(widget) gtk_window_destroy(GTK_WINDOW(widget))
 	#define gq_gtk_widget_queue_draw_area(widget, x, y, width, height) gtk_widget_queue_draw(widget);
-	#define gq_gtk_widget_show_all(widget) ;
-	#define gq_gtk_window_move(window, x, y) ;
 	#define gq_gtk_window_resize(window, width, height) gtk_window_set_default_size(window, width, height)
-	#define gq_gtk_window_set_keep_above(window, setting) ;
-	#define gq_gtk_window_set_position(window, position) ;
 	#define gq_gtk_window_fullscreen_on_monitor(window, monitor) ;
 	#define gq_icon_theme_get_default() gtk_icon_theme_get_for_display(gdk_display_get_default())
 #else
 	#define gq_gtk_box_pack_end(box, child, expand, fill, padding) gtk_box_pack_end(box, child, expand, fill, padding)
 	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_pack_start(box, child, expand, fill, padding)
-	#define gq_gtk_frame_set_shadow_type(frame, type) gtk_frame_set_shadow_type(frame, type)
 	#define gq_gtk_image_new_from_icon_name(icon_name, size) gtk_image_new_from_icon_name(icon_name, size)
+	#define gq_gtk_icon_theme_has_icon(icon_theme, icon_name) gtk_icon_theme_has_icon(icon_theme, icon_name)
 	#define gq_gtk_scrolled_window_new(hadjustment, vadjustment) gtk_scrolled_window_new(hadjustment, vadjustment)
-	#define gq_gtk_scrolled_window_set_shadow_type(scrolled_window, type) gtk_scrolled_window_set_shadow_type(scrolled_window, type)
-	#define gq_gtk_widget_destroy(widget) gtk_widget_destroy(widget)
 	#define gq_gtk_widget_queue_draw_area(widget, x, y, width, height) gtk_widget_queue_draw_area(widget, x, y, width, height);
-	#define gq_gtk_widget_show_all(widget) gtk_widget_show_all(widget)
-	#define gq_gtk_window_move(window, x, y) gtk_window_move(window, x, y)
 	#define gq_gtk_window_resize(window, width, height)gtk_window_resize(window, width, height)
-	#define gq_gtk_window_set_keep_above(window, setting) gtk_window_set_keep_above(window, setting)
-	#define gq_gtk_window_set_position(window, position) gtk_window_set_position(window, position)
 	#define gq_gtk_window_fullscreen_on_monitor(window, screen, monitor) gtk_window_fullscreen_on_monitor(window, screen, monitor)
 	#define gq_icon_theme_get_default() gtk_icon_theme_get_default()
 #endif
 
+#if HAVE_GTK4
+void gq_gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
+void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
+#else
+	#define gq_gtk_box_pack_end(box, child, expand, fill, padding) gtk_box_pack_end(box, child, expand, fill, padding)
+	#define gq_gtk_box_pack_start(box, child, expand, fill, padding) gtk_box_pack_start(box, child, expand, fill, padding)
+#endif
+gint gq_gtk_box_get_child_position(GtkBox *box, GtkWidget *child);
+void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position);
+
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
+void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget);
+void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data);
+void gq_gtk_widget_show_all(GtkWidget *widget);
+void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type);
+void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type);
+gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y);
+void gq_gtk_window_move(GtkWindow *window, gint x, gint y);
+void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting);
+void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position);
+void gq_gtk_widget_destroy(GtkWidget *widget);
+void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
+gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height);
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size);
 GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget);
+GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget);
 GList *gq_gtk_widget_get_children(GtkWidget *widget);
 void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type);
-gboolean gq_gtk_widget_event(GtkWidget *widget, GdkEvent *event);
+#if !HAVE_GTK4
+gboolean gq_gtk_widget_key_event(GtkWidget *widget, GdkEventKey *event);
+#endif
 void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
 void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
 void gq_gtk_drag_dest_unset(GtkWidget *widget);

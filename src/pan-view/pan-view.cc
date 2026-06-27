@@ -1064,7 +1064,7 @@ static gboolean pan_window_key_press_cb(GtkWidget *widget, GdkEventKey *event, g
 	pr = PIXBUF_RENDERER(pw->imd->pr);
 	fd = pan_menu_click_fd(pw);
 
-	imd_widget = gtk_container_get_focus_child(GTK_CONTAINER(pw->imd->widget));
+	imd_widget = gq_gtk_widget_get_focus_child(pw->imd->widget);
 	focused = (pw->fs || (imd_widget && gtk_widget_has_focus(imd_widget)));
 	on_entry = (gtk_widget_has_focus(pw->path_entry) ||
 		    gtk_widget_has_focus(pw->search_ui->search_entry) ||
@@ -1705,7 +1705,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_window_set_geometry_hints(GTK_WINDOW(pw->window), nullptr, &geometry, GDK_HINT_MIN_SIZE);
 
 	gtk_window_set_resizable(GTK_WINDOW(pw->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(pw->window), 0);
+	gq_gtk_widget_set_border_width(pw->window, 0);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(vbox);

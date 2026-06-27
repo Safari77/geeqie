@@ -164,7 +164,7 @@ GtkWidget *pref_frame_new(GtkWidget *parent_box, gboolean fill,
 
 	box = gtk_box_new(orientation, padding);
 	gq_gtk_container_add(frame, box);
-	gtk_container_set_border_width(GTK_CONTAINER(box), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(box, PREF_PAD_BORDER);
 	gtk_widget_show(box);
 
 	return box;
@@ -1327,7 +1327,14 @@ GdkRectangle widget_get_position_geometry(GtkWidget *widget)
 		return rect;
 		}
 
-	gdk_surface_get_position(surface, &rect.x, &rect.y);
+	if (GTK_IS_WINDOW(widget) && !gq_gtk_window_get_position(GTK_WINDOW(widget), &rect.x, &rect.y))
+		{
+		gdk_surface_get_position(surface, &rect.x, &rect.y);
+		}
+	else if (!GTK_IS_WINDOW(widget))
+		{
+		gdk_surface_get_position(surface, &rect.x, &rect.y);
+		}
 	rect.width  = gdk_surface_get_width(surface);
 	rect.height = gdk_surface_get_height(surface);
 
@@ -1354,6 +1361,11 @@ GdkRectangle widget_get_root_origin_geometry(GtkWidget *widget)
 	if (!surface)
 		{
 		return rect;
+		}
+
+	if (GTK_IS_WINDOW(widget))
+		{
+		gq_gtk_window_get_position(GTK_WINDOW(widget), &rect.x, &rect.y);
 		}
 
 	rect.width  = gdk_surface_get_width(surface);
@@ -1408,7 +1420,7 @@ gboolean widget_received_event(GtkWidget *widget, GqPoint event)
 
 void widget_remove_from_parent(GtkWidget *widget)
 {
-	gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(widget)), widget);
+	gq_gtk_container_remove(gtk_widget_get_parent(widget), widget);
 }
 
 void widget_remove_from_parent_cb(GtkWidget *, gpointer data)
@@ -1524,6 +1536,19 @@ PangoAttrList *get_pango_attr_list(gboolean weight, gboolean scale)
 		}
 
 	return pal;
+}
+
+gboolean get_alternative_button_order(GtkWidget *widget)
+{
+	GtkSettings *settings = gtk_settings_get_for_screen(gtk_widget_get_screen(widget));
+	GObjectClass *klass = G_OBJECT_CLASS(GTK_SETTINGS_GET_CLASS(settings));
+
+	if (!g_object_class_find_property(klass, "gtk-alternative-button-order")) return FALSE;
+
+	gboolean alternative_order = FALSE;
+	g_object_get(settings, "gtk-alternative-button-order", &alternative_order, NULL);
+
+	return alternative_order;
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

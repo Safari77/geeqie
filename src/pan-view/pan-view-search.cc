@@ -385,11 +385,11 @@ static void pan_search_toggle_cb(GtkWidget *button, gpointer data)
 		{
 		parent = gtk_widget_get_parent(ui->search_button_arrow);
 
-		gtk_container_remove(GTK_CONTAINER(parent), ui->search_button_arrow);
+		gq_gtk_container_remove(parent, ui->search_button_arrow);
 		ui->search_button_arrow = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_UP, GTK_ICON_SIZE_BUTTON);
 
 		gq_gtk_box_pack_start(GTK_BOX(parent), ui->search_button_arrow, FALSE, FALSE, 0);
-		gtk_box_reorder_child(GTK_BOX(parent), ui->search_button_arrow, 0);
+		gq_gtk_box_reorder_child(GTK_BOX(parent), ui->search_button_arrow, 0);
 
 		gtk_widget_show(ui->search_button_arrow);
 		}
@@ -397,11 +397,11 @@ static void pan_search_toggle_cb(GtkWidget *button, gpointer data)
 		{
 		parent = gtk_widget_get_parent(ui->search_button_arrow);
 
-		gtk_container_remove(GTK_CONTAINER(parent), ui->search_button_arrow);
+		gq_gtk_container_remove(parent, ui->search_button_arrow);
 		ui->search_button_arrow = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_BUTTON);
 
 		gq_gtk_box_pack_start(GTK_BOX(parent), ui->search_button_arrow, FALSE, FALSE, 0);
-		gtk_box_reorder_child(GTK_BOX(parent), ui->search_button_arrow, 0);
+		gq_gtk_box_reorder_child(GTK_BOX(parent), ui->search_button_arrow, 0);
 
 		gtk_widget_show(ui->search_button_arrow);
 		gtk_widget_grab_focus(ui->search_entry);

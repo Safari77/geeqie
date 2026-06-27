@@ -296,7 +296,7 @@ static void bookmark_move(BookMarkData *bm, GtkWidget *button, gint direction)
 	bookmark_populate_all(key_holder);
 	bm->key = key_holder;
 
-	gtk_box_reorder_child(GTK_BOX(bm->box), button, p + direction);
+	gq_gtk_box_reorder_child(GTK_BOX(bm->box), button, p + direction);
 }
 
 static void bookmark_menu_prop_cb(GtkWidget *widget, gpointer data)
@@ -510,16 +510,16 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 			{
 			gint w = 16;
 			gint h = 16;
-			gtk_icon_size_lookup(GTK_ICON_SIZE_BUTTON, &w, &h);
+			gq_gtk_icon_size_lookup(GTK_ICON_SIZE_BUTTON, &w, &h);
 
-			pixbuf = gtk_icon_theme_load_icon(gtk_icon_theme_get_default(), b->icon.c_str(), w, GTK_ICON_LOOKUP_NO_SVG, nullptr);
+			pixbuf = gq_gtk_icon_theme_load_icon_copy(gq_icon_theme_get_default(), b->icon.c_str(), w, GTK_ICON_LOOKUP_NO_SVG);
 			}
 
 		if (pixbuf)
 			{
 			gint w = 16;
 			gint h = 16;
-			gtk_icon_size_lookup(GTK_ICON_SIZE_BUTTON, &w, &h);
+			gq_gtk_icon_size_lookup(GTK_ICON_SIZE_BUTTON, &w, &h);
 
 			g_autoptr(GdkPixbuf) scaled = gdk_pixbuf_scale_simple(pixbuf, w, h, GDK_INTERP_BILINEAR);
 			image = gtk_image_new_from_pixbuf(scaled);
@@ -578,7 +578,7 @@ static void bookmark_populate(BookMarkData *bm)
 	{
 		gq_gtk_widget_destroy(widget);
 	};
-	gtk_container_foreach(GTK_CONTAINER(bm->box), destroy_widget, nullptr);
+	gq_gtk_container_foreach(bm->box, destroy_widget, nullptr);
 #endif
 
 	if (!bm->no_defaults && !history_list_find_by_key(bm->key.c_str()))

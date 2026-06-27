@@ -710,7 +710,7 @@ void print_window_new(GList *selection, GtkWidget *parent)
 	pw->parent = parent;
 
 	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_container_set_border_width(GTK_CONTAINER(vbox), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(vbox, PREF_PAD_BORDER);
 	gtk_widget_show(vbox);
 
 	print_text_menu(vbox, pw);

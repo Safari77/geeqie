@@ -269,7 +269,7 @@ static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModi
 	GtkWidget *focused = nullptr;
 
 #if !HAVE_GTK4
-	focused = gtk_container_get_focus_child(GTK_CONTAINER(lw->image->widget));
+	focused = gq_gtk_widget_get_focus_child(lw->image->widget);
 #endif
 
 	gboolean stop_signal = FALSE;
@@ -352,7 +352,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 			gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 			}
 
-		if (gq_gtk_widget_event(lw->path_entry, reinterpret_cast<GdkEvent *>(event)))
+		if (gq_gtk_widget_key_event(lw->path_entry, event))
 			{
 			return TRUE;
 			}
@@ -364,7 +364,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 			gq_gtk_bin_get_child(GTK_WIDGET(lw->vf->file_filter.combo));
 
 		if (gtk_widget_has_focus(combo_entry) &&
-		    gq_gtk_widget_event(combo_entry, reinterpret_cast<GdkEvent *>(event)))
+		    gq_gtk_widget_key_event(combo_entry, event))
 			{
 			return TRUE;
 			}
@@ -374,7 +374,7 @@ static gboolean layout_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpoin
 	    lw->options.dir_view_type == DIRVIEW_TREE &&
 	    gtk_widget_has_focus(lw->vd->view) &&
 	    !layout_key_match(event->keyval) &&
-	    gq_gtk_widget_event(lw->vd->view, reinterpret_cast<GdkEvent *>(event)))
+	    gq_gtk_widget_key_event(lw->vd->view, event))
 		{
 		return TRUE;
 		}
@@ -2376,7 +2376,7 @@ static void layout_menu_windows_menu_cb(GtkWidget *, gpointer data)
 			gtk_widget_set_sensitive(widget, FALSE);
 			}
 	};
-	gtk_container_foreach(GTK_CONTAINER(sub_menu), set_sensitive, nullptr);
+	gq_gtk_container_foreach(sub_menu, set_sensitive, nullptr);
 }
 
 static void layout_menu_view_menu_cb(GtkWidget *, gpointer data)
@@ -2400,7 +2400,7 @@ static void layout_menu_view_menu_cb(GtkWidget *, gpointer data)
 			gtk_widget_set_sensitive(widget, GPOINTER_TO_INT(data));
 			}
 	};
-	gtk_container_foreach(GTK_CONTAINER(sub_menu), set_sensitive, GINT_TO_POINTER(sensitive));
+	gq_gtk_container_foreach(sub_menu, set_sensitive, GINT_TO_POINTER(sensitive));
 }
 
 static gchar *create_tmp_config_file()
@@ -3050,7 +3050,7 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 			deprecated_gtk_action_group_add_actions(lw->action_group_editors, &entry, 1, lw);
 
 			// @todo Use g_list_find_custom() if tooltip is unique
-			gtk_container_foreach(GTK_CONTAINER(main_toolbar), set_image_and_tooltip_from_editor, editor);
+			gq_gtk_container_foreach(main_toolbar, set_image_and_tooltip_from_editor, editor);
 
 			GList *path = layout_actions_editor_menu_path(editor);
 			layout_actions_editor_add(desc, path, old_path);
@@ -3335,7 +3335,7 @@ void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 
 	if (lw->toolbar[type])
 		{
-		gtk_container_foreach(GTK_CONTAINER(lw->toolbar[type]), toolbar_clear_cb, nullptr);
+		gq_gtk_container_foreach(lw->toolbar[type], toolbar_clear_cb, nullptr);
 		}
 }
 
@@ -3608,7 +3608,7 @@ void layout_util_status_update_write(LayoutWindow *lw)
 		{
 		if (lw->toolbar[i])
 			{
-			gtk_container_foreach(GTK_CONTAINER(lw->toolbar[i]), update_icon_cb, &uid);
+			gq_gtk_container_foreach(lw->toolbar[i], update_icon_cb, &uid);
 			}
 		}
 }

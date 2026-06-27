@@ -1767,8 +1767,8 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 
 
 		gtk_window_set_resizable(GTK_WINDOW(lw->tools), TRUE);
-		gtk_container_set_border_width(GTK_CONTAINER(lw->tools), 0);
-		if (options->expand_menu_toolbar) gtk_container_remove(GTK_CONTAINER(lw->main_box), lw->menu_tool_bar);
+		gq_gtk_widget_set_border_width(lw->tools, 0);
+		if (options->expand_menu_toolbar) gq_gtk_container_remove(lw->main_box, lw->menu_tool_bar);
 
 		new_window = TRUE;
 		}
@@ -1913,7 +1913,7 @@ void layout_split_change(LayoutWindow *lw, ImageSplitMode mode)
 				widget_remove_from_parent(lw->split_images[i]->widget);
 			}
 		}
-	gtk_container_remove(GTK_CONTAINER(lw->utility_paned), lw->split_image_widget);
+	gq_gtk_container_remove(lw->utility_paned, lw->split_image_widget);
 
 	image = layout_image_setup_split(lw, mode);
 
@@ -2157,7 +2157,7 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 	lw->info_pixel = nullptr;
 	lw->info_zoom = nullptr;
 
-	gtk_container_remove(GTK_CONTAINER(lw->main_box), lw->group_box);
+	gq_gtk_container_remove(lw->main_box, lw->group_box);
 	lw->group_box = nullptr;
 
 	/* re-fill */
@@ -2392,7 +2392,7 @@ void layout_show_config_window(LayoutWindow *lw)
 
 	gtk_window_set_default_size(GTK_WINDOW(lc->configwindow), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(lc->configwindow), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(lc->configwindow), PREF_PAD_BORDER);
+	gq_gtk_widget_set_border_width(lc->configwindow, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	DEBUG_NAME(win_vbox);
@@ -2432,9 +2432,9 @@ void layout_show_config_window(LayoutWindow *lw)
 	gtk_widget_set_can_default(button, TRUE);
 	gtk_widget_show(button);
 
-	if (!generic_dialog_get_alternative_button_order(lc->configwindow))
+	if (!get_alternative_button_order(lc->configwindow))
 		{
-		gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
+		gq_gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
 		}
 
 	frame = pref_frame_new(win_vbox, TRUE, nullptr, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
@@ -2654,7 +2654,7 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 	lw->window = window_new(GQ_APPNAME_LC, nullptr, nullptr);
 	DEBUG_NAME(lw->window);
 	gtk_window_set_resizable(GTK_WINDOW(lw->window), TRUE);
-	gtk_container_set_border_width(GTK_CONTAINER(lw->window), 0);
+	gq_gtk_widget_set_border_width(lw->window, 0);
 
 	if (options->save_window_positions)
 		{

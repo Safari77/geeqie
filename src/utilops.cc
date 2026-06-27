@@ -110,10 +110,10 @@ GdkPixbuf *file_util_get_error_icon(FileData *fd, GList *list, GtkWidget *)
 {
 	static PixmapErrors pe = []() -> PixmapErrors
 	{
-		GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+		GtkIconTheme *icon_theme = gq_icon_theme_get_default();
 
 		gint size;
-		if (!gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))
+		if (!gq_gtk_icon_size_lookup(GTK_ICON_SIZE_MENU, &size, &size))
 			{
 			size = 16;
 			}
@@ -1882,7 +1882,7 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 
 	ud->rename_entry = gtk_entry_new();
 	gq_gtk_grid_attach(GTK_GRID(table), ud->rename_entry, 1, 2, 1, 2);
-	generic_dialog_attach_default(GENERIC_DIALOG(ud->gd), ud->rename_entry);
+	generic_dialog_attach_default(ud->gd, ud->rename_entry);
 	gtk_widget_grab_focus(ud->rename_entry);
 
 	g_signal_connect(G_OBJECT(ud->rename_entry), "changed",
@@ -2016,8 +2016,7 @@ void file_util_dialog_run(UtilityData *ud)
 				case UtilityType::RENAME:
 					file_util_dialog_init_source_dest(ud, TRUE);
 
-					GdkRectangle rect;
-					if (!options->save_dialog_window_positions || !generic_dialog_find_window("Rename", "dlg_confirm", rect))
+					if (!options->save_dialog_window_positions || !generic_dialog_find_window("Rename", "dlg_confirm"))
 						{
 						gq_gtk_window_resize(GTK_WINDOW(ud->gd->dialog), RENAME_WINDOW_WIDTH, RENAME_WINDOW_HEIGHT);
 						}
@@ -2165,7 +2164,7 @@ static gchar *file_util_details_get_message(UtilityData *ud, FileData *fd, const
 		if (icon_name) *icon_name = GQ_ICON_DIALOG_INFO;
 		}
 
-	return g_string_free(message, FALSE);;
+	return g_string_free(message, FALSE);
 }
 
 static void file_util_details_dialog(UtilityData *ud, FileData *fd)

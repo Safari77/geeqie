@@ -3154,7 +3154,7 @@ void search_new(FileData *dir_fd, FileData *example_file)
 	                 G_CALLBACK(search_window_keypress_cb), sd);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
-	gtk_container_set_border_width(GTK_CONTAINER(vbox), PREF_PAD_GAP);
+	gq_gtk_widget_set_border_width(vbox, PREF_PAD_GAP);
 	gq_gtk_container_add(sd->ui.window, vbox);
 	gtk_widget_show(vbox);
 
