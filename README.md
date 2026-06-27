@@ -188,6 +188,22 @@ Thumbnails and similarity data will also not be available. You must regenerate t
 $HOME/snap/geeqie/common/.cache
 ```
 
+### Project branches
+
+The master branch is, temporarily, unstable and for use by developers to implement GTK4 compliance.
+
+To find the latest stable branch, use:
+
+```
+git tag --sort=-v:refname | head -n1
+```
+
+After cloning Geeqie, switch to the latest stable branch by, e.g.:
+
+```sh
+git checkout v2.9
+```
+
 ### Installation scripts
 
 Geeqie is stable and you may compile the latest version from sources.
