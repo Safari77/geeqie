@@ -184,7 +184,7 @@ static const gchar default_config_copyright[] =
 "    </layout>"
 "</gq>";
 
-#if (HAVE_LIBCHAMPLAIN && HAVE_LIBCHAMPLAIN_GTK) || HAVE_LIBSHUMATE
+#if HAVE_LIBSHUMATE
 static const gchar default_config_gps[] =
 "<gq>"
 "    <layout id = '_current_'>"
@@ -212,7 +212,7 @@ static const KnownPanes known_panes[] = {
 	{PANE_EXIF,		"file_info",	N_("File info"),	default_config_file_info},
 	{PANE_EXIF,		"location",	N_("Location and GPS"),	default_config_location},
 	{PANE_EXIF,		"copyright",	N_("Copyright"),	default_config_copyright},
-#if (HAVE_LIBCHAMPLAIN && HAVE_LIBCHAMPLAIN_GTK) || HAVE_LIBSHUMATE
+#if HAVE_LIBSHUMATE
 	{PANE_GPS,		"gps",	N_("GPS Map"),	default_config_gps},
 #endif
 	{PANE_UNDEF,		nullptr,		nullptr,			nullptr}
@@ -247,7 +247,6 @@ static void height_spin_changed_cb(GtkSpinButton *spin, gpointer data)
 	gtk_widget_set_size_request(static_cast<GtkWidget *>(data), -1, gtk_spin_button_get_value_as_int(spin));
 }
 
-#if HAVE_GTK4
 static void height_spin_key_press_cb(GtkEventControllerKey *, gint keyval, guint, GdkModifierType, gpointer data)
 {
 	if ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_Escape))
@@ -255,22 +254,11 @@ static void height_spin_key_press_cb(GtkEventControllerKey *, gint keyval, guint
 		gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
 		}
 }
-#else
-static gboolean height_spin_key_press_cb(GtkWidget *, GdkEventKey *event, gpointer data)
-{
-	if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter || event->keyval == GDK_KEY_Escape)
-		{
-		gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
-		return TRUE;
-		}
 
-	return FALSE;
-}
-#endif
-
-static void expander_height_cb(GtkWidget *widget, GdkEvent *, gpointer)
+static void expander_height_cb(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer data)
 {
-	gq_gtk_widget_destroy(widget);
+/** @FIXME GTK4 Destroy the widget
+ */
 }
 
 static void bar_expander_height_cb(GtkWidget *, gpointer data)
@@ -290,40 +278,36 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 	device = gdk_seat_get_pointer(seat);
 	get_device_position(device, x, y);
 
-	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(expander));
-	auto *data_box = static_cast<GtkWidget *>(list->data);
-
-#if HAVE_GTK4
 	window = gtk_window_new();
-#else
-	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-#endif
 
 	gtk_window_set_modal(GTK_WINDOW(window), TRUE);
 	gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 	gq_gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
 	gtk_window_set_default_size(GTK_WINDOW(window), 50, 30); //** @FIXME set these values in a more sensible way */
-	g_signal_connect(window, "key-press-event", G_CALLBACK(expander_height_cb), nullptr);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(expander_height_cb), nullptr);
+	gtk_widget_add_controller(window, controller);
 
-	gq_gtk_window_move(GTK_WINDOW(window), x, y);
 	gtk_widget_show(window);
 
+	GtkWidget *data_box = gtk_widget_get_first_child(expander);
 	gtk_widget_get_size_request(data_box, &w, &h);
 
 	GtkWidget *spin = gtk_spin_button_new_with_range(1, 1000, 1);
 	g_signal_connect(G_OBJECT(spin), "value-changed", G_CALLBACK(height_spin_changed_cb), data_box);
-#if HAVE_GTK4
-	GtkEventController *controller = gtk_event_controller_key_new();
+	controller = gtk_event_controller_key_new();
 	g_signal_connect(controller, "key-pressed", G_CALLBACK(height_spin_key_press_cb), window);
 	gtk_widget_add_controller(spin, controller);
-#else
-	g_signal_connect(G_OBJECT(spin), "key_press_event", G_CALLBACK(height_spin_key_press_cb), window);
-#endif
 
 	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), h);
 	gq_gtk_container_add(window, spin);
 	gtk_widget_show(spin);
 	gtk_widget_grab_focus(spin);
+}
+
+void menu_expander_height_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	bar_expander_height_cb(nullptr, data);
 }
 
 static void bar_expander_add_cb(GtkWidget *, gpointer data)
@@ -363,7 +347,7 @@ static void bar_menu_popup(GtkWidget *widget)
 		                        (g_strcmp0(label, "GPS Map") == 0);
 		}
 
-	popup_menu_bar(expander, display_height_option ? G_CALLBACK(bar_expander_height_cb) : nullptr);
+	popup_menu_bar(expander, display_height_option ? G_CALLBACK(bar_expander_height_cb) : nullptr, widget);
 }
 
 
@@ -377,26 +361,18 @@ static gboolean bar_menu_expander_common(GtkWidget *widget, guint button)
 	return FALSE;
 }
 
-#if HAVE_GTK4
 static void bar_menu_expander_gesture_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
 	bar_menu_expander_common(widget, gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
 }
-#else
-static gboolean bar_menu_expander_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
-{
-	return bar_menu_expander_common(widget, bevent->button);
-}
-#endif
 
 static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 {
 	GtkExpander *expander;
-	GtkWidget *child;
 
 	expander = GTK_EXPANDER(object);
-	child = gq_gtk_bin_get_child(GTK_WIDGET(expander));
+	GtkWidget *child = gtk_widget_get_first_child(GTK_WIDGET(expander));
 
 	if (gtk_expander_get_expanded(expander))
 		{
@@ -410,25 +386,18 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 
 static void bar_menu_add_cb(GtkWidget *, gpointer)
 {
-	GtkWidget *menu = popup_menu_short_lived();
+	GtkWidget *menu = popover_box_new();
 
-	for (const KnownPanes *pane = known_panes; pane->id; pane++)
-		{
-		menu_item_add_icon(menu, _(pane->title), GQ_ICON_ADD,
-		                   G_CALLBACK(bar_expander_add_cb), const_cast<gchar *>(pane->config));
-		}
+/** @FIXME GTK$ This is a placeholder for the moment.
+ * The style should be, for example:
+ * 	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-collection.ui");
+	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-collection"));
+	popup_menu(menu_model, cw->window);
 
-	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
+	See the original code.
+*/
 }
 
-
-static void bar_pane_set_fd_cb(GtkWidget *expander, gpointer data)
-{
-	GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
-	auto pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
-	if (!pd) return;
-	if (pd->pane_set_fd) pd->pane_set_fd(widget, static_cast<FileData *>(data));
-}
 
 void bar_set_fd(GtkWidget *bar, FileData *fd)
 {
@@ -438,17 +407,20 @@ void bar_set_fd(GtkWidget *bar, FileData *fd)
 	file_data_unref(bd->fd);
 	bd->fd = file_data_ref(fd);
 
-	gq_gtk_container_foreach(bd->vbox, bar_pane_set_fd_cb, fd);
+	for (GtkWidget *expander = gtk_widget_get_first_child(bd->vbox);
+	     expander;
+	     expander = gtk_widget_get_next_sibling(expander))
+		{
+		GtkWidget *widget = gtk_widget_get_first_child(expander);
+
+		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
+		if (pd && pd->pane_set_fd)
+			{
+			pd->pane_set_fd(widget, fd);
+			}
+		}
 
 	gtk_label_set_text(GTK_LABEL(bd->label_file_name), bd->fd ? bd->fd->name : "");
-}
-
-static void bar_pane_notify_selection_cb(GtkWidget *expander, gpointer data)
-{
-	GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
-	auto pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
-	if (!pd) return;
-	if (pd->pane_notify_selection) pd->pane_notify_selection(widget, GPOINTER_TO_INT(data));
 }
 
 void bar_notify_selection(GtkWidget *bar, gint count)
@@ -456,7 +428,18 @@ void bar_notify_selection(GtkWidget *bar, gint count)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	gq_gtk_container_foreach(bd->vbox,  bar_pane_notify_selection_cb, GINT_TO_POINTER(count));
+	for (GtkWidget *expander = gtk_widget_get_first_child(bd->vbox);
+	     expander;
+	     expander = gtk_widget_get_next_sibling(expander))
+		{
+		GtkWidget *widget = gtk_widget_get_first_child(expander);
+
+		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
+		if (pd && pd->pane_notify_selection)
+			{
+			pd->pane_notify_selection(widget, count);
+			}
+		}
 }
 
 gboolean bar_event(GtkWidget *bar, GdkEvent *event)
@@ -464,11 +447,11 @@ gboolean bar_event(GtkWidget *bar, GdkEvent *event)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return FALSE;
 
-	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
-
-	for (GList *work = list; work; work = work->next)
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	    child;
+	    child = gtk_widget_get_next_sibling(child))
 		{
-		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(work->data));
+		GtkWidget *widget = gtk_widget_get_first_child(child);
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && pd->pane_event && pd->pane_event(widget, event))
@@ -492,10 +475,11 @@ GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id)
 	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return nullptr;
 
-	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
-	for (GList *work = list; work; work = work->next)
+	for (GtkWidget *child = gtk_widget_get_first_child(bd->vbox);
+	    child;
+	    child = gtk_widget_get_next_sibling(child))
 		{
-		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(work->data));
+		GtkWidget *widget = gtk_widget_get_first_child(child);
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && type == pd->type && strcmp(id, pd->id) == 0)
@@ -510,14 +494,14 @@ GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id)
 void bar_clear(GtkWidget *bar)
 {
 	BarData *bd;
-	GList *list;
 
 	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
-
-	g_list_free_full(list, reinterpret_cast<GDestroyNotify>(widget_remove_from_parent));
+	while (GtkWidget *child = gtk_widget_get_first_child(bd->vbox))
+		{
+		gtk_box_remove(GTK_BOX(bd->vbox), child);
+		}
 }
 
 void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
@@ -535,11 +519,11 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 
-	g_autoptr(GList) list = gq_gtk_widget_get_children(GTK_WIDGET(bd->vbox));
-	for (GList *work = list; work; work = work->next)
+	for (GtkWidget *expander = gtk_widget_get_first_child(bd->vbox);
+	    expander;
+	    expander = gtk_widget_get_next_sibling(expander))
 		{
-		auto *expander = static_cast<GtkWidget *>(work->data);
-		GtkWidget *widget = gq_gtk_bin_get_child(GTK_WIDGET(expander));
+		GtkWidget *widget = gtk_widget_get_first_child(expander);
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (!pd) continue;
@@ -572,6 +556,7 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 	auto pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 
 	if (!bd) return;
+	if (!pd) return;
 
 	pd->lw = bd->lw;
 	pd->bar = bar;
@@ -586,14 +571,10 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 
 	gq_gtk_box_pack_start(GTK_BOX(bd->vbox), expander, FALSE, TRUE, 0);
 
-#if HAVE_GTK4
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect(gesture, "released", G_CALLBACK(bar_menu_expander_gesture_cb), bd);
 	gtk_widget_add_controller(expander, GTK_EVENT_CONTROLLER(gesture));
-#else
-	g_signal_connect(expander, "button_release_event", G_CALLBACK(bar_menu_expander_cb), bd);
-#endif
 	g_signal_connect(expander, "notify::expanded", G_CALLBACK(bar_expander_cb), pd);
 
 	gq_gtk_container_add(expander, pane);
@@ -677,7 +658,7 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	gq_gtk_box_pack_start(GTK_BOX(bd->widget), box, FALSE, FALSE, 0);
 	gtk_widget_show(box);
 
-	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gtk_scrolled_window_new();
 	DEBUG_NAME(scrolled);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 		GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -687,7 +668,7 @@ GtkWidget *bar_new(LayoutWindow *lw)
 
 	bd->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gq_gtk_container_add(scrolled, bd->vbox);
-	gq_gtk_viewport_set_shadow_type(GTK_WIDGET(gq_gtk_bin_get_child(GTK_WIDGET(scrolled))), GTK_SHADOW_NONE);
+	gtk_widget_remove_css_class(gtk_widget_get_first_child(scrolled), "frame");
 
 	add_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(add_box);
@@ -697,7 +678,7 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	                    _("Add Pane"), G_CALLBACK(bar_menu_add_cb), nullptr);
 	gtk_widget_show(add_box);
 
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_NONE);
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_widget_show(bd->vbox);
 	return bd->widget;
 }

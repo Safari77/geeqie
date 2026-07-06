@@ -57,6 +57,11 @@ i18n = import('i18n')
 fs = import('fs')
 configuration_inc = include_directories('.')
 
+# Main library dependencies
+gtk_dep = dependency('gtk4', version : '>=4.18', required : true)
+glib_dep = dependency('glib-2.0', version : '>=2.66', required: true)
+pango_dep = dependency('pango', version : '>=1.46', required: true)
+
 option = get_option('git')
 if not option.disabled()
     running_from_git = find_program('git', required: false).found() and fs.is_dir('.git')
@@ -149,17 +154,6 @@ conf_data.set('HAVE_MNTENT_H', 0)
 if cc.has_header('mntent.h')
     conf_data.set('HAVE_MNTENT_H', 1)
 endif
-
-conf_data.set('HAVE_GTK4', 0)
-option = get_option('gtk4')
-if option.enabled()
-    gtk_dep = dependency('gtk4', required: true)
-    conf_data.set('HAVE_GTK4', 1)
-else
-    gtk_dep = dependency('gtk+-3.0', version : '>=3.24', required: true)
-endif
-glib_dep = dependency('glib-2.0', version : '>=2.66', required: true)
-pango_dep = dependency('pango', version : '>=1.46', required: true)
 
 # Required only for seg. fault stacktrace and backtrace debugging
 conf_data.set('HAVE_EXECINFO_H', 0)
@@ -308,66 +302,21 @@ else
     summary({'fits' : ['disabled - fits files supported:', false]}, section : 'Configuration', bool_yn : true)
 endif
 
-champlain_dep = []
-champlain_gtk_dep = []
-clutter_dep = []
-clutter_gtk_dep = []
 shumate_dep = []
 
-if conf_data.get('HAVE_GTK4', 0) == 1
-    conf_data.set('HAVE_LIBSHUMATE', 0)
-    req_version_shumate = '>=1.5.0'
-    option = get_option('gps-map')
-    if not option.disabled()
-        shumate_dep = dependency('shumate-1.0', version : req_version_shumate, required : get_option('gps-map'))
-        if shumate_dep.found()
-            conf_data.set('HAVE_LIBSHUMATE', 1)
-            summary({'gps-map' : ['GPS map displayed', true]}, section : 'Configuration', bool_yn : true)
-        else
-            summary({'gps-map' : ['shumate-1.0 ' + req_version_shumate + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-        endif
+conf_data.set('HAVE_LIBSHUMATE', 0)
+req_version_shumate = '>=1.5.0'
+option = get_option('gps-map')
+if not option.disabled()
+    shumate_dep = dependency('shumate-1.0', version : req_version_shumate, required : get_option('gps-map'))
+    if shumate_dep.found()
+        conf_data.set('HAVE_LIBSHUMATE', 1)
+        summary({'gps-map' : ['GPS map displayed', true]}, section : 'Configuration', bool_yn : true)
     else
-        summary({'gps-map' : ['disabled - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
+        summary({'gps-map' : ['shumate-1.0 ' + req_version_shumate + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
     endif
 else
-    conf_data.set('HAVE_CLUTTER', 0)
-    conf_data.set('HAVE_LIBCHAMPLAIN', 0)
-    conf_data.set('HAVE_LIBCHAMPLAIN_GTK', 0)
-    req_version_champlain = '>=0.12'
-    req_version_champlain_gtk = '>=0.12'
-    req_version_clutter = '>=1.0'
-    req_version_clutter_gtk = '>=1.0'
-    option = get_option('gps-map')
-    if not option.disabled()
-        champlain_dep = dependency('champlain-0.12', version : req_version_champlain, required : get_option('gps-map'))
-        champlain_gtk_dep = dependency('champlain-gtk-0.12', version : req_version_champlain_gtk, required : get_option('gps-map'))
-        if champlain_dep.found() and champlain_gtk_dep.found()
-            clutter_dep = dependency('clutter-1.0', version : req_version_clutter, required : get_option('gps-map'))
-            clutter_gtk_dep = dependency('clutter-gtk-1.0', version : req_version_clutter_gtk, required : get_option('gps-map'))
-            if clutter_dep.found() and clutter_gtk_dep.found()
-                conf_data.set('HAVE_CLUTTER', 1)
-                conf_data.set('HAVE_LIBCHAMPLAIN', 1)
-                conf_data.set('HAVE_LIBCHAMPLAIN_GTK', 1)
-                summary({'gps-map' : ['GPS map displayed', true]}, section : 'Configuration', bool_yn : true)
-            else
-                if not clutter_dep.found()
-                    summary({'gps-map-clutter' : ['clutter-1.0 ' + req_version_clutter + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-                endif
-                if not clutter_gtk_dep.found()
-                    summary({'gps-map-clutter-gtk' : ['clutter-gtk-1.0 ' + req_version_clutter_gtk + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-                endif
-            endif
-        else
-            if not champlain_dep.found()
-                summary({'gps-map-champlain' : ['champlain-0.12 ' + req_version_champlain + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-            endif
-            if not champlain_gtk_dep.found()
-                summary({'gps-map-champlain-gtk' : ['champlain-gtk-0.12 ' + req_version_champlain_gtk + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-            endif
-        endif
-    else
-        summary({'gps-map' : ['disabled - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
-    endif
+    summary({'gps-map' : ['disabled - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
 endif
 
 conf_data.set('HAVE_HEIF', 0)
@@ -517,16 +466,15 @@ else
 endif
 
 conf_data.set('HAVE_SPELL', 0)
-gspell_dep = []
-req_version = '>=1.6'
+spelling_dep = []
 option = get_option('spell')
 if not option.disabled()
-    gspell_dep = dependency('gspell-1', version : req_version, required: get_option('spell'))
-    if gspell_dep.found()
+    spelling_dep = dependency('libspelling-1', required: get_option('spell'))
+    if spelling_dep.found()
         conf_data.set('HAVE_SPELL', 1)
         summary({'spell' : ['spelling checks enabled', true]}, section : 'Configuration', bool_yn : true)
     else
-        summary({'spell' : ['gspell-1 ' + req_version + ' not found - spelling checks enabled', false]}, section : 'Configuration', bool_yn : true)
+        summary({'spell' : ['libspelling-1 not found - spelling checks enabled', false]}, section : 'Configuration', bool_yn : true)
     endif
 else
     summary({'spell' : ['disabled - spelling checks enabled', false]}, section : 'Configuration', bool_yn : true)
@@ -843,23 +791,6 @@ if boolean_comparison_check_awk.found()
     summary({'Boolean Comparison' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
 else
     summary({'Boolean Comparison' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
-endif
-
-# GTK4 migration regression checks
-gtk4_migration_check_sh = find_program('gtk4-migration-regression-check.sh', dirs : buildauxdir, required : true)
-if gtk4_migration_check_sh.found()
-    compat_cc = join_paths(meson.project_source_root(), 'src', 'compat.cc')
-    compat_h = join_paths(meson.project_source_root(), 'src', 'compat.h')
-    foreach source_file : code_sources
-        source_file_name = fs.name(source_file)
-        if (source_file_name != 'compat-deprecated.h' and source_file_name != 'debug.h')
-            test('GTK4 migration_ ' + source_file_name, gtk4_migration_check_sh, args : [source_file, compat_cc, compat_h], timeout : 100, suite : 'analysis')
-        endif
-    endforeach
-
-    summary({'GTK4 migration' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
-else
-    summary({'GTK4 migration' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
 endif
 
 # Untranslated text checks

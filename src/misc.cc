@@ -319,22 +319,10 @@ gint get_cpu_cores()
     return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
-#if HAVE_GTK4
 GdkRGBA convert_gdkcolor_to_gdkrgba(gpointer data)
 {
 /* @FIXME GTK4 stub */
 }
-#else
-GdkRGBA convert_gdkcolor_to_gdkrgba(gpointer data)
-{
-	auto *gdk_color = static_cast<GdkColor *>(data);
-
-	return { std::clamp((double)gdk_color->red / 65535.0, 0.0, 1.0),
-	         std::clamp((double)gdk_color->green / 65535.0, 0.0, 1.0),
-	         std::clamp((double)gdk_color->blue / 65535.0, 0.0, 1.0),
-	         1.0 };
-}
-#endif
 
 /**
  * @brief Shifts a GdkRGBA values lighter or darker \n
@@ -377,22 +365,38 @@ void gq_gtk_entry_set_text(GtkEntry *entry, const gchar *text)
 	gtk_entry_buffer_set_text(buffer, text, static_cast<gint>(g_utf8_strlen(text, -1)));
 }
 
-const gchar *gq_gtk_entry_get_text(GtkEntry *entry)
+namespace
 {
-	GtkEntryBuffer *buffer;
 
-	buffer = gtk_entry_get_buffer(entry);
-	return gtk_entry_buffer_get_text(buffer);
+struct DialogRunData
+{
+	GMainLoop *loop;
+	gint response_id;
+};
+
+void dialog_run_response_cb(GtkDialog *, gint response_id, gpointer data)
+{
+	auto *run_data = static_cast<DialogRunData *>(data);
+	run_data->response_id = response_id;
+	g_main_loop_quit(run_data->loop);
 }
 
-void gq_gtk_grid_attach(GtkGrid *grid, GtkWidget *child, guint left_attach, guint right_attach, guint top_attach, guint bottom_attach)
-{
-	gtk_grid_attach(grid, child, left_attach, top_attach, right_attach - left_attach, bottom_attach - top_attach);
-}
+} // namespace
 
-void gq_gtk_grid_attach_default(GtkGrid *grid, GtkWidget *child, guint left_attach, guint right_attach, guint top_attach, guint bottom_attach )
+gint gq_gtk_dialog_run(GtkDialog *dialog)
 {
-	gtk_grid_attach(grid, child, left_attach, top_attach, right_attach - left_attach, bottom_attach - top_attach);
+	DialogRunData run_data{};
+	run_data.loop = g_main_loop_new(nullptr, FALSE);
+	run_data.response_id = GTK_RESPONSE_NONE;
+
+	gulong handler_id = g_signal_connect(dialog, "response",
+					     G_CALLBACK(dialog_run_response_cb), &run_data);
+	gtk_widget_show(GTK_WIDGET(dialog));
+	g_main_loop_run(run_data.loop);
+	g_signal_handler_disconnect(dialog, handler_id);
+	g_main_loop_unref(run_data.loop);
+
+	return run_data.response_id;
 }
 
 /**
@@ -412,94 +416,16 @@ void cell_renderer_height_override(GtkCellRenderer *renderer)
 		}
 }
 
-/**
- * @brief Set cursor for widget's window.
- * @param widget Widget for which cursor is set
- * @param icon Cursor type from GdkCursorType.
- *        Value -1 means using the cursor of its parent window.
- * @todo Use std::optional for icon since C++17 instead of special -1 value
- */
-#if HAVE_GTK4
-static const gchar *cursor_name_from_legacy_icon(gint icon)
-{
-	switch (icon)
-		{
-		case GDK_ARROW:
-			return "default";
-		case GDK_HAND2:
-			return "pointer";
-		case GDK_CROSS:
-			return "crosshair";
-		case GDK_WATCH:
-			return "wait";
-		case GDK_XTERM:
-			return "text";
-		case GDK_FLEUR:
-			return "move";
-		default:
-			return nullptr;
-		}
-}
-#endif
-
-void widget_set_cursor(GtkWidget *widget, gint icon)
-{
-	if (!widget)
-		{
-		return;
-		}
-
-#if HAVE_GTK4
-	if (icon == -1)
-		{
-		gtk_widget_set_cursor(widget, nullptr);
-		}
-	else
-		{
-		auto *name = cursor_name_from_legacy_icon(icon);
-		if (name)
-			{
-			gtk_widget_set_cursor_from_name(widget, name);
-			}
-		}
-
-#else
-	auto *window = gtk_widget_get_window(widget);
-
-	if (!window)
-		{
-		return;
-		}
-
-	GdkCursor *cursor = nullptr;
-
-	if (icon != -1)
-		{
-		auto *display = gdk_window_get_display(window);
-		cursor = gdk_cursor_new_for_display(display, static_cast<GdkCursorType>(icon));
-		}
-#endif
-
-	gdk_window_set_cursor(window, cursor);
-
-	if (cursor) g_object_unref(cursor);
-}
-
 GtkWidget *widget_get_toplevel(GtkWidget *widget)
 {
-#if HAVE_GTK4
-	auto *root = gtk_widget_get_root(vf->listview);
+	auto *root = widget ? gtk_widget_get_root(widget) : nullptr;
 
 	if (GTK_IS_WINDOW(root))
 		{
-		return GTK_WINDOW(root);
+		return GTK_WIDGET(root);
 		}
-	else
-		{
-		return nullptr;
-		}
-#else
-	return gtk_widget_get_toplevel(widget);
-#endif
+	
+				return nullptr;
+	
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

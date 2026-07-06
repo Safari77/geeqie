@@ -20,6 +20,7 @@
 
 #include "print.h"
 
+#include <array>
 #include <cstddef>
 #include <cstring>
 
@@ -71,8 +72,8 @@ struct PrintWindow
 
 	GList *print_pixbuf_queue;
 	gboolean job_render_finished;
-	GSList *image_group;
-	GSList *page_group;
+	std::array<GtkWidget *, 4> image_group{};
+	std::array<GtkWidget *, 4> page_group{};
 };
 
 constexpr gint PRE_FORMATTED_COLUMNS = 4;
@@ -155,22 +156,20 @@ void print_set_font_cb(GtkWidget *widget, gpointer data)
 	gtk_widget_show(dialog);
 }
 
-gint set_toggle(GSList *list, TextPosition pos)
+gint set_toggle(const std::array<GtkWidget *, 4> &group, TextPosition pos)
 {
-	GtkToggleButton *current_sel;
-	GtkToggleButton *new_sel;
 	gint new_pos = - 1;
 
-	current_sel = static_cast<GtkToggleButton *>(g_slist_nth(list, pos)->data);
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(current_sel)))
+	GtkWidget *current_sel = group[pos];
+	if (current_sel && gtk_check_button_get_active(GTK_CHECK_BUTTON(current_sel)))
 		{
 		new_pos = (pos - 1);
 		if (new_pos < 0)
 			{
 			new_pos = HEADER_1;
 			}
-		new_sel = static_cast<GtkToggleButton *>(g_slist_nth(list, new_pos)->data);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(new_sel), TRUE);
+		GtkWidget *new_sel = group[new_pos];
+		if (new_sel) gtk_check_button_set_active(GTK_CHECK_BUTTON(new_sel), TRUE);
 		}
 	return new_pos;
 }
@@ -178,7 +177,7 @@ gint set_toggle(GSList *list, TextPosition pos)
 template<TextPosition pos>
 void image_text_position_cb(GtkWidget *widget, gpointer data)
 {
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
+	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
 
 	auto pw = static_cast<PrintWindow *>(data);
 	gint new_set = set_toggle(pw->page_group, pos);
@@ -193,7 +192,7 @@ void image_text_position_cb(GtkWidget *widget, gpointer data)
 template<TextPosition pos>
 void page_text_position_cb(GtkWidget *widget, gpointer data)
 {
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
+	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
 
 	auto pw = static_cast<PrintWindow *>(data);
 	gint new_set = set_toggle(pw->image_group, pos);
@@ -242,17 +241,20 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	button1 = pref_radiobutton_new(hbox, nullptr,  _("Header 1"),
 	                               options->printer.image_text_position == HEADER_1,
 	                               G_CALLBACK(image_text_position_cb<HEADER_1>), pw);
+	pw->image_group[HEADER_1] = button1;
 	button1 = pref_radiobutton_new(hbox, button1,  _("Header 2"),
 	                               options->printer.image_text_position == HEADER_2,
 	                               G_CALLBACK(image_text_position_cb<HEADER_2>), pw);
+	pw->image_group[HEADER_2] = button1;
 	button1 = pref_radiobutton_new(hbox, button1, _("Footer 1"),
 	                               options->printer.image_text_position == FOOTER_1,
 	                               G_CALLBACK(image_text_position_cb<FOOTER_1>), pw);
+	pw->image_group[FOOTER_1] = button1;
 	button1 = pref_radiobutton_new(hbox, button1, _("Footer 2"),
 	                               options->printer.image_text_position == FOOTER_2,
 	                               G_CALLBACK(image_text_position_cb<FOOTER_2>), pw);
+	pw->image_group[FOOTER_2] = button1;
 	gtk_widget_show(hbox);
-	pw->image_group = (gtk_radio_button_get_group(GTK_RADIO_BUTTON(button1)));
 
 	image_text_template_view = gtk_text_view_new();
 
@@ -264,9 +266,9 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	gtk_widget_set_tooltip_markup(image_text_template_view,
 					_("Extensive formatting options are shown in the Help file"));
 
-	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_widget_set_size_request(scrolled, 200, 50);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 									GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 	gq_gtk_box_pack_start(GTK_BOX(subgroup), scrolled, TRUE, TRUE, 5);
@@ -306,21 +308,24 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	button2 = pref_radiobutton_new(hbox, nullptr, _("Header 1"),
 	                               options->printer.page_text_position == HEADER_1,
 	                               G_CALLBACK(page_text_position_cb<HEADER_1>), pw);
+	pw->page_group[HEADER_1] = button2;
 	button2 = pref_radiobutton_new(hbox, button2,  _("Header 2"),
 	                               options->printer.page_text_position == HEADER_2,
 	                               G_CALLBACK(page_text_position_cb<HEADER_2>), pw);
+	pw->page_group[HEADER_2] = button2;
 	button2 = pref_radiobutton_new(hbox, button2, _("Footer 1"),
 	                               options->printer.page_text_position == FOOTER_1,
 	                               G_CALLBACK(page_text_position_cb<FOOTER_1>), pw);
+	pw->page_group[FOOTER_1] = button2;
 	button2 = pref_radiobutton_new(hbox, button2, _("Footer 2"),
 	                               options->printer.page_text_position == FOOTER_2,
 	                               G_CALLBACK(page_text_position_cb<FOOTER_2>), pw);
+	pw->page_group[FOOTER_2] = button2;
 	gtk_widget_show(hbox);
-	pw->page_group = (gtk_radio_button_get_group(GTK_RADIO_BUTTON(button2)));
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	scrolled = gtk_scrolled_window_new();
 	gtk_widget_set_size_request(scrolled, 50, 50);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 	gq_gtk_box_pack_start(GTK_BOX(subgroup), scrolled, TRUE, TRUE, 5);
@@ -690,11 +695,6 @@ void end_print_cb(GtkPrintOperation *operation, GtkPrintContext *, gpointer data
 	print_window_free(pw);
 }
 
-void print_response_cb(GtkDialog *dialog, gint, gpointer)
-{
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
-}
-
 } // namespace
 
 /**
@@ -753,17 +753,9 @@ void print_window_new(GList *selection, GtkWidget *parent)
 
 	if (error)
 		{
-		GtkWidget *dialog;
-
-		dialog = gtk_message_dialog_new(GTK_WINDOW (parent),
-								GTK_DIALOG_DESTROY_WITH_PARENT,
-								GTK_MESSAGE_ERROR,
-								GTK_BUTTONS_CLOSE,
-								"%s", error->message);
-
-		g_signal_connect(dialog, "response", G_CALLBACK(print_response_cb), NULL);
-
-		gtk_widget_show (dialog);
+		g_autoptr(GtkAlertDialog) dialog = gtk_alert_dialog_new("%s", error->message);
+		gtk_alert_dialog_set_modal(dialog, TRUE);
+		gtk_alert_dialog_show(dialog, GTK_WINDOW(parent));
 		}
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

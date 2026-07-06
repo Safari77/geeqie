@@ -95,13 +95,9 @@ struct ImageWindow
 	gpointer data_state;
 
 	/* button, scroll functions */
-#if HAVE_GTK4
 	void (*func_button)(ImageWindow *, GqMouseButtonEvent *event, gpointer);
-#else
-	void (*func_button)(ImageWindow *, GdkEventButton *event, gpointer);
-#endif
-	void (*func_drag)(ImageWindow *, GdkEventMotion *event, gdouble dx, gdouble dy, gpointer);
-	void (*func_scroll)(ImageWindow *, GdkEventScroll *event, gpointer);
+	void (*func_drag)(ImageWindow *, const GqPointerMotionEvent *event, gpointer);
+	void (*func_scroll)(ImageWindow *, const GqScrollEvent *event, gpointer);
 	void (*func_focus_in)(ImageWindow *, gpointer);
 
 	gpointer data_button;
@@ -151,20 +147,14 @@ void image_attach_window(ImageWindow *imd, GtkWidget *window,
 void image_set_update_func(ImageWindow *imd,
 			   void (*func)(ImageWindow *imd, gpointer data),
 			   gpointer data);
-#if HAVE_GTK4
 void image_set_button_func(ImageWindow *imd,
 	void (*func)(ImageWindow *, GqMouseButtonEvent *event, gpointer),
 	gpointer data);
-#else
-void image_set_button_func(ImageWindow *imd,
-	void (*func)(ImageWindow *, GdkEventButton *event, gpointer),
-	gpointer data);
-#endif
 void image_set_drag_func(ImageWindow *imd,
-	void (*func)(ImageWindow *, GdkEventMotion *event, gdouble dx, gdouble dy, gpointer),
+	void (*func)(ImageWindow *, const GqPointerMotionEvent *event, gpointer),
 	gpointer data);
 void image_set_scroll_func(ImageWindow *imd,
-	void (*func)(ImageWindow *, GdkEventScroll *event, gpointer),
+	void (*func)(ImageWindow *, const GqScrollEvent *event, gpointer),
 	gpointer data);
 void image_set_focus_in_func(ImageWindow *imd,
 	void (*func)(ImageWindow *, gpointer),

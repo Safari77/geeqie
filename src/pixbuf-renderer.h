@@ -274,18 +274,15 @@ struct PixbufRendererClass
 	GtkDrawingAreaClass parent_class;
 
 	void (*zoom)(PixbufRenderer *pr, gdouble zoom);
-#if HAVE_GTK4
 	void (*clicked)(PixbufRenderer *pr, GqMouseButtonEvent *event);
 	void (*button_press)(PixbufRenderer *pr, GqMouseButtonEvent *event);
 	void (*button_release)(PixbufRenderer *pr, GqMouseButtonEvent *event);
-#else
-	void (*clicked)(PixbufRenderer *pr, GdkEventButton *event);
-#endif
+
 	void (*scroll_notify)(PixbufRenderer *pr);
 	void (*update_pixel)(PixbufRenderer *pr);
 
 	void (*render_complete)(PixbufRenderer *pr);
-	void (*drag)(PixbufRenderer *pr, GdkEventMotion *event);
+	void (*drag)(PixbufRenderer *pr, GqPointerMotionEvent *event);
 };
 
 

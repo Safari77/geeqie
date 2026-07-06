@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <vector>
 
+#include "actions.h"
 #include "cache-maint.h"
 #include "cache.h"
 #include "collect-io.h"
@@ -62,6 +63,8 @@ namespace
 enum OUTPUT_TYPE {
 	GUI, /**< Option requires the GUI */
 	TEXT, /**< Option only outputs text to the command line */
+	QUIET, /**< Option does not output text and must not activate the GUI */
+	TEXT_QUIET, /**< Option outputs text and must not activate the GUI */
 	N_A /**< Not Applicable */
 };
 
@@ -121,7 +124,7 @@ gchar *set_cwd(gchar *filename, GApplicationCommandLine *app_command_line)
 
 gboolean close_window_cb(gpointer)
 {
-	if (layout_valid(&lw_id)) layout_menu_close_cb(nullptr, lw_id);
+	if (layout_valid(&lw_id)) layout_menu_close_cb(nullptr, nullptr, lw_id);
 
 	return G_SOURCE_REMOVE;
 }
@@ -162,9 +165,59 @@ gboolean wait_cb(gpointer data)
 	gint x = position >> 16;
 	gint y = position - (x << 16);
 
-	gq_gtk_window_move(GTK_WINDOW(lw_id->window), x, y);
 
 	return G_SOURCE_REMOVE;
+}
+
+bool activate_detailed_action(GActionGroup *group, const char *action_name, GVariant *target)
+{
+	g_auto(GStrv) actions = g_action_group_list_actions(group);
+
+	for (guint i = 0; actions[i] != nullptr; i++)
+		{
+		g_print("%s\n", actions[i]);
+		}
+
+	const GVariantType *ptype = g_action_group_get_action_parameter_type(group, action_name);
+
+	if ((ptype == nullptr && target == nullptr) ||
+	        (ptype != nullptr && target != nullptr &&
+	         g_variant_is_of_type(target, ptype)))
+		{
+		g_action_group_activate_action(group, action_name, target);
+
+		return true;
+		}
+
+	return false;
+}
+
+bool run_action(const char *text, GApplication *app, GtkWidget *win)
+{
+	g_autofree char *action_name = nullptr;
+	g_autoptr(GVariant) target = nullptr;
+	g_autoptr(GError) error = nullptr;
+
+	if (!g_action_parse_detailed_name(text, &action_name, &target, &error))
+		{
+		log_printf("Invalid detailed action name: %s\n", text);
+
+		return FALSE;
+		}
+
+	if (!activate_detailed_action(G_ACTION_GROUP(app), action_name, target))
+		{
+		char *new_action = g_strconcat("main-win-", action_name, nullptr);
+
+		if (!activate_detailed_action(G_ACTION_GROUP(win), new_action, target))
+			{
+			log_printf("Action not found or invalid target: %s\n", action_name);
+
+			return FALSE;
+			}
+		}
+
+	return TRUE;
 }
 
 void gq_action(GtkApplication *, GApplicationCommandLine *app_command_line, GVariantDict *command_line_options_dict, GList *)
@@ -173,7 +226,7 @@ void gq_action(GtkApplication *, GApplicationCommandLine *app_command_line, GVar
 
 	remote_instance = g_application_command_line_get_is_remote(app_command_line);
 
-	gchar *text = nullptr;
+	const gchar *text = nullptr;
 	g_variant_dict_lookup(command_line_options_dict, "action", "&s", &text);
 
 	layout_valid(&lw_id);
@@ -184,47 +237,34 @@ void gq_action(GtkApplication *, GApplicationCommandLine *app_command_line, GVar
 		}
 	else
 		{
-		GtkAction *action;
+		GApplication *app = g_application_get_default();
 
-		action = deprecated_gtk_action_group_get_action(lw_id->action_group, text);
-		if (action)
-			{
-			deprecated_gtk_action_activate(action);
-			}
-		else
-			{
-			g_application_command_line_print(app_command_line, _("Action %s is unknown\n"), text);
-			if (!remote_instance)
-				{
-				exit_program();
-				}
-			}
+		run_action(text, app, lw_id->window);
+		}
+
+	if (!remote_instance)
+		{
+		exit_program();
 		}
 }
 
-void gq_action_list(GtkApplication *, GApplicationCommandLine *app_command_line,GVariantDict *, GList *)
+void gq_action_list(GtkApplication *, GApplicationCommandLine *app_command_line, GVariantDict *, GList *)
 {
-	gint max_length = 0;
+	const ActionDef *ad_app = get_app_actions();
+	g_auto(GStrv) app_lines = action_defs_to_aligned_lines(ad_app);
 
-	std::vector<ActionItem> list = get_action_items();
-
-	/* Get the length required for padding */
-	for (const ActionItem &action_item : list)
+	for (int i = 0; app_lines[i]; i++)
 		{
-		const auto length = g_utf8_strlen(action_item.name, -1);
-		max_length = std::max<gint>(length, max_length);
+		g_application_command_line_print(app_command_line, "%s\n", app_lines[i]);
 		}
 
-	/* Pad the action names to the same column for readable output */
-	g_autoptr(GString) out_string = g_string_new(nullptr);
-	for (const ActionItem &action_item : list)
-		{
-		g_string_append_printf(out_string, "%-*s", max_length + 4, action_item.name);
-		out_string = g_string_append(out_string, action_item.label);
-		out_string = g_string_append(out_string, "\n");
-		}
+	const ActionDef *ad_layout = get_main_actions();
+	g_auto(GStrv) layout_lines = action_defs_to_aligned_lines(ad_layout);
 
-	g_application_command_line_print(app_command_line, "%s\n", out_string->str);
+	for (int i = 0; layout_lines[i]; i++)
+		{
+		g_application_command_line_print(app_command_line, "%s\n", layout_lines[i]);
+		}
 }
 
 void gq_back(GtkApplication *, GApplicationCommandLine *, GVariantDict *, GList *)
@@ -512,7 +552,6 @@ void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 		g_auto(GStrv) geometry = g_strsplit_set(text, "+", 3);
 		if (geometry[1] != nullptr && geometry[2] != nullptr )
 			{
-			gq_gtk_window_move(GTK_WINDOW(lw_id->window), atoi(geometry[1]), atoi(geometry[2]));
 			}
 		}
 	else
@@ -520,7 +559,7 @@ void gq_geometry(GtkApplication *, GApplicationCommandLine *, GVariantDict *comm
 		g_auto(GStrv) geometry = g_strsplit_set(text, "+x", 4);
 		if (geometry[0] != nullptr && geometry[1] != nullptr)
 			{
-			gq_gtk_window_resize(GTK_WINDOW(lw_id->window), atoi(geometry[0]), atoi(geometry[1]));
+			gtk_window_set_default_size(GTK_WINDOW(lw_id->window), atoi(geometry[0]), atoi(geometry[1]));
 			}
 		if (geometry[2] != nullptr && geometry[3] != nullptr)
 			{
@@ -1209,7 +1248,7 @@ void gq_tools(GtkApplication *, GApplicationCommandLine *, GVariantDict *, GList
 
 void gq_version(GtkApplication *, GApplicationCommandLine *app_command_line,GVariantDict *, GList *)
 {
-	g_application_command_line_print(app_command_line, "%s %s GTK%d\n", GQ_APPNAME, VERSION, gtk_major_version);
+	g_application_command_line_print(app_command_line, "%s %s GTK%u\n", GQ_APPNAME, VERSION, gtk_get_major_version());
 }
 
 void gq_get_window_list(GtkApplication *, GApplicationCommandLine *app_command_line,GVariantDict *, GList *)
@@ -1358,10 +1397,10 @@ void process_files(GList *file_list)
 /* print0 and id are first so that they can affect other command line entries */
 CommandLineOptionEntry command_line_options[] =
 {
-	{ "print0",                      gq_print0,                      PRIMARY_REMOTE, GUI  },
-	{ "id",                          gq_id,                          REMOTE        , N_A  },
+	{ "print0",                      gq_print0,                      PRIMARY_REMOTE, QUIET },
+	{ "id",                          gq_id,                          REMOTE        , QUIET },
 	{ "action",                      gq_action,                      PRIMARY_REMOTE, GUI  },
-	{ "action-list",                 gq_action_list,                 PRIMARY_REMOTE, TEXT },
+	{ "action-list",                 gq_action_list,                 PRIMARY_REMOTE, TEXT_QUIET },
 	{ "back",                        gq_back,                        PRIMARY_REMOTE, GUI  },
 	{ "cache-metadata",              gq_cache_metadata,              PRIMARY_REMOTE, GUI  },
 	{ "cache-render",                gq_cache_render<FALSE, FALSE>,  PRIMARY_REMOTE, GUI  },
@@ -1378,44 +1417,44 @@ CommandLineOptionEntry command_line_options[] =
 	{ "delay",                       gq_delay,                       PRIMARY_REMOTE, GUI  },
 	{ "file",                        gq_file,                        PRIMARY_REMOTE, GUI  },
 	{ "dupes",                       gq_dupes<FALSE>,                PRIMARY_REMOTE, GUI  },
-	{ "dupes-export",                gq_dupes_export,                PRIMARY_REMOTE, TEXT },
+	{ "dupes-export",                gq_dupes_export,                PRIMARY_REMOTE, TEXT_QUIET },
 	{ "dupes-recurse",               gq_dupes<TRUE>,                 PRIMARY_REMOTE, GUI  },
 	{ "File",                        gq_File,                        PRIMARY_REMOTE, GUI  },
-	{ "file-extensions",             gq_file_extensions,             PRIMARY_REMOTE, TEXT },
+	{ "file-extensions",             gq_file_extensions,             PRIMARY_REMOTE, TEXT_QUIET },
 	{ "first",                       gq_first,                       PRIMARY_REMOTE, GUI  },
 	{ "fullscreen",                  gq_fullscreen,                  PRIMARY_REMOTE, GUI  },
 	{ "geometry",                    gq_geometry,                    PRIMARY_REMOTE, GUI  },
-	{ "get-collection",              gq_get_collection,              PRIMARY_REMOTE, TEXT },
-	{ "get-collection-list",         gq_get_collection_list,         PRIMARY_REMOTE, TEXT },
+	{ "get-collection",              gq_get_collection,              PRIMARY_REMOTE, TEXT_QUIET },
+	{ "get-collection-list",         gq_get_collection_list,         PRIMARY_REMOTE, TEXT_QUIET },
 	{ "get-destination",             gq_get_destination,             PRIMARY_REMOTE, GUI  },
-	{ "get-file-info",               gq_get_file_info,               REMOTE        , N_A  },
+	{ "get-file-info",               gq_get_file_info,               REMOTE        , TEXT_QUIET },
 	{ "get-filelist",                gq_get_filelist<false>,         PRIMARY_REMOTE, GUI  },
 	{ "get-filelist-recurse",        gq_get_filelist<true>,          PRIMARY_REMOTE, GUI  },
-	{ "get-rectangle",               gq_get_rectangle,               REMOTE        , N_A  },
-	{ "get-render-intent",           gq_get_render_intent,           REMOTE        , N_A  },
-	{ "get-selection",               gq_get_selection,               REMOTE        , N_A  },
-	{ "get-sidecars",                gq_get_sidecars,                REMOTE        , N_A  },
-	{ "get-window-list",             gq_get_window_list,             REMOTE        , N_A  },
+	{ "get-rectangle",               gq_get_rectangle,               REMOTE        , TEXT_QUIET },
+	{ "get-render-intent",           gq_get_render_intent,           REMOTE        , TEXT_QUIET },
+	{ "get-selection",               gq_get_selection,               REMOTE        , TEXT_QUIET },
+	{ "get-sidecars",                gq_get_sidecars,                REMOTE        , TEXT_QUIET },
+	{ "get-window-list",             gq_get_window_list,             REMOTE        , TEXT_QUIET },
 #ifdef DEBUG
 	{ "grep",                        gq_grep,                        PRIMARY_REMOTE, GUI  },
 #endif
 	{ "last",                        gq_last,                        PRIMARY_REMOTE, GUI  },
 	{ "log-file",                    gq_log_file,                    PRIMARY_REMOTE, GUI  },
-	{ "lua",                         gq_lua,                         REMOTE        , N_A  },
+	{ "lua",                         gq_lua,                         REMOTE        , TEXT_QUIET },
 	{ "new-window",                  gq_new_window,                  PRIMARY_REMOTE, GUI  },
 	{ "next",                        gq_next,                        PRIMARY_REMOTE, GUI  },
-	{ "pixel-info",                  gq_pixel_info,                  REMOTE        , N_A  },
+	{ "pixel-info",                  gq_pixel_info,                  REMOTE        , TEXT_QUIET },
 	{ "quit",                        gq_quit,                        PRIMARY_REMOTE, GUI  },
 	{ "raise",                       gq_raise,                       PRIMARY_REMOTE, GUI  },
-	{ "selection-add",               gq_selection_add,               REMOTE        , N_A  },
-	{ "selection-clear",             gq_selection_clear,             REMOTE        , N_A  },
-	{ "selection-remove",            gq_selection_remove,            REMOTE        , N_A  },
+	{ "selection-add",               gq_selection_add,               REMOTE        , QUIET },
+	{ "selection-clear",             gq_selection_clear,             REMOTE        , QUIET },
+	{ "selection-remove",            gq_selection_remove,            REMOTE        , QUIET },
 	{ "show-log-window",             gq_show_log_window,             PRIMARY_REMOTE, GUI  },
 	{ "slideshow-recurse",           gq_slideshow_recurse,           PRIMARY_REMOTE, GUI  },
 	{ "slideshow",                   gq_slideshow,                   PRIMARY_REMOTE, GUI  },
-	{ "tell",                        gq_tell,                        REMOTE        , N_A  },
+	{ "tell",                        gq_tell,                        REMOTE        , TEXT_QUIET },
 	{ "tools",                       gq_tools,                       PRIMARY_REMOTE, GUI  },
-	{ "version",                     gq_version,                     PRIMARY_REMOTE, TEXT },
+	{ "version",                     gq_version,                     PRIMARY_REMOTE, TEXT_QUIET },
 	{ "view",                        gq_view,                        PRIMARY_REMOTE, GUI  },
 	{ nullptr,                       nullptr,                        NA,             N_A }
 };
@@ -1512,11 +1551,22 @@ CommandLineOptionEntry command_line_options_cache_maintenance[] =
 
 } // namespace
 
-gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_command_line, gpointer )
+gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_command_line, gpointer data)
 {
 	GVariantDict* command_line_options_dict;
 	gint i;
 	GList *file_list = nullptr;
+	CommandLineProcessResult default_result;
+	auto *result = &default_result;
+	gboolean option_found = FALSE;
+
+	if (data)
+		{
+		result = static_cast<CommandLineProcessResult *>(data);
+		}
+
+	result->activate = FALSE;
+	result->status = EXIT_SUCCESS;
 
 	/* These values are used for the rest of this command line */
 	/* Make lw_id point to current window
@@ -1532,6 +1582,10 @@ gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_comm
 	 * option needs to modify the file list.
 	 */
 	file_list = directories_collections_files(app, app_command_line);
+	if (file_list)
+		{
+		result->activate = TRUE;
+		}
 
 	/* Execute the command line options */
 	i = 0;
@@ -1539,6 +1593,8 @@ gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_comm
 		{
 		if (g_variant_dict_contains(command_line_options_dict, command_line_options[i].option_name))
 			{
+			option_found = TRUE;
+
 			/* Exit if option is a remote only and the instance is primary */
 			if (command_line_options[i].option_type == REMOTE)
 				{
@@ -1547,22 +1603,28 @@ gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_comm
 					g_application_command_line_print(app_command_line, "%s%s%s%s%s", _("Geeqie is not running: --"), BOLD_ON, command_line_options[i].option_name, BOLD_OFF, _(" is a Remote command\n"));
 
 					g_application_quit(G_APPLICATION(app));
-					exit(EXIT_FAILURE);
+					result->status = EXIT_FAILURE;
+					return result->status;
 					}
 				}
 
 			/* Instance is either primary or remote */
 			command_line_options[i].func(app, app_command_line, command_line_options_dict, file_list);
 
+			if (command_line_options[i].display_type == GUI)
+				{
+				result->activate = TRUE;
+				}
+
 			/* If the instance is a primary and the option only outputs text,
 			 * e.g. --version, kill the application after the text is output
 			 */
 			if (! g_application_command_line_get_is_remote(app_command_line))
 				{
-				if (command_line_options[i].display_type == TEXT)
+				if (command_line_options[i].display_type == TEXT || command_line_options[i].display_type == TEXT_QUIET)
 					{
 					g_application_quit(G_APPLICATION(app));
-					exit(EXIT_SUCCESS);
+					return result->status;
 					}
 				}
 			}
@@ -1570,11 +1632,16 @@ gint process_command_line(GtkApplication *app, GApplicationCommandLine *app_comm
 		i++;
 		}
 
+	if (!option_found && !file_list)
+		{
+		result->activate = TRUE;
+		}
+
 	process_files(file_list);
 
 	g_list_free_full(file_list, g_free);
 
-	return TRUE;
+	return result->status;
 }
 
 gint process_command_line_cache_maintenance(GtkApplication *app, GApplicationCommandLine *app_command_line, gpointer)

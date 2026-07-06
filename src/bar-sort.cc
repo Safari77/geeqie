@@ -345,7 +345,7 @@ static void bar_sort_set_action(SortData *sd, BarSort::Action action, const gcha
 template<BarSort::Action action>
 static void bar_sort_set_action_cb(GtkWidget *button, gpointer data)
 {
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
+	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(button))) return;
 
 	auto *sd = static_cast<SortData *>(data);
 	const auto *key = static_cast<const gchar *>(g_object_get_data(G_OBJECT(button), "filter_key"));
@@ -380,17 +380,10 @@ static gboolean bar_filter_message_common(guint button)
 	return TRUE;
 }
 
-#if HAVE_GTK4
 static void bar_filter_message_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer)
 {
 	bar_filter_message_common(gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
 }
-#else
-static gboolean bar_filter_message_cb(GtkWidget *, GdkEventButton *event, gpointer)
-{
-	return bar_filter_message_common(event->button);
-}
-#endif
 
 static void bar_sort_help_cb(gpointer)
 {
@@ -400,7 +393,7 @@ static void bar_sort_help_cb(gpointer)
 template<BarSort::Selection selection>
 static void bar_sort_set_selection_cb(GtkWidget *button, gpointer data)
 {
-	if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button))) return;
+	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(button))) return;
 
 	auto *sd = static_cast<SortData *>(data);
 	sd->selection = selection;
@@ -411,13 +404,12 @@ static void new_collection_file_save_failed_cb(GtkDialog *dialog, gint, gpointer
 	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
 }
 
-static gboolean save_new_collection(GtkFileChooser *chooser, gpointer data)
+static gboolean save_new_collection(GFile *file, gpointer data)
 {
 	auto sd = static_cast<SortData *>(data);
 	CollectionData *cd;
 	gboolean ret;
 
-	g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
 	g_autofree gchar *path = g_file_get_path(file);
 
 	cd = collection_new(path);
@@ -428,7 +420,7 @@ static gboolean save_new_collection(GtkFileChooser *chooser, gpointer data)
 		}
 	else
 		{
-		GtkWidget *new_collection_file_save_failed = gtk_message_dialog_new_with_markup(GTK_WINDOW(chooser), GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_OK, _("<b>File save failed.</b>\n\nFile \"%s\" was not saved."), path);
+		GtkWidget *new_collection_file_save_failed = gtk_message_dialog_new_with_markup(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_OK, _("<b>File save failed.</b>\n\nFile \"%s\" was not saved."), path);
 		gtk_window_set_modal(GTK_WINDOW(new_collection_file_save_failed), TRUE);
 
 		g_signal_connect(new_collection_file_save_failed, "response", G_CALLBACK(new_collection_file_save_failed_cb), nullptr);
@@ -443,30 +435,23 @@ static gboolean save_new_collection(GtkFileChooser *chooser, gpointer data)
 	return ret;
 }
 
-static void new_collection_file_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
+static void new_collection_file_response_cb(GFile *file, gpointer data)
 {
 	auto sd = static_cast<SortData *>(data);
 
-	if (response_id == GTK_RESPONSE_ACCEPT)
+	if (file != nullptr)
 		{
-		g_autoptr(GFile) file = gtk_file_chooser_get_file(chooser);
+		g_autoptr(GFile) parent = g_file_get_parent(file);
 
-		if (file != nullptr)
+		if (save_new_collection(file, sd))
 			{
-			g_autoptr(GFile) parent = g_file_get_parent(file);
-
-			if (save_new_collection(chooser, sd))
+			if (parent != nullptr)
 				{
-				if (parent != nullptr)
-					{
-					g_autofree gchar *dirname = g_file_get_path(parent);
-					history_list_add_to_key("open_collection", dirname, -1);
-					}
+				g_autofree gchar *dirname = g_file_get_path(parent);
+				history_list_add_to_key("open_collection", dirname, -1);
 				}
 			}
 		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 }
 
 static void bar_sort_add_cb(GtkWidget *, gpointer data)
@@ -479,23 +464,20 @@ static void bar_sort_add_cb(GtkWidget *, gpointer data)
 		}
 	else
 		{
-		FileChooserDialogData fcdd{};
+		FileDialogData fdd{};
 
-		fcdd.action = GTK_FILE_CHOOSER_ACTION_SAVE;
-		fcdd.accept_text = _("Save");
-		fcdd.data = sd;
-		fcdd.filename = get_collections_dir();
-		fcdd.filter = GQ_COLLECTION_EXT;
-		fcdd.filter_description = _("Collection files");
-		fcdd.history_key = "open_collection";
-		fcdd.response_callback = G_CALLBACK(new_collection_file_response_cb);
-		fcdd.shortcuts = get_collections_dir();
-		fcdd.suggested_name = _("Untitled.gqv");
-		fcdd.title = _("Create empty Collection file");
+		fdd.action = FileDialogAction::SAVE;
+		fdd.accept_text = _("Save");
+		fdd.callback = new_collection_file_response_cb;
+		fdd.data = sd;
+		fdd.filename = get_collections_dir();
+		fdd.filter = GQ_COLLECTION_EXT;
+		fdd.filter_description = _("Collection files");
+		fdd.history_key = "open_collection";
+		fdd.suggested_name = _("Untitled.gqv");
+		fdd.title = _("Create empty Collection file");
 
-		GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
-
-		gq_gtk_widget_show_all(GTK_WIDGET(dialog));
+		file_dialog_show(fdd);
 		}
 }
 
@@ -573,24 +555,16 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 
 	buttongrp = pref_radiobutton_new(sd->folder_group, nullptr, _("Copy"), sd->action == BarSort::COPY,
 	                                 G_CALLBACK(bar_sort_set_action_cb<BarSort::COPY>), sd);
-#if HAVE_GTK4
 	GtkGesture *copy_gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(copy_gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect(copy_gesture, "pressed", G_CALLBACK(bar_filter_message_cb), NULL);
 	gtk_widget_add_controller(buttongrp, GTK_EVENT_CONTROLLER(copy_gesture));
-#else
-	g_signal_connect(G_OBJECT(buttongrp), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
-#endif
 	button = pref_radiobutton_new(sd->folder_group, buttongrp, _("Move"), sd->action == BarSort::MOVE,
 	                              G_CALLBACK(bar_sort_set_action_cb<BarSort::MOVE>), sd);
-#if HAVE_GTK4
 	GtkGesture *move_gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(move_gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect(move_gesture, "pressed", G_CALLBACK(bar_filter_message_cb), NULL);
 	gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(move_gesture));
-#else
-	g_signal_connect(G_OBJECT(button), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
-#endif
 
 
 	have_filter = FALSE;
@@ -610,14 +584,10 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 
 		GtkWidget *button = pref_radiobutton_new(sd->folder_group, buttongrp, editor->name, select,
 		                                         G_CALLBACK(bar_sort_set_action_cb<BarSort::FILTER>), sd);
-#if HAVE_GTK4
 		GtkGesture *filter_gesture = gtk_gesture_click_new();
 		gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(filter_gesture), GDK_BUTTON_SECONDARY);
 		g_signal_connect(filter_gesture, "pressed", G_CALLBACK(bar_filter_message_cb), NULL);
 		gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(filter_gesture));
-#else
-		g_signal_connect(G_OBJECT(button), "button_press_event", G_CALLBACK(bar_filter_message_cb), NULL);
-#endif
 
 		g_object_set_data_full(G_OBJECT(button), "filter_key", key, g_free);
 		}

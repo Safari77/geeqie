@@ -33,9 +33,6 @@
 /* Define to enable archive support */
 #mesondefine HAVE_ARCHIVE
 
-/* Define to enable use of clutter library */
-#mesondefine HAVE_CLUTTER
-
 /* Define to enable DjVu support */
 #mesondefine HAVE_DJVU
 
@@ -76,12 +73,6 @@
 #mesondefine HAVE_LCMS
 
 /* Define to enable use of maps */
-#mesondefine HAVE_LIBCHAMPLAIN
-
-/* Define to enable use of maps */
-#mesondefine HAVE_LIBCHAMPLAIN_GTK
-
-/* Define to enable use of maps */
 #mesondefine HAVE_LIBSHUMATE
 
 /* Define to 1 if LIRC must be used */
@@ -105,7 +96,7 @@
 /* Define to enable libraw support */
 #mesondefine HAVE_RAW
 
-/* Define to enable libgspell support */
+/* Define to enable libspelling support */
 #mesondefine HAVE_SPELL
 
 /* Define to enable use of custom tiff loader */
@@ -221,9 +212,6 @@
 
 /* Define to 1 if you have the <execinfo.h> header file. */
 #mesondefine HAVE_EXECINFO_H
-
-/* Do not use */
-#mesondefine HAVE_GTK4
 
 /* Whether to enable a mode of Geeqie that executes unit tests instead of
    running the actual app.  Actually executing the unit tests _also_ requires

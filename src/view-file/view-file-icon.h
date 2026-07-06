@@ -54,20 +54,10 @@ struct ViewFileInfoIcon
 #define VFICON(_vf_) ((ViewFileInfoIcon *)((_vf_)->info))
 
 gboolean vficon_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType state);
-#if HAVE_GTK4
 gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
 gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
-#else
-gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
-gboolean vficon_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
-#endif
 
 FileData *vficon_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
-
-#if !HAVE_GTK4
-void vficon_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context);
-void vficon_dnd_end(ViewFile *vf, GdkDragContext *context);
-#endif
 
 void vficon_destroy_cb(ViewFile *vf);
 ViewFile *vficon_new(ViewFile *vf);
@@ -88,7 +78,7 @@ void vficon_popup_destroy_cb(ViewFile *vf);
 
 gint vficon_index_by_fd(const ViewFile *vf, const FileData *fd);
 
-gboolean vficon_is_selected(ViewFile *vf, FileData *fd);
+bool vficon_is_selected(const ViewFile *vf, const FileData *fd);
 guint vficon_selection_count(ViewFile *vf, gint64 *bytes);
 GList *vficon_selection_get_list(ViewFile *vf);
 std::vector<int> vficon_selection_get_list_by_index(const ViewFile *vf);

@@ -43,20 +43,10 @@ struct ViewFileInfoList
 #define VFLIST(_vf_) ((ViewFileInfoList *)((_vf_)->info))
 
 gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkModifierType);
-#if HAVE_GTK4
 gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
 gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event);
-#else
-gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
-gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, GdkEventButton *bevent);
-#endif
 
 FileData *vflist_find_data_by_coord(ViewFile *vf, gint x, gint y, GtkTreeIter *iter);
-
-#if !HAVE_GTK4
-void vflist_dnd_begin(ViewFile *vf, GtkWidget *widget, GdkDragContext *context);
-void vflist_dnd_end(ViewFile *vf, GdkDragContext *context);
-#endif
 
 void vflist_destroy_cb(ViewFile *vf);
 ViewFile *vflist_new(ViewFile *vf);
@@ -77,7 +67,7 @@ void vflist_popup_destroy_cb(ViewFile *vf);
 
 gint vflist_index_by_fd(const ViewFile *vf, const FileData *fd);
 
-gboolean vflist_is_selected(ViewFile *vf, FileData *fd);
+bool vflist_is_selected(const ViewFile *vf, const FileData *fd);
 guint vflist_selection_count(ViewFile *vf, gint64 *bytes = nullptr);
 GList *vflist_selection_get_list(ViewFile *vf);
 std::vector<int> vflist_selection_get_list_by_index(const ViewFile *vf);

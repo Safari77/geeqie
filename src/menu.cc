@@ -23,6 +23,8 @@
 
 #include <gdk/gdk.h>
 
+#include "actions.h"
+#include "bar.h"
 #include "collect-io.h"
 #include "editors.h"
 #include "image.h"
@@ -33,6 +35,8 @@
 #include "ui-menu.h"
 #include "ui-misc.h"
 
+#include "accelerators.h"
+#include "layout.h"
 /*
  *-----------------------------------------------------------------------------
  * menu utils
@@ -42,7 +46,7 @@
 gpointer submenu_item_get_data(GtkWidget *submenu_item)
 {
 	GtkWidget *submenu = gtk_widget_get_parent(submenu_item);
-	if (!submenu || !GTK_IS_MENU(submenu)) return nullptr;
+	if (!submenu) return nullptr;
 
 	return g_object_get_data(G_OBJECT(submenu), "submenu_data");
 }
@@ -69,7 +73,7 @@ static void add_edit_items(GtkWidget *menu, GCallback func, GList *fd_list)
 			stock_id = key;
 			}
 
-		GtkWidget *item = menu_item_add_stock(menu, editor->name, stock_id, func, key);
+		GtkWidget *item = popover_item_add_stock(menu, editor->name, stock_id, func, key);
 		g_signal_connect_swapped(G_OBJECT(item), "destroy", G_CALLBACK(g_free), key);
 		}
 }
@@ -77,22 +81,34 @@ static void add_edit_items(GtkWidget *menu, GCallback func, GList *fd_list)
 GtkWidget *submenu_add_edit(GtkWidget *menu, gboolean sensitive, GList *fd_list, GCallback func, gpointer data)
 {
 	GtkWidget *submenu;
-	GtkAccelGroup *accel_group;
-
-	accel_group = gtk_accel_group_new();
-
-	submenu = gtk_menu_new();
+	submenu = popover_box_new();
 	g_object_set_data(G_OBJECT(submenu), "submenu_data", data);
-	gtk_menu_set_accel_group(GTK_MENU(submenu), accel_group);
-	g_object_set_data(G_OBJECT(submenu), "accel_group", accel_group);
 
 	add_edit_items(submenu, func, fd_list);
 
-	GtkWidget *item = menu_item_add(menu, _("_Plugins"), nullptr, nullptr);
-	gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
-	gtk_widget_set_sensitive(item, sensitive);
+	if (menu)
+		{
+		GtkWidget *item = popover_item_add(menu, _("_Plugins"), nullptr, nullptr);
+		gtk_widget_set_sensitive(item, sensitive);
+		}
 
 	return submenu;
+}
+
+void gsubmenu_add_edit(GMenu *menu, gboolean, GList *fd_list, GCallback, gpointer)
+{
+	EditorsList editors_list = editor_list_get();
+
+	for (const EditorDescription *editor : editors_list)
+		{
+		if (fd_list && editor_errors(editor_command_parse(editor, fd_list, FALSE, nullptr))) continue;
+
+		GMenuItem *item = g_menu_item_new(editor->name, "win.plugins");
+
+		g_menu_item_set_attribute(item, "target", "s", editor->key);
+
+		g_menu_append_item(menu, item);
+		}
 }
 
 /*
@@ -108,14 +124,13 @@ GtkWidget *submenu_add_sort(GtkWidget *menu, GCallback func, gpointer data,
 
 	if (menu)
 		{
-		submenu = gtk_menu_new();
-
-		GtkWidget *item = menu_item_add(menu, _("_Sort"), nullptr, nullptr);
-		gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
+		submenu = popover_box_new();
+		GtkWidget *item = popover_item_add(menu, _("_Sort"), nullptr, nullptr);
+		gtk_widget_set_sensitive(item, TRUE);
 		}
 	else
 		{
-		submenu = popup_menu_short_lived();
+		submenu = popover_box_new();
 		}
 
 	if (!show_current) g_object_set_data(G_OBJECT(submenu), "submenu_data", data);
@@ -125,13 +140,13 @@ GtkWidget *submenu_add_sort(GtkWidget *menu, GCallback func, gpointer data,
 		{
 		if (show_current)
 			{
-			menu_item_add_radio(submenu, sort_type_get_text(sort_type),
+			popover_item_add_radio(submenu, sort_type_get_text(sort_type),
 			                    GINT_TO_POINTER(sort_type), sort_type == type,
 			                    func, data);
 			}
 		else
 			{
-			menu_item_add(submenu, sort_type_get_text(sort_type),
+			popover_item_add(submenu, sort_type_get_text(sort_type),
 			              func, GINT_TO_POINTER(sort_type));
 			}
 		}
@@ -175,35 +190,30 @@ static const gchar *alter_type_get_text(AlterType type)
 }
 
 static void submenu_add_alter_item(GtkWidget *menu, GCallback func, AlterType type,
-                                   GtkAccelGroup *accel_group, guint accel_key, guint accel_mods)
+                                   guint accel_key, guint accel_mods)
 {
-	GtkWidget *item = menu_item_add_simple(menu, alter_type_get_text(type), func, GINT_TO_POINTER(type));
-	gtk_widget_add_accelerator(item, "activate", accel_group, accel_key, static_cast<GdkModifierType>(accel_mods), GTK_ACCEL_VISIBLE);
+	(void)accel_key;
+	(void)accel_mods;
+	popover_item_add_simple(menu, alter_type_get_text(type), func, GINT_TO_POINTER(type));
 }
 
 GtkWidget *submenu_add_alter(GtkWidget *menu, GCallback func, gpointer data)
 {
 	GtkWidget *submenu;
 
-	submenu = gtk_menu_new();
+	submenu = popover_box_new();
 	g_object_set_data(G_OBJECT(submenu), "submenu_data", data);
 
-	GtkAccelGroup *accel_group = gtk_accel_group_new();
-
-	submenu_add_alter_item(submenu, func, ALTER_ROTATE_90, accel_group, ']', 0);
-	submenu_add_alter_item(submenu, func, ALTER_ROTATE_90_CC, accel_group, '[', 0);
-	submenu_add_alter_item(submenu, func, ALTER_ROTATE_180, accel_group, 'R', GDK_SHIFT_MASK);
-	submenu_add_alter_item(submenu, func, ALTER_MIRROR, accel_group, 'M', GDK_SHIFT_MASK);
-	submenu_add_alter_item(submenu, func, ALTER_FLIP, accel_group, 'F', GDK_SHIFT_MASK);
-	submenu_add_alter_item(submenu, func, ALTER_NONE, accel_group, 'O', GDK_SHIFT_MASK);
+	submenu_add_alter_item(submenu, func, ALTER_ROTATE_90, ']', 0);
+	submenu_add_alter_item(submenu, func, ALTER_ROTATE_90_CC, '[', 0);
+	submenu_add_alter_item(submenu, func, ALTER_ROTATE_180, 'R', GDK_SHIFT_MASK);
+	submenu_add_alter_item(submenu, func, ALTER_MIRROR, 'M', GDK_SHIFT_MASK);
+	submenu_add_alter_item(submenu, func, ALTER_FLIP, 'F', GDK_SHIFT_MASK);
+	submenu_add_alter_item(submenu, func, ALTER_NONE, 'O', GDK_SHIFT_MASK);
 
 	if (menu)
 		{
-		GtkWidget *item;
-
-		item = menu_item_add(menu, _("_Orientation"), nullptr, nullptr);
-		gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
-		return item;
+		return popover_item_add(menu, _("_Orientation"), nullptr, nullptr);
 		}
 
 	return submenu;
@@ -230,12 +240,12 @@ GtkWidget *submenu_add_collections(GtkWidget *menu, gboolean sensitive,
 	GtkWidget *submenu;
 	GList *collection_list = nullptr;
 
-	submenu = gtk_menu_new();
+	submenu = popover_box_new();
 	g_object_set_data(G_OBJECT(submenu), "submenu_data", data);
 
-	menu_item_add_icon_sensitive(submenu, _("New collection"), PIXBUF_INLINE_COLLECTION,
+	popover_item_add_icon_sensitive(submenu, _("New collection"), PIXBUF_INLINE_COLLECTION,
 	                             TRUE, G_CALLBACK(func), GINT_TO_POINTER(-1));
-	menu_item_add_divider(submenu);
+	popover_item_add_divider(submenu);
 
 	collect_manager_list(&collection_list,nullptr,nullptr);
 
@@ -243,16 +253,60 @@ GtkWidget *submenu_add_collections(GtkWidget *menu, gboolean sensitive,
 	for (GList *work = collection_list; work; work = work->next, index++)
 		{
 		auto *collection_name = static_cast<gchar *>(work->data);
-		menu_item_add(submenu, collection_name, func, GINT_TO_POINTER(index));
+		popover_item_add(submenu, collection_name, func, GINT_TO_POINTER(index));
 		}
 
-	GtkWidget *item = menu_item_add(menu, _("_Add to Collection"), nullptr, nullptr);
-	gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
-	gtk_widget_set_sensitive(item, sensitive);
+	if (menu)
+		{
+		GtkWidget *item = popover_item_add(menu, _("_Add to Collection"), nullptr, nullptr);
+		gtk_widget_set_sensitive(item, sensitive);
+		}
 
 	g_list_free_full(collection_list, g_free);
 
 	return submenu;
+}
+
+void submenu_add_collections_new(GMenu *menu, gboolean, const gchar *func, gpointer)
+{
+	GList *collection_list = nullptr;
+
+	collect_manager_list(&collection_list,nullptr,nullptr);
+
+	int index = 0; /* index to existing collection list menu item selected */
+	for (GList *work = collection_list; work; work = work->next, index++)
+		{
+		auto *collection_name = static_cast<gchar *>(work->data);
+
+		GMenuItem *item = g_menu_item_new(collection_name, nullptr);
+		g_menu_item_set_action_and_target_value(item, func, g_variant_new_int32(index));
+
+		g_menu_append_item(menu, item);
+		}
+
+	g_list_free_full(collection_list, g_free);
+}
+
+void gsubmenu_add_collections(GMenu *menu, gboolean, GCallback, gpointer)
+{
+	GList *collection_list = nullptr;
+
+	collect_manager_list(&collection_list, nullptr, nullptr);
+
+	int index = 0; /* index to existing collection list menu item selected */
+	for (GList *work = collection_list; work; work = work->next, index++)
+		{
+		auto *collection_name = static_cast<gchar *>(work->data);
+
+		GMenuItem *item = g_menu_item_new(_(collection_name), "win.collections");
+
+		g_menu_item_set_attribute(item, "target", "i", index);
+
+		g_menu_append_item(menu, item);
+		g_object_unref(item);
+		}
+
+	g_list_free_full(collection_list, g_free);
 }
 
 /*
@@ -269,8 +323,8 @@ GtkWidget *submenu_add_collections(GtkWidget *menu, gboolean sensitive,
  * @param single_step Move up/down one step, or to top/bottom
  *
  */
-template<gboolean up, gboolean single_step>
-static void widget_move_cb(GtkWidget *, gpointer data)
+template<bool up, bool single_step>
+static void widget_move_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto *widget = static_cast<GtkWidget *>(data);
 	if (!widget) return;
@@ -294,35 +348,48 @@ static void widget_move_cb(GtkWidget *, gpointer data)
 	gq_gtk_box_reorder_child(GTK_BOX(box), widget, pos);
 }
 
-void popup_menu_bar(GtkWidget *widget, GCallback expander_height_cb)
+static const GActionEntry popup_entries[] =
 {
-	GtkWidget *menu = popup_menu_short_lived();
+	{ "move-to-top",    widget_move_cb<true,  false>,  nullptr, nullptr, nullptr, {} },
+	{ "move-up",        widget_move_cb<true,  true>,   nullptr, nullptr, nullptr, {} },
+	{ "move-down",      widget_move_cb<false, true>,   nullptr, nullptr, nullptr, {} },
+	{ "move-to-bottom", widget_move_cb<false, false>,  nullptr, nullptr, nullptr, {} },
+	{ "remove",         widget_remove_from_parent_cb,  nullptr, nullptr, nullptr, {} },
+	{ "height",         menu_expander_height_cb,       nullptr, nullptr, nullptr, {} }
+};
 
-	if (widget)
+void popup_menu_bar(GtkWidget *widget, GCallback expander_height_cb, gpointer)
+{
+	GtkBuilder *builder;
+	GSimpleActionGroup *group;
+	GMenu *menu_model;
+	GtkWidget *menu;
+
+	builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-popup.ui");
+
+	menu_model = G_MENU(gtk_builder_get_object(builder, "menubar-popup"));
+	group = g_simple_action_group_new();
+
+	g_action_map_add_action_entries(G_ACTION_MAP(group), popup_entries, G_N_ELEMENTS(popup_entries), widget);
+
+	gtk_widget_insert_action_group(widget, "popup", G_ACTION_GROUP(group));
+
+	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(group), "height");
+	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), FALSE);
+
+	if (expander_height_cb && gtk_expander_get_expanded(GTK_EXPANDER(widget)))
 		{
-		menu_item_add_icon(menu, _("Move to _top"), GQ_ICON_GO_TOP,
-		                   (GCallback)widget_move_cb<TRUE, FALSE>, widget);
-		menu_item_add_icon(menu, _("Move _up"), GQ_ICON_GO_UP,
-		                   (GCallback)widget_move_cb<TRUE, TRUE>, widget);
-		menu_item_add_icon(menu, _("Move _down"), GQ_ICON_GO_DOWN,
-		                   (GCallback)widget_move_cb<FALSE, TRUE>, widget);
-		menu_item_add_icon(menu, _("Move to _bottom"), GQ_ICON_GO_BOTTOM,
-		                   (GCallback)widget_move_cb<FALSE, FALSE>, widget);
-		menu_item_add_divider(menu);
-
-		if (expander_height_cb && gtk_expander_get_expanded(GTK_EXPANDER(widget)))
+		if (action)
 			{
-			menu_item_add_icon(menu, _("Height…"), GQ_ICON_PREFERENCES,
-			                   G_CALLBACK(expander_height_cb), widget);
-			menu_item_add_divider(menu);
+			g_simple_action_set_enabled(G_SIMPLE_ACTION(action), TRUE);
 			}
-
-		menu_item_add_icon(menu, _("Remove"), GQ_ICON_DELETE,
-		                   G_CALLBACK(widget_remove_from_parent_cb), widget);
-		menu_item_add_divider(menu);
 		}
 
-	gtk_menu_popup_at_pointer(GTK_MENU(menu), nullptr);
+	g_object_unref(group);
+
+	/* Temporary GTK4 path: use the shared popover helper. */
+	menu = popup_menu(menu_model, widget);
+	(void)menu;
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

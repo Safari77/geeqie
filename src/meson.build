@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-main_sources = files('advanced-exif.cc',
+main_sources = files('accelerators.cc',
+'accelerators.h',
+'actions.cc',
+'actions.h',
+'advanced-exif.cc',
 'advanced-exif.h',
 'archives.cc',
 'archives.h',
@@ -43,6 +47,8 @@ main_sources = files('advanced-exif.cc',
 'compat.cc',
 'compat.h',
 'compat-deprecated.h',
+'convert-configuration.cc',
+'convert-configuration.h',
 'debug.cc',
 'debug.h',
 'desktop-file.cc',
@@ -98,6 +104,8 @@ main_sources = files('advanced-exif.cc',
 'intl.h',
 'jpeg-parser.cc',
 'jpeg-parser.h',
+'keyboard-shortcuts.cc',
+'keyboard-shortcuts.h',
 'layout.cc',
 'layout.h',
 'layout-config.cc',
@@ -115,6 +123,8 @@ main_sources = files('advanced-exif.cc',
 'md5-util.h',
 'menu.cc',
 'menu.h',
+#~ 'menu-actions.cc',
+#~ 'menu-actions.h',
 'metadata.cc',
 'metadata.h',
 'misc.cc',
@@ -274,7 +284,7 @@ if conf_data.get('HAVE_JPEGXL', 0) == 1
     )
 endif
 
-if (conf_data.get('HAVE_LIBCHAMPLAIN', 0) == 1 and conf_data.get('HAVE_LIBCHAMPLAIN_GTK', 0) == 1) or conf_data.get('HAVE_LIBSHUMATE', 0) == 1
+if conf_data.get('HAVE_LIBSHUMATE', 0) == 1
     main_sources += files(
         'bar-gps.cc',
         'bar-gps.h',
@@ -299,6 +309,13 @@ if conf_data.get('HAVE_PDF', 0) == 1
     main_sources += files(
         'image-load-pdf.cc',
         'image-load-pdf.h',
+    )
+endif
+
+if conf_data.get('HAVE_SPELL', 0) == 1
+    main_sources += files(
+        'spell.cc',
+        'spell.h',
     )
 endif
 
@@ -330,16 +347,11 @@ project_sources += code_sources
 geeqie_exe = executable('geeqie', project_sources,
 dependencies : [
 gtk_dep,
-champlain_dep,
-champlain_gtk_dep,
-clutter_dep,
-clutter_gtk_dep,
 ddjvuapi_dep,
 exiv2_dep,
 exr_dep,
 fits_dep,
 glib_dep,
-gspell_dep,
 imath_dep,
 lcms_dep,
 libarchive_dep,
@@ -355,6 +367,7 @@ lua_dep,
 pango_dep,
 poppler_glib_dep,
 shumate_dep,
+spelling_dep,
 thread_dep,
 tiff_dep
 ] + conditional_unit_test_deps,

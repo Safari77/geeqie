@@ -21,152 +21,196 @@
 
 #include "dnd.h"
 
-#include <algorithm>
+#include <cstring>
 
-#include <glib-object.h>
-#include <pango/pango.h>
+#include <gio/gio.h>
 
-#include "compat.h"
-#include "options.h"
-#include "pixbuf-util.h"
+#include "filedata.h"
+#include "ui-fileops.h"
+#include "uri-utils.h"
 
-#if !HAVE_GTK4
-
-#define DND_ICON_SIZE (options->dnd_icon_size)
-
-
-static void pixbuf_draw_border(GdkPixbuf *pixbuf, gint w, gint h)
+namespace
 {
-	gboolean alpha;
-	gint rs;
-	guchar *pix;
-	guchar *p;
-	gint i;
 
-	alpha = gdk_pixbuf_get_has_alpha(pixbuf);
-	rs = gdk_pixbuf_get_rowstride(pixbuf);
-	pix = gdk_pixbuf_get_pixels(pixbuf);
+constexpr auto GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY = "gq-gtk4-drag-source-controller";
+constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-controller";
 
-	p = pix;
-	for (i = 0; i < w; i++)
-		{
-		*p = 0; p++; *p = 0; p++; *p = 0; p++;
-		if (alpha) { *p= 255; p++; }
-		}
+struct DndFileListReadData
+{
+	DndFileListCallback callback;
+	gpointer data;
+	GdkDrop *drop;
+	GInputStream *stream;
+	GString *text;
+};
 
-	const gint p_step = alpha ? 4 : 3;
-	for (i = 1; i < h - 1; i++)
-		{
-		p = pix + (rs * i);
-		*p = 0; p++; *p = 0; p++; *p = 0; p++;
-		if (alpha) *p= 255;
+struct DndTextReadData
+{
+	DndTextCallback callback;
+	gpointer data;
+};
 
-		p = pix + (rs * i) + ((w - 1) * p_step);
-		*p = 0; p++; *p = 0; p++; *p = 0; p++;
-		if (alpha) *p= 255;
-		}
-	p = pix + (rs * (h - 1));
-	for (i = 0; i < w; i++)
-		{
-		*p = 0; p++; *p = 0; p++; *p = 0; p++;
-		if (alpha) { *p= 255; p++; }
-		}
+} // namespace name
+
+void drag_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
+{
+	g_signal_connect(instance, detailed_signal, c_handler, data);
 }
 
-/**
- * @brief Sets a drag icon to pixbuf, if items is > 1, text is drawn onto icon to indicate value
- */
-void dnd_set_drag_icon(GtkWidget *widget, GdkDragContext *context, GdkPixbuf *pixbuf, gint items)
+void drag_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
 {
-	gint w;
-	gint h;
-	gint sw;
-	gint sh;
-	PangoLayout *layout = nullptr;
-	gint x;
-	gint y;
-
-	x = y = 0;
-
-	sw = gdk_pixbuf_get_width(pixbuf);
-	sh = gdk_pixbuf_get_height(pixbuf);
-
-	if (sw <= DND_ICON_SIZE && sh <= DND_ICON_SIZE)
-		{
-		w = sw;
-		h = sh;
-		}
-	else if (sw < sh)
-		{
-		w = sw * DND_ICON_SIZE / sh;
-		h = DND_ICON_SIZE;
-		}
-	else
-		{
-		w = DND_ICON_SIZE;
-		h = sh * DND_ICON_SIZE / sw;
-		}
-
-	const gint dest_width = std::max(1, w);
-	const gint dest_height = std::max(1, h);
-
-	g_autoptr(GdkPixbuf) dest = gdk_pixbuf_scale_simple(pixbuf, dest_width, dest_height, GDK_INTERP_BILINEAR);
-	pixbuf_draw_border(dest, dest_width, dest_height);
-
-	if (items > 1)
-		{
-		gint lw;
-		gint lh;
-
-		layout = gtk_widget_create_pango_layout(widget, nullptr);
-
-		g_autofree gchar *buf = g_strdup_printf("<small> %d </small>", items);
-		pango_layout_set_markup(layout, buf, -1);
-
-		pango_layout_get_pixel_size(layout, &lw, &lh);
-
-		x = std::max(0, w - lw);
-		y = std::max(0, h - lh);
-		lw = std::clamp(lw, 0, w - x - 1);
-		lh = std::clamp(lh, 0, h - y - 1);
-
-		pixbuf_draw_rect_fill(dest, {x, y, lw, lh}, {128, 128, 128, 255});
-		}
-
-	if (layout)
-		{
-		pixbuf_draw_layout(dest, layout, x + 1, y + 1, {0, 0, 0, 255});
-		pixbuf_draw_layout(dest, layout, x, y, {255, 255, 255, 255});
-
-		g_object_unref(G_OBJECT(layout));
-		}
-
-	gtk_drag_set_icon_pixbuf(context, dest, -8, -6);
+	g_signal_connect_swapped(instance, detailed_signal, c_handler, data);
 }
 
-static void dnd_set_drag_label_end_cb(GtkWidget *widget, GdkDragContext *, gpointer data)
+void drag_source_set(GtkWidget *widget, guint button, gpointer, gint, GdkDragAction actions)
 {
-	auto window = static_cast<GtkWidget *>(data);
-	g_signal_handlers_disconnect_by_func(widget, (gpointer)dnd_set_drag_label_end_cb, data);
-	gq_gtk_widget_destroy(window);
+	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY));
+	if (controller)
+		{
+		gtk_widget_remove_controller(widget, controller);
+		}
+
+	GtkDragSource *drag_source = gtk_drag_source_new();
+	gtk_drag_source_set_actions(drag_source, actions);
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_source), button);
+	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drag_source));
+	g_object_set_data(G_OBJECT(widget), GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY, drag_source);
 }
 
-void dnd_set_drag_label(GtkWidget *widget, GdkDragContext *context, const gchar *text)
+void drag_dest_set(GtkWidget *widget, const char **mime_types, guint n_mime_types, GdkDragAction actions)
 {
-	GtkWidget *label;
+	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
+	if (controller)
+		{
+		gtk_widget_remove_controller(widget, controller);
+		}
 
-	GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
-	gtk_widget_realize (window);
-
-	label = gtk_label_new(text);
-	gq_gtk_container_add(window, label);
-	gtk_widget_show(label);
-	gtk_drag_set_icon_widget(context, window, -15, 10);
-	g_signal_connect(G_OBJECT(widget), "drag_end",
-			 G_CALLBACK(dnd_set_drag_label_end_cb), window);
+	GdkContentFormats *formats = gdk_content_formats_new(mime_types, n_mime_types);
+	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, actions);
+	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drop_target));
+	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, drop_target);
 }
 
-#endif
+void drag_dest_unset(GtkWidget *widget)
+{
+	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
+	if (!controller) return;
 
+	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, nullptr);
+	gtk_widget_remove_controller(widget, controller);
+}
+
+GdkContentProvider *dnd_file_list_content_provider(GList *list)
+{
+	g_autofree gchar *uri_text = uri_text_from_filelist(list);
+	if (!uri_text || uri_text[0] == '\0') return nullptr;
+
+	g_autoptr(GBytes) bytes = g_bytes_new(uri_text, strlen(uri_text));
+
+	GdkContentProvider *providers[] = {
+		gdk_content_provider_new_for_bytes("text/uri-list", bytes),
+		gdk_content_provider_new_typed(G_TYPE_STRING, g_strdup(uri_text))
+	};
+
+	return gdk_content_provider_new_union(providers, G_N_ELEMENTS(providers));
+}
+
+static void dnd_read_file_list_stream_cb(GObject *source_object, GAsyncResult *result, gpointer data)
+{
+	auto *read_data = static_cast<DndFileListReadData *>(data);
+	auto *stream = G_INPUT_STREAM(source_object);
+	g_autoptr(GError) error = nullptr;
+	g_autoptr(GBytes) bytes = g_input_stream_read_bytes_finish(stream, result, &error);
+
+	if (!error && bytes && g_bytes_get_size(bytes) > 0)
+		{
+		g_string_append_len(read_data->text,
+		                    static_cast<const gchar *>(g_bytes_get_data(bytes, nullptr)),
+		                    g_bytes_get_size(bytes));
+		g_input_stream_read_bytes_async(read_data->stream, 4096, G_PRIORITY_DEFAULT, nullptr,
+						dnd_read_file_list_stream_cb, read_data);
+		return;
+		}
+
+	if (error)
+		{
+		DEBUG_1("File drop read failed: %s", error->message);
+		}
+
+	g_autoptr(FileDataList) list = nullptr;
+	if (!error)
+		{
+		list = uri_filelist_from_text(read_data->text->str);
+		}
+
+	read_data->callback(read_data->drop, list, read_data->data);
+	g_object_unref(read_data->stream);
+	g_object_unref(read_data->drop);
+	g_string_free(read_data->text, TRUE);
+	g_free(read_data);
+}
+
+static void dnd_read_file_list_cb(GObject *source_object, GAsyncResult *result, gpointer data)
+{
+	auto *read_data = static_cast<DndFileListReadData *>(data);
+	GdkDrop *drop = GDK_DROP(source_object);
+	const gchar *mime_type = nullptr;
+	g_autoptr(GError) error = nullptr;
+	g_autoptr(GInputStream) stream = gdk_drop_read_finish(drop, result, &mime_type, &error);
+
+	if (!stream || g_strcmp0(mime_type, "text/uri-list") != 0 || error)
+		{
+		if (error)
+			{
+			DEBUG_1("File drop start failed: %s", error->message);
+			}
+
+		read_data->callback(drop, nullptr, read_data->data);
+		g_free(read_data);
+		return;
+		}
+
+	read_data->drop = GDK_DROP(g_object_ref(drop));
+	read_data->stream = g_steal_pointer(&stream);
+	read_data->text = g_string_new(nullptr);
+
+	g_input_stream_read_bytes_async(read_data->stream, 4096, G_PRIORITY_DEFAULT, nullptr,
+					dnd_read_file_list_stream_cb, read_data);
+}
+
+void dnd_read_file_list_async(GdkDrop *drop, DndFileListCallback callback, gpointer data)
+{
+	static const gchar *mime_types[] = {"text/uri-list", nullptr};
+	auto *read_data = g_new0(DndFileListReadData, 1);
+	read_data->callback = callback;
+	read_data->data = data;
+
+	gdk_drop_read_async(drop, mime_types, G_PRIORITY_DEFAULT, nullptr, dnd_read_file_list_cb, read_data);
+}
+
+static void dnd_read_text_cb(GObject *source_object, GAsyncResult *result, gpointer data)
+{
+	g_autofree auto *read_data = static_cast<DndTextReadData *>(data);
+	GdkDrop *drop = GDK_DROP(source_object);
+	g_autoptr(GError) error = nullptr;
+	const GValue *value = gdk_drop_read_value_finish(drop, result, &error);
+	g_autofree gchar *dropped_text = nullptr;
+
+	if (value && G_VALUE_HOLDS_STRING(value))
+		{
+		dropped_text = g_strdup(g_value_get_string(value));
+		}
+
+	read_data->callback(drop, dropped_text, read_data->data);
+}
+
+void dnd_read_text_async(GdkDrop *drop, DndTextCallback callback, gpointer data)
+{
+	auto *read_data = g_new(DndTextReadData, 1);
+	read_data->callback = callback;
+	read_data->data = data;
+
+	gdk_drop_read_value_async(drop, G_TYPE_STRING, G_PRIORITY_DEFAULT, nullptr, dnd_read_text_cb, read_data);
+}
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

@@ -46,6 +46,8 @@ namespace
 
 using DialogWindowKey = std::pair<std::string, std::string>;
 
+constexpr auto GENERIC_DIALOG_ROLE_DATA_KEY = "gq-generic-dialog-role";
+
 DialogWindowKey dialog_window_key_create(const gchar *title, const gchar *role)
 {
 	DialogWindowKey key{};
@@ -101,7 +103,8 @@ void generic_dialog_close(GenericDialog *gd)
 
 	GdkRectangle rect = widget_get_root_origin_geometry(gd->dialog);
 
-	generic_dialog_save_window(actual_title, gtk_window_get_role(GTK_WINDOW(gd->dialog)), rect);
+	auto *role = static_cast<const gchar *>(g_object_get_data(G_OBJECT(gd->dialog), GENERIC_DIALOG_ROLE_DATA_KEY));
+	generic_dialog_save_window(actual_title, role, rect);
 
 	gq_gtk_widget_destroy(gd->dialog);
 	g_free(gd);
@@ -120,11 +123,12 @@ static void generic_dialog_click_cb(GtkWidget *widget, gpointer data)
 	if (auto_close) generic_dialog_close(gd);
 }
 
-static gboolean generic_dialog_default_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gboolean generic_dialog_default_key_press_cb(GtkEventControllerKey *controller, guint keyval, guint, GdkModifierType, gpointer data)
 {
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
 	auto gd = static_cast<GenericDialog *>(data);
 
-	if ((event->keyval == (GDK_KEY_Return) || (event->keyval == GDK_KEY_KP_Enter)) && gtk_widget_has_focus(widget)
+	if ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) && gtk_widget_has_focus(widget)
 	    && gd->default_cb)
 		{
 		gboolean auto_close;
@@ -141,16 +145,18 @@ static gboolean generic_dialog_default_key_press_cb(GtkWidget *widget, GdkEventK
 void generic_dialog_attach_default(GenericDialog *gd, GtkWidget *widget)
 {
 	if (!gd || !widget) return;
-	g_signal_connect(G_OBJECT(widget), "key_press_event",
-			 G_CALLBACK(generic_dialog_default_key_press_cb), gd);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(generic_dialog_default_key_press_cb), gd);
+	gtk_widget_add_controller(widget, controller);
 }
 
-static gboolean generic_dialog_key_press_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gboolean generic_dialog_key_press_cb(GtkEventControllerKey *controller, guint keyval, guint, GdkModifierType, gpointer data)
 {
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
 	auto gd = static_cast<GenericDialog *>(data);
 	gboolean auto_close = gd->auto_close;
 
-	if (event->keyval == GDK_KEY_Escape)
+	if (keyval == GDK_KEY_Escape)
 		{
 		if (gd->cancel_cb)
 			{
@@ -166,7 +172,7 @@ static gboolean generic_dialog_key_press_cb(GtkWidget *widget, GdkEventKey *even
 	return FALSE;
 }
 
-static gboolean generic_dialog_delete_cb(GtkWidget *, GdkEventAny *, gpointer data)
+static gboolean generic_dialog_delete_cb(GtkWidget *, gpointer data)
 {
 	auto gd = static_cast<GenericDialog *>(data);
 	gboolean auto_close;
@@ -199,7 +205,6 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
 	button = pref_button_new(nullptr, icon_name, text,
 				 G_CALLBACK(generic_dialog_click_cb), gd);
 
-	gtk_widget_set_can_default(button, TRUE);
 	g_object_set_data(G_OBJECT(button), "dialog_function", reinterpret_cast<void *>(func_cb));
 
 	gq_gtk_container_add(gd->hbox, button);
@@ -208,7 +213,7 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
 
 	if (is_default)
 		{
-		gtk_widget_grab_default(button);
+		gtk_window_set_default_widget(GTK_WINDOW(gd->dialog), button);
 		gtk_widget_grab_focus(button);
 		gd->default_cb = func_cb;
 
@@ -245,7 +250,7 @@ GtkWidget *generic_dialog_add_message(GenericDialog *gd, const gchar *icon_name,
 	hbox = pref_box_new(gd->vbox, expand, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	if (icon_name)
 		{
-		GtkWidget *image = gq_gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_DIALOG);
+		GtkWidget *image = gtk_image_new_from_icon_name(icon_name);
 		gtk_widget_set_halign(image, GTK_ALIGN_CENTER);
 		gtk_widget_set_valign(image, GTK_ALIGN_START);
 		gq_gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 0);
@@ -265,7 +270,7 @@ GtkWidget *generic_dialog_add_message(GenericDialog *gd, const gchar *icon_name,
 		label = pref_label_new(vbox, text);
 		gtk_label_set_xalign(GTK_LABEL(label), 0.0);
 		gtk_label_set_yalign(GTK_LABEL(label), 0.5);
-		gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+		gtk_label_set_wrap(GTK_LABEL(label), TRUE);
 		}
 
 	return vbox;
@@ -334,14 +339,13 @@ static void generic_dialog_setup(GenericDialog *gd,
 
 	gd->dialog = window_new(role, nullptr, title);
 	DEBUG_NAME(gd->dialog);
-	gtk_window_set_type_hint(GTK_WINDOW(gd->dialog), GDK_WINDOW_TYPE_HINT_DIALOG);
+	g_object_set_data_full(G_OBJECT(gd->dialog), GENERIC_DIALOG_ROLE_DATA_KEY, g_strdup(role), g_free);
 
 	if (options->save_dialog_window_positions)
 		{
 		if (auto rect = generic_dialog_find_window(title, role); rect)
 			{
 			gtk_window_set_default_size(GTK_WINDOW(gd->dialog), rect->width, rect->height);
-			gq_gtk_window_move(GTK_WINDOW(gd->dialog), rect->x, rect->y);
 			}
 		}
 
@@ -358,21 +362,22 @@ static void generic_dialog_setup(GenericDialog *gd,
 			GtkWidget *top;
 
 			top = widget_get_toplevel(parent);
-			if (GTK_IS_WINDOW(top) && gtk_widget_is_toplevel(top)) window = GTK_WINDOW(top);
+			if (GTK_IS_WINDOW(top)) window = GTK_WINDOW(top);
 			}
 
 		if (window) gtk_window_set_transient_for(GTK_WINDOW(gd->dialog), window);
 		}
 
-	g_signal_connect(G_OBJECT(gd->dialog), "delete_event",
+	g_signal_connect(G_OBJECT(gd->dialog), "close-request",
 			 G_CALLBACK(generic_dialog_delete_cb), gd);
-	g_signal_connect(G_OBJECT(gd->dialog), "key_press_event",
-			 G_CALLBACK(generic_dialog_key_press_cb), gd);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(generic_dialog_key_press_cb), gd);
+	gtk_widget_add_controller(gd->dialog, controller);
 
 	gtk_window_set_resizable(GTK_WINDOW(gd->dialog), TRUE);
 	gq_gtk_widget_set_border_width(gd->dialog, PREF_PAD_BORDER);
 
-	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled), TRUE);
 	gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(scrolled), TRUE);
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_BUTTON_SPACE);
@@ -386,11 +391,9 @@ static void generic_dialog_setup(GenericDialog *gd,
 	gq_gtk_box_pack_start(GTK_BOX(vbox), gd->vbox, TRUE, TRUE, 0);
 	gtk_widget_show(gd->vbox);
 
-	gd->hbox = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
-	gtk_button_box_set_layout(GTK_BUTTON_BOX(gd->hbox), GTK_BUTTONBOX_END);
-	gtk_box_set_spacing(GTK_BOX(gd->hbox), PREF_PAD_BUTTON_GAP);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), gd->hbox, FALSE, FALSE, 0);
-	gtk_widget_show(gd->hbox);
+	gd->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
+	gtk_widget_set_halign(gd->hbox, GTK_ALIGN_END);
+	gtk_box_append(GTK_BOX(vbox), gd->hbox);
 
 	if (gd->cancel_cb)
 		{

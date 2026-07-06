@@ -35,11 +35,6 @@
 
 #include <config.h>
 
-#if HAVE_CLUTTER
-#  include <clutter-gtk/clutter-gtk.h>
-#  include <clutter/clutter.h>
-#endif
-
 #if HAVE_EXECINFO_H
 #include <execinfo.h>
 #endif
@@ -53,6 +48,8 @@
 #  include <libintl.h>
 #endif
 
+#include "accelerators.h"
+#include "actions.h"
 #include "cache-maint.h"
 #include "cache.h"
 #include "collect-io.h"
@@ -60,6 +57,7 @@
 #include "command-line-handling.h"
 #include "compat-deprecated.h"
 #include "compat.h"
+#include "convert-configuration.h"
 #include "exif.h"
 #include "filedata.h"
 #include "filefilter.h"
@@ -77,6 +75,7 @@
 #include "logwindow.h"
 #include "main-defines.h"
 #include "metadata.h"
+#include "misc.h"
 #include "options.h"
 #include "pixbuf-util.h"
 #include "third-party/whereami.h"
@@ -117,8 +116,6 @@ Normally a single set of configuration files is used for all instances.\n \
 However, the environment variables XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME\n \
 can be used to modify this behavior on an individual basis e.g.\n \
 XDG_CONFIG_HOME=/tmp/a XDG_CACHE_HOME=/tmp/b GQ_NEW_INSTANCE=y geeqie\n\n \
-To disable Clutter use:\n \
-GQ_DISABLE_CLUTTER=y[es] geeqie\n\n \
 To run or stop Geeqie in cache maintenance (non-GUI) mode use:\n \
 GQ_CACHE_MAINTENANCE=y[es] geeqie --help\n \
 Note that bash command line completion does not work in this mode.\n\n \
@@ -302,6 +299,11 @@ gboolean search_command_line_for_unit_test_option(gint argc, gchar *argv[])
 	return search_command_line_for_option(argc, argv, "--run-unit-tests");
 }
 
+gboolean command_line_is_version_only(gint argc, gchar *argv[])
+{
+	return argc == 2 && (g_strcmp0(argv[1], "--version") == 0 || g_strcmp0(argv[1], "-v") == 0);
+}
+
 /**
  * @brief Show log window for config. file errors
  * @param GSimpleAction
@@ -398,88 +400,6 @@ void mkdir_if_not_exists(const gchar *path)
 		}
 }
 
-void gq_accel_map_print(
-		    gpointer 	data,
-		    const gchar	*accel_path,
-		    guint	accel_key,
-		    GdkModifierType accel_mods,
-		    gboolean	changed)
-{
-	auto gstring = static_cast<GString *>(data);
-
-	if (!changed)
-		g_string_append(gstring, "; ");
-
-	g_string_append(gstring, "(gtk_accel_path \"");
-
-	g_autofree gchar *accel_path_escaped = g_strescape(accel_path, nullptr);
-	g_string_append(gstring, accel_path_escaped);
-
-	g_string_append(gstring, "\" \"");
-
-	g_autofree gchar *name = gtk_accelerator_name(accel_key, accel_mods);
-	g_autofree gchar *name_escaped = g_strescape(name, nullptr);
-	g_string_append(gstring, name_escaped);
-
-	g_string_append(gstring, "\")\n");
-}
-
-gboolean gq_accel_map_save(const gchar *path)
-{
-	g_autofree gchar *pathl = path_from_utf8(path);
-
-	g_autoptr(GString) gstring = g_string_new("; ");
-	if (g_get_prgname())
-		g_string_append(gstring, g_get_prgname());
-	g_string_append(gstring, " GtkAccelMap rc-file         -*- scheme -*-\n");
-	g_string_append(gstring, "; this file is an automated accelerator map dump\n");
-	g_string_append(gstring, ";\n");
-
-	gtk_accel_map_foreach(gstring, gq_accel_map_print);
-
-	secure_save(pathl, gstring->str, -1);
-
-	return TRUE;
-}
-
-gchar *accep_map_filename()
-{
-	return g_build_filename(get_rc_dir(), "accels", NULL);
-}
-
-void accel_map_save()
-{
-	g_autofree gchar *path = accep_map_filename();
-	gq_accel_map_save(path);
-}
-
-void accel_map_load()
-{
-	g_autofree gchar *path = accep_map_filename();
-	g_autofree gchar *pathl = path_from_utf8(path);
-	gtk_accel_map_load(pathl);
-}
-
-void gq_gtk_css_load()
-{
-	/* Load gtk.css file from the rc directory */
-	g_autofree gchar *path = g_build_filename(get_rc_dir(), "gtk.css", nullptr);
-	g_autofree gchar *pathl = path_from_utf8(path);
-	if (access(pathl, R_OK) != 0) return;
-
-	g_autoptr(GtkCssProvider) css_provider = gtk_css_provider_new();
-#if HAVE_GTK4
-	gtk_css_provider_load_from_path(css_provider, pathl);
-	gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
-#else
-	if (!gtk_css_provider_load_from_path(css_provider, pathl, nullptr))
-		{
-		return;
-		}
-	gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
-#endif
-}
-
 void exit_program_final()
 {
 	GFile *archive_file;
@@ -503,7 +423,6 @@ void exit_program_final()
 
 	save_options(options);
 	keys_save();
-	accel_map_save();
 
 	LayoutWindow *lw = get_current_layout();
 	if (lw)
@@ -650,6 +569,10 @@ void setup_sig_handler()
 
 void set_theme_bg_color()
 {
+	GdkRGBA bg_color;
+	GdkRGBA theme_color;
+	GtkStyleContext *style_context;
+
 	if (!options->image.use_custom_border_color)
 		{
 		LayoutWindow *lw = layout_window_first();
@@ -659,13 +582,9 @@ void set_theme_bg_color()
 			GdkRGBA theme_color {};
 			GtkStyleContext *style_context = gtk_widget_get_style_context(lw->window);
 
-#if HAVE_GTK4
 /** @FIXME This sets the foreground color. CSS should be used.
  */
 			gtk_style_context_get_color(style_context, &theme_color);
-#else
-			gtk_style_context_get(style_context, GTK_STATE_FLAG_NORMAL, "background-color", &theme_color, nullptr);
-#endif
 
 			layout_window_foreach([&theme_color](LayoutWindow *lw)
 				{
@@ -720,13 +639,16 @@ void create_application_paths()
 
 gint command_line_cb(GtkApplication *app, GApplicationCommandLine *app_command_line, gpointer)
 {
-	gint ret;
+	CommandLineProcessResult result;
 
-	ret = process_command_line((app), app_command_line, nullptr);
+	process_command_line(app, app_command_line, &result);
 
-	g_application_activate(G_APPLICATION(app));
+	if (result.activate)
+		{
+		g_application_activate(G_APPLICATION(app));
+		}
 
-	return ret;
+	return result.status;
 }
 
 gint shutdown_cache_maintenance_cb(GtkApplication *, gpointer)
@@ -766,8 +688,6 @@ void startup_common(GtkApplication *, gpointer)
 	file_data_register_notify_func(collect_manager_notify_cb, nullptr, NOTIFY_PRIORITY_LOW);
 	file_data_register_notify_func(metadata_notify_cb, nullptr, NOTIFY_PRIORITY_LOW);
 
-	gq_gtk_css_load();
-
 	const gchar *gtk_version_error = gtk_check_version(GTK_MAJOR_VERSION, GTK_MINOR_VERSION, GTK_MICRO_VERSION);
 
 	if (gtk_version_error)
@@ -801,7 +721,55 @@ void startup_common(GtkApplication *, gpointer)
 	setup_env_path();
 
 	keys_load();
-	accel_map_load();
+
+	/* If this is the first run with the revised style action/accelerator list,
+	 * convert accels from:
+	 *
+	 * (gtk_accel_path "<Actions>/MenuActions/FirstPage" "<Alt>d")
+	 * to
+	 * [first_page}
+	 * accel=<Alt>d
+	 *
+	 * convert the Toolbars sections of geeqie.xml from
+	 * ColorProfile0
+	 * to
+	 * color-profile-0
+	 */
+	g_autofree char *accels_ini_path = accels_ini_filename();
+
+	if (!isfile(accels_ini_path))
+		{
+		const char *description =
+			_("As part of the GTK3/GTK4 migration, it was necessary to rework the entire menu and action code. \n \
+Superficially, you should not see significant differences, however you should be aware there may be resulting problems. \n\n \
+Some shortcuts have changed. \n \
+Command line option --action parameters are all changed. \n\n \
+If you find problems, check these files: \n \
+$HOME/.config/geeqie/accels (old) \n \
+$HOME/.config/geeqie/accels.ini (new) \n \
+$HOME/.config/geeqie/geeqierc.xml (revised Toolbar sections) \n \
+$HOME/.config/geeqie/geeqierc.xml~ (backup of original) \n\n \
+If you press Yes to continue, shortcuts and configuration files will be automatically converted. \n\n \
+This message will not be shown again. \n\n \
+Continue?");
+
+		GtkWidget *dialog = gtk_message_dialog_new(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO, _("Some keyboard shortcuts and \n menu actions have changed."));
+		gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", description);
+
+		int result = gq_gtk_dialog_run(GTK_DIALOG(dialog));
+
+		if (result == GTK_RESPONSE_NO)
+			{
+			abort();
+			}
+
+		gq_gtk_widget_destroy(dialog);
+
+		convert_configuration_file();
+		convert_accel_map();
+		}
+
+	accel_map_load_merged();
 
 	command_line = g_new0(CommandLine, 1);
 }
@@ -843,13 +811,10 @@ void startup_cb(GtkApplication *app, gpointer)
 {
 	startup_common(app, nullptr);
 
-	const gchar *gq_disable_clutter = g_getenv("GQ_DISABLE_CLUTTER");
-
-	if (gq_disable_clutter && (gq_disable_clutter[0] == 'y' || gq_disable_clutter[0] == 'Y'))
-		{
-		options->disable_gpu = TRUE;
-		DEBUG_1("GPU disabled due to $GQ_DISABLE_CLUTTER setting, GPS MAP will not work");
-		}
+	/* This must run before the layout is loaded. The layout may contain
+	 * app level actions.
+	 */
+	register_app_actions(app);
 
 	/* restore session from the config file */
 
@@ -869,23 +834,6 @@ void startup_cb(GtkApplication *app, gpointer)
 		options->image_overlay_n[0].template_string = g_strdup(options->image_overlay.template_string);
 		options->image_overlay_n[0].font = g_strdup(options->image_overlay.font);
 		}
-
-#if HAVE_CLUTTER
-	/** @FIXME For the background of this see:
-	 * https://github.com/BestImageViewer/geeqie/issues/397
-	 * The feature CLUTTER_FEATURE_SWAP_EVENTS indictates if the
-	 * system is liable to exhibit this problem.
-	 * The user is provided with an override in Preferences/Behavior
-	 */
-	if (!options->override_disable_gpu && !options->disable_gpu)
-		{
-		DEBUG_1("CLUTTER_FEATURE_SWAP_EVENTS %d",clutter_feature_available(CLUTTER_FEATURE_SWAP_EVENTS));
-		if (clutter_feature_available(CLUTTER_FEATURE_SWAP_EVENTS) != 0)
-			{
-			options->disable_gpu = TRUE;
-			}
-		}
-#endif
 
 	/* handle missing config file and commandline additions*/
 	if (!layout_window_first())
@@ -916,6 +864,11 @@ void startup_cb(GtkApplication *app, gpointer)
 			new_appimage_notification(app);
 			}
 		}
+
+	auto *provider = gtk_css_provider_new();
+	gtk_css_provider_load_from_resource(provider, "/org/geeqie/geeqie/css/geeqie.css");
+	gtk_style_context_add_provider_for_display( gdk_display_get_default(), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	g_object_unref(provider);
 
 	gtk_application_window_new(app);
 }
@@ -951,6 +904,13 @@ gint main(gint argc, gchar *argv[])
 	GtkApplication *app;
 
 	tzset();
+
+	if (command_line_is_version_only(argc, argv))
+		{
+		printf("%s %s GTK%d\n", GQ_APPNAME, VERSION, GTK_MAJOR_VERSION);
+		return EXIT_SUCCESS;
+		}
+
 	// We handle unit tests here because it takes the place of running the
 	// rest of the app.
 	if (search_command_line_for_unit_test_option(argc, argv))
@@ -964,22 +924,6 @@ gint main(gint argc, gchar *argv[])
 #endif
 		}
 
-#if HAVE_CLUTTER
-	const gchar *gq_disable_clutter = g_getenv("GQ_DISABLE_CLUTTER");
-
-	if (!gq_disable_clutter || tolower(gq_disable_clutter[0]) != 'y')
-		{
-		if (gtk_clutter_init(nullptr, nullptr) != CLUTTER_INIT_SUCCESS)
-			{
-			fprintf(stderr,
-				_("Can't initialize clutter-gtk. \n \
-				To start Geeqie use: \n \
-				GQ_DISABLE_CLUTTER=y geeqie\n\n"));
-
-			return EXIT_FAILURE;
-			}
-		}
-#endif
 	const gchar *gq_cache_maintenance = g_getenv("GQ_CACHE_MAINTENANCE");
 	if (gq_cache_maintenance && tolower(gq_cache_maintenance[0]) == 'y')
 		{
@@ -1049,7 +993,6 @@ Version: Geeqie "), VERSION, nullptr);
     g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(config_file_error_notification_action));
 
 	status = g_application_run(G_APPLICATION(app), argc, argv);
-
 	g_object_unref(app);
 
 	return status;

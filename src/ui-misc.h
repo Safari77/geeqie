@@ -210,7 +210,7 @@ struct ActionItem
 
 std::vector<ActionItem> get_action_items();
 
-// Copy pixbuf returned by gtk_icon_theme_load_icon() to avoid GTK+ keeping the old icon theme loaded
+// Load a themed icon through the GTK4 icon theme API and return a copy as a pixbuf
 GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gchar *icon_name, gint size, GtkIconLookupFlags flags);
 
 gboolean widget_get_pointer_position(GtkWidget *widget, GqPoint &pos);
@@ -219,12 +219,7 @@ GdkRectangle widget_get_root_origin_geometry(GtkWidget *widget);
 gboolean widget_received_event(GtkWidget *widget, GqPoint event);
 
 void widget_remove_from_parent(GtkWidget *widget);
-void widget_remove_from_parent_cb(GtkWidget *, gpointer data);
-
-#if !HAVE_GTK4
-void widget_input_grab(GtkWidget *widget, GdkSeatCapabilities capabilities, gboolean owner_events, GdkEventMask event_mask);
-#endif
-void widget_input_ungrab(GtkWidget *widget);
+void widget_remove_from_parent_cb(GSimpleAction *action, GVariant *parameter, gpointer data);
 
 gboolean get_pointer_position(GtkWidget *widget, GdkDevice *device, int *x, int *y, GdkModifierType *mask);
 void get_device_position(GdkDevice *device, int &x, int &y);
@@ -232,6 +227,9 @@ void get_device_position(GdkDevice *device, int &x, int &y);
 PangoAttrList *get_pango_attr_list(gboolean weight, gboolean scale);
 
 gboolean get_alternative_button_order(GtkWidget *widget);
+
+bool focus_is_text_editable(GtkWindow *window);
+bool focus_is_editable(GtkWindow *window);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

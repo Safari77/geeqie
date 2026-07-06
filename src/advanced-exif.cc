@@ -90,12 +90,6 @@ constexpr gint display_order[6] = {
 
 constexpr gint ADVANCED_EXIF_DATA_COLUMN_WIDTH = 200;
 
-#if !HAVE_GTK4
-constexpr std::array<GtkTargetEntry, 1> advanced_exif_drag_types{{
-	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
-}};
-#endif
-
 } // namespace
 
 static gboolean advanced_exif_row_enabled(const gchar *name)
@@ -185,42 +179,6 @@ void advanced_exif_set_fd(GtkWidget *window, FileData *fd)
 	advanced_exif_update(ew);
 }
 
-#if !HAVE_GTK4
-static void advanced_exif_dnd_get(GtkWidget *listview, GdkDragContext *,
-				  GtkSelectionData *selection_data,
-				  guint, guint, gpointer)
-{
-	GtkTreeSelection *sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(listview));
-	GtkTreeIter iter;
-
-	if (!gtk_tree_selection_get_selected(sel, nullptr, &iter)) return;
-
-	GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(listview));
-
-	g_autofree gchar *key = nullptr;
-	gtk_tree_model_get(store, &iter, EXIF_ADVCOL_NAME, &key, -1);
-
-	gtk_selection_data_set_text(selection_data, key, -1);
-}
-
-
-static void advanced_exif_dnd_begin(GtkWidget *listview, GdkDragContext *context, gpointer)
-{
-	GtkTreeSelection *sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(listview));
-	GtkTreeIter iter;
-
-	if (!gtk_tree_selection_get_selected(sel, nullptr, &iter)) return;
-
-	GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(listview));
-
-	g_autofree gchar *key = nullptr;
-	gtk_tree_model_get(store, &iter, EXIF_ADVCOL_NAME, &key, -1);
-
-	dnd_set_drag_label(listview, context, key);
-}
-#endif
-
-
 static void advanced_exif_add_column(GtkWidget *listview, const gchar *title, gint n, gboolean sizable)
 {
 	GtkTreeViewColumn *column;
@@ -253,19 +211,7 @@ static void advanced_exif_window_get_geometry(ExifWin *ew)
 	LayoutWindow *lw = get_current_layout();
 	if (!ew || !lw) return;
 
-#if HAVE_GTK4
-	GdkSurface *surface;
-
-	surface = gtk_native_get_surface(GTK_NATIVE(ew->window));
-	if (!surface)
-		{
-		return;
-		}
-
-	lw->options.advanced_exif_window = widget_get_position_geometry(surface);
-#else
 	lw->options.advanced_exif_window = widget_get_position_geometry(ew->window);
-#endif
 }
 
 static void advanced_exif_close(ExifWin *ew)
@@ -280,7 +226,7 @@ static void advanced_exif_close(ExifWin *ew)
 	g_free(ew);
 }
 
-static gboolean advanced_exif_delete_cb(GtkWidget *, GdkEvent *, gpointer data)
+static gboolean advanced_exif_delete_cb(GtkWidget *, gpointer data)
 {
 	auto ew = static_cast<ExifWin *>(data);
 
@@ -303,11 +249,7 @@ static gint advanced_exif_sort_cb(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 	return gq_gtk_tree_iter_utf8_collate(model, a, b, n);
 }
 
-#if HAVE_GTK4
 static gboolean advanced_exif_mouseclick(GtkGestureClick *, gint, gdouble, gdouble, gpointer data)
-#else
-static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer data)
-#endif
 {
 	auto ew = static_cast<ExifWin *>(data);
 	g_autoptr(GtkTreePath) path = nullptr;
@@ -326,16 +268,10 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 		g_autofree gchar *value = nullptr;
 		gtk_tree_model_get(store, &iter, display_order[col_num], &value, -1);
 
-#if HAVE_GTK4
 		GdkDisplay *display = gdk_display_get_default();
 		GdkClipboard *clipboard = gdk_display_get_primary_clipboard(display);
 
 		gdk_clipboard_set_text(clipboard, value);
-#else
-		GtkClipboard *clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
-
-		gtk_clipboard_set_text(clipboard, value, -1);
-#endif
 
 		gtk_tree_view_set_search_column(GTK_TREE_VIEW(ew->listview), gtk_tree_view_column_get_sort_column_id(column));
 		}
@@ -343,21 +279,12 @@ static gboolean advanced_exif_mouseclick(GtkWidget *, GdkEventButton *, gpointer
 	return TRUE;
 }
 
-#if HAVE_GTK4
 static gboolean advanced_exif_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
-#else
-static gboolean advanced_exif_keypress(GtkWidget *, GdkEventKey *event, gpointer data)
-#endif
 {
 	auto ew = static_cast<ExifWin *>(data);
 	gboolean stop_signal = FALSE;
-#if HAVE_GTK4
 	const guint event_keyval = keyval;
 	const GdkModifierType event_state = state;
-#else
-	const guint event_keyval = event->keyval;
-	const auto event_state = static_cast<GdkModifierType>(event->state);
-#endif
 
 	if (event_state & GDK_CONTROL_MASK)
 		{
@@ -373,11 +300,13 @@ static gboolean advanced_exif_keypress(GtkWidget *, GdkEventKey *event, gpointer
 			}
 		}
 
+/** @FIXME GTK4
 	if (!stop_signal && is_help_key(event_keyval, event_state))
 		{
 		help_window_show("GuideOtherWindowsExif.html");
 		stop_signal = TRUE;
 		}
+*/
 
 	return stop_signal;
 }
@@ -424,28 +353,18 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	ew->window = window_new("view", nullptr, _("Metadata"));
 	DEBUG_NAME(ew->window);
 
-#if HAVE_GTK4
     gtk_widget_set_size_request(GTK_WIDGET(ew->window), 900, 600);
     gtk_window_set_default_size(GTK_WINDOW(ew->window), 900, 600);
-#else
-	GdkGeometry geometry;
-
-	geometry.min_width = 900;
-	geometry.min_height = 600;
-
-	gtk_window_set_geometry_hints(GTK_WINDOW(ew->window), nullptr, &geometry, GDK_HINT_MIN_SIZE);
-#endif
 
 	gtk_window_set_resizable(GTK_WINDOW(ew->window), TRUE);
 
-	gq_gtk_window_resize(GTK_WINDOW(ew->window), lw->options.advanced_exif_window.width, lw->options.advanced_exif_window.height);
+	gtk_window_set_default_size(GTK_WINDOW(ew->window), lw->options.advanced_exif_window.width, lw->options.advanced_exif_window.height);
 	if (lw->options.advanced_exif_window.x != 0 && lw->options.advanced_exif_window.y != 0)
 		{
-		gq_gtk_window_move(GTK_WINDOW(ew->window), lw->options.advanced_exif_window.x, lw->options.advanced_exif_window.y);
 		}
 
 	g_object_set_data(G_OBJECT(ew->window), "advanced_exif_data", ew);
-	g_signal_connect(G_OBJECT(ew->window), "delete_event", G_CALLBACK(advanced_exif_delete_cb), ew);
+	g_signal_connect(G_OBJECT(ew->window), "close-request", G_CALLBACK(advanced_exif_delete_cb), ew);
 
 	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gq_gtk_container_add(ew->window, vbox);
@@ -495,39 +414,17 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 	gtk_tree_view_set_search_column(GTK_TREE_VIEW(ew->listview), EXIF_ADVCOL_DESCRIPTION);
 	gtk_tree_view_set_search_equal_func(GTK_TREE_VIEW(ew->listview), search_function_cb, ew, nullptr);
 
-#if !HAVE_GTK4
-	gq_gtk_drag_source_set(ew->listview,
-	                    static_cast<GdkModifierType>(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK),
-	                    advanced_exif_drag_types.data(), advanced_exif_drag_types.size(),
-	                    static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
-
-	gq_drag_g_signal_connect(G_OBJECT(ew->listview), "drag_data_get",
-			 G_CALLBACK(advanced_exif_dnd_get), ew);
-
-	gq_drag_g_signal_connect(G_OBJECT(ew->listview), "drag_begin",
-			 G_CALLBACK(advanced_exif_dnd_begin), ew);
-#endif
-
-#if HAVE_GTK4
 	GtkEventController *controller = gtk_event_controller_key_new();
 	g_signal_connect(controller, "key-pressed", G_CALLBACK(advanced_exif_keypress), ew);
 	gtk_widget_add_controller(ew->window, controller);
-#else
-	g_signal_connect(G_OBJECT(ew->window), "key_press_event", G_CALLBACK(advanced_exif_keypress), ew);
-#endif
 
-#if HAVE_GTK4
 	GtkGesture *click = gtk_gesture_click_new();
 
 	gtk_widget_add_controller(ew->listview, GTK_EVENT_CONTROLLER(click));
 	g_signal_connect(click, "released", G_CALLBACK(advanced_exif_mouseclick), ew);
-	g_object_unref(click);
-#else
-	g_signal_connect(G_OBJECT(ew->listview), "button_release_event", G_CALLBACK(advanced_exif_mouseclick), ew);
-#endif
 
-	ew->scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(ew->scrolled), GTK_SHADOW_IN);
+	ew->scrolled = gtk_scrolled_window_new();
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(ew->scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(ew->scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_ALWAYS);
 	gq_gtk_box_pack_start(GTK_BOX(vbox), ew->scrolled, TRUE, TRUE, 0);
@@ -537,10 +434,11 @@ GtkWidget *advanced_exif_new(LayoutWindow *lw)
 
 	button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gq_gtk_box_pack_end(GTK_BOX(vbox), button_box, FALSE, FALSE, 0);
+	gtk_widget_set_halign(button_box, GTK_ALIGN_END);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_box_set_spacing(GTK_BOX(hbox), PREF_PAD_SPACE);
-	gq_gtk_box_pack_end(GTK_BOX(button_box), hbox, FALSE, FALSE, 0);
+	gq_gtk_box_pack_start(GTK_BOX(button_box), hbox, FALSE, FALSE, 0);
 
 	GtkWidget *button_help = pref_button_new(hbox, GQ_ICON_HELP, _("Help"), G_CALLBACK(exif_window_help_cb), ew);
 	gtk_widget_set_tooltip_text(button_help, "F1");

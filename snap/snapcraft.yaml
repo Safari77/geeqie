@@ -130,10 +130,6 @@ parts:
       - gettext
       - libarchive-dev
       - libcfitsio-dev
-      - libchamplain-0.12-dev
-      - libchamplain-gtk-0.12-dev
-      - libclutter-1.0-dev
-      - libclutter-gtk-1.0-dev
       - libcogl-dev
       - libdjvulibre-dev
       - libdw-dev
@@ -141,8 +137,8 @@ parts:
       - libfftw3-dev
       - libgexiv2-dev
       - libglib2.0-dev
-      - libgspell-1-dev
-      - libgtk-3-dev
+      - libspelling-1-dev
+      - libgtk-4-dev
       - libheif-dev
       - libimath-dev
       - libjpeg-turbo8-dev
@@ -170,10 +166,6 @@ parts:
       - libproxy1-plugin-gsettings
       - libproxy1-plugin-networkmanager   # optional, but nice to have
 
-      - libchamplain-0.12-0
-      - libchamplain-gtk-0.12-0
-      - libclutter-1.0-0
-      - libclutter-gtk-1.0-0
       - libcogl20
       - libdjvulibre21
       - libexif12
@@ -182,7 +174,7 @@ parts:
       - libfftw3-double3
       - libgexiv2-2
       - libgfortran5
-      - libgspell-1-2
+      - libspelling-1-2
       - libheif1
       - libimath-3-1-29
       - libjpeg-turbo8

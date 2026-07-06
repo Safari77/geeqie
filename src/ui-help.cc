@@ -139,7 +139,7 @@ void help_window_load_text(GtkWidget *text, const gchar *path)
 	gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(text), &iter, 0.0, TRUE, 0, 0);
 }
 
-gboolean help_window_delete_cb(GtkWidget *widget, GdkEventAny *, gpointer)
+gboolean help_window_delete_cb(GtkWidget *widget, gpointer)
 {
 	gq_gtk_widget_destroy(widget);
 	return TRUE;
@@ -162,7 +162,7 @@ void help_window_set_key(GtkWidget *window, const gchar *key)
 	text = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(window), "text_widget"));
 	if (!text) return;
 
-	gdk_window_raise(gtk_widget_get_window(window));
+	gtk_window_present(GTK_WINDOW(window));
 
 	if (key) help_window_scroll(text, key);
 }
@@ -185,7 +185,7 @@ GtkWidget *help_window_new(const gchar *title,
 	gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
 	gtk_window_set_default_size(GTK_WINDOW(window), HELP_WINDOW_WIDTH, HELP_WINDOW_HEIGHT);
 
-	g_signal_connect(G_OBJECT(window), "delete_event",
+	g_signal_connect(G_OBJECT(window), "close-request",
 			 G_CALLBACK(help_window_delete_cb), NULL);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -200,8 +200,8 @@ GtkWidget *help_window_new(const gchar *title,
 	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 	gtk_widget_show(hbox);
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+	scrolled = gtk_scrolled_window_new();
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), scrolled, TRUE, TRUE, 0);
@@ -216,18 +216,15 @@ GtkWidget *help_window_new(const gchar *title,
 	gtk_text_buffer_create_tag(buffer, "monospace",
 				   "family", "monospace", NULL);
 
-	hbox = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
-	gq_gtk_widget_set_border_width(hbox, PREF_PAD_BORDER);
-	gtk_button_box_set_layout(GTK_BUTTON_BOX(hbox), GTK_BUTTONBOX_END);
-	gq_gtk_box_pack_end(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
-	gtk_widget_show(hbox);
+	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
+	gtk_widget_set_halign(hbox, GTK_ALIGN_END);
+	gtk_box_append(GTK_BOX(vbox), hbox);
 
-	button = gtk_button_new_from_icon_name(GQ_ICON_CLOSE, GTK_ICON_SIZE_BUTTON);
+	button = gtk_button_new_from_icon_name(GQ_ICON_CLOSE);
 	g_signal_connect(G_OBJECT(button), "clicked",
 			 G_CALLBACK(help_window_close), window);
 	gq_gtk_container_add(hbox, button);
-	gtk_widget_set_can_default(button, TRUE);
-	gtk_widget_grab_default(button);
+	gtk_window_set_default_widget(GTK_WINDOW(window), button);
 	gtk_widget_show(button);
 
 	g_object_set_data(G_OBJECT(window), "text_widget", text);

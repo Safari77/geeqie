@@ -22,44 +22,22 @@
 #ifndef DND_H
 #define DND_H
 
-#if !HAVE_GTK4
-
-#include <array>
-
-#include <gdk-pixbuf/gdk-pixbuf.h>
-#include <gdk/gdk.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 
-#include "main-defines.h"
+void drag_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
+void drag_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data);
+void drag_dest_unset(GtkWidget *widget);
 
-#define TARGET_APP_COLLECTION_MEMBER_STRING "application/x-" GQ_APPNAME_LC "-collection-member"
-#define TARGET_APP_EXIF_ENTRY_STRING "application/x-" GQ_APPNAME_LC "-exif-entry"
-#define TARGET_APP_KEYWORD_PATH_STRING "application/x-" GQ_APPNAME_LC "-keyword-path"
+void drag_source_set(GtkWidget *widget, guint button, gpointer, gint n_targets, GdkDragAction actions);
+void drag_dest_set(GtkWidget *widget, const char **mime_types, guint n_mime_types, GdkDragAction actions);
 
-enum {
-	TARGET_APP_COLLECTION_MEMBER,
-	TARGET_APP_EXIF_ENTRY,
-	TARGET_APP_KEYWORD_PATH,
-	TARGET_URI_LIST,
-	TARGET_TEXT_PLAIN
-};
+using DndFileListCallback = void (*)(GdkDrop *drop, GList *list, gpointer data);
+using DndTextCallback = void (*)(GdkDrop *drop, const gchar *text, gpointer data);
 
-inline constexpr std::array<GtkTargetEntry, 2> dnd_file_drag_types{{
-	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
-	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN }
-}};
+GdkContentProvider *dnd_file_list_content_provider(GList *list);
+void dnd_read_file_list_async(GdkDrop *drop, DndFileListCallback callback, gpointer data);
+void dnd_read_text_async(GdkDrop *drop, DndTextCallback callback, gpointer data);
 
-inline constexpr std::array<GtkTargetEntry, 3> dnd_file_drop_types{{
-	{ const_cast<gchar *>(TARGET_APP_COLLECTION_MEMBER_STRING), 0, TARGET_APP_COLLECTION_MEMBER },
-	{ const_cast<gchar *>("text/uri-list"), 0, TARGET_URI_LIST },
-	{ const_cast<gchar *>("text/plain"), 0, TARGET_TEXT_PLAIN },
-}};
-
-void dnd_set_drag_icon(GtkWidget *widget, GdkDragContext *context, GdkPixbuf *pixbuf, gint items);
-
-void dnd_set_drag_label(GtkWidget *widget, GdkDragContext *context, const gchar *text);
-
-#endif
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

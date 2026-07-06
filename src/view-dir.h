@@ -50,12 +50,12 @@ enum {
 
 struct PixmapFolders
 {
-	GdkPixbuf *close;
-	GdkPixbuf *open;
-	GdkPixbuf *deny;
-	GdkPixbuf *parent;
-	GdkPixbuf *link;
-	GdkPixbuf *read_only;
+	GIcon *close;
+	GIcon *open;
+	GIcon *parent;
+	GIcon *deny;
+	GIcon *link;
+	GIcon *read_only;
 };
 
 struct ViewDir
@@ -100,7 +100,7 @@ void vd_color_set(ViewDir *vd, FileData *fd, gint color_set);
 void vd_popup_destroy_cb(GtkWidget *widget, gpointer data);
 
 GtkWidget *vd_drop_menu(ViewDir *vd, gint active);
-GtkWidget *vd_pop_menu(ViewDir *vd, FileData *fd);
+void vd_pop_menu(ViewDir *vd, FileData *fd, GtkWidget *parent = nullptr, gdouble x = 0, gdouble y = 0);
 
 void vd_new_folder(ViewDir *vd, FileData *dir_fd);
 
@@ -110,15 +110,8 @@ void vd_dnd_init(ViewDir *vd);
 void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *column, gpointer data);
 void vd_color_cb(GtkTreeViewColumn *tree_column, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data);
 
-#if HAVE_GTK4
 gboolean vd_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data);
-gboolean vd_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data);
+gboolean vd_press_key_cb(GtkWidget *widget, const GqKeyEvent *event, gpointer data);
 gboolean vd_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data);
-#else
-gboolean vd_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data);
-gboolean vd_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data);
-gboolean vd_press_cb(GtkWidget *widget,  GdkEventButton *bevent, gpointer data);
-#endif
-
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

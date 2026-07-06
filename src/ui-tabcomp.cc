@@ -156,7 +156,7 @@ static gchar *tab_completion_get_text(TabCompData *td)
 {
 	gchar *text;
 
-	text = g_strdup(gq_gtk_entry_get_text(GTK_ENTRY(td->entry)));
+	text = g_strdup(gtk_editable_get_text(GTK_EDITABLE(td->entry)));
 
 	if (text[0] == '~')
 		{
@@ -185,17 +185,16 @@ static void tab_completion_emit_tab_signal(TabCompData *td)
 	td->tab_func(text);
 }
 
-static void tab_completion_iter_menu_items(GtkWidget *widget, gpointer data)
+static void tab_completion_iter_menu_items(GtkWidget *widget, TabCompPrefix &tp)
 {
 	if (!gtk_widget_get_visible(widget)) return;
 
-	GtkWidget *child = gq_gtk_bin_get_child(GTK_WIDGET(widget));
+	GtkWidget *child = gtk_widget_get_first_child(widget);
 	if (!GTK_IS_LABEL(child)) return;
 
-	auto *tp = static_cast<TabCompPrefix *>(data);
 	const gchar *text = gtk_label_get_text(GTK_LABEL(child));
 
-	if (!tp->match(text))
+	if (!tp.match(text))
 		{
 		/* Hide menu items not matching */
 		gtk_widget_hide(widget);
@@ -203,16 +202,17 @@ static void tab_completion_iter_menu_items(GtkWidget *widget, gpointer data)
 	else
 		{
 		/* Count how many choices are left in the menu */
-		tp->choices++;
+		tp.choices++;
 		}
 }
 
-static gboolean tab_completion_popup_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gboolean tab_completion_popup_key_press(GtkEventControllerKey *controller, guint keyval, guint, GdkModifierType, gpointer data)
 {
-	const bool is_supported_key = event->keyval >= 0x20 && event->keyval <= 0xFF;
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+	const bool is_supported_key = keyval >= 0x20 && keyval <= 0xFF;
 
-	if (event->keyval != GDK_KEY_Tab &&
-	    event->keyval != GDK_KEY_BackSpace &&
+	if (keyval != GDK_KEY_Tab &&
+	    keyval != GDK_KEY_BackSpace &&
 	    !is_supported_key)
 		return FALSE;
 
@@ -222,30 +222,29 @@ static gboolean tab_completion_popup_key_press(GtkWidget *widget, GdkEventKey *e
 		gchar buf[2];
 		gint p = -1;
 
-		buf[0] = event->keyval;
+		buf[0] = keyval;
 		buf[1] = '\0';
 		gtk_editable_insert_text(GTK_EDITABLE(td->entry), buf, 1, &p);
 		gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
 
 		/* Reduce the number of entries in the menu */
-		const gchar *entry_text = gq_gtk_entry_get_text(GTK_ENTRY(td->entry));
+		const char *entry_text = gtk_editable_get_text(GTK_EDITABLE(td->entry));
 		const gchar *prefix = filename_from_path(entry_text);
 		TabCompPrefix tp{ prefix, strlen(prefix), 0 };
 
-		gq_gtk_container_foreach(widget, tab_completion_iter_menu_items, &tp);
+		for (GtkWidget *child = gtk_widget_get_first_child(widget);
+		     child;
+		     child = gtk_widget_get_next_sibling(child))
+			{
+			tab_completion_iter_menu_items(child, tp);
+			}
 
 		if (tp.choices > 1) return TRUE; /* multiple choices */
 		if (tp.choices > 0) tab_completion_do(td); /* one choice */
 		}
 
 	/* close the menu */
-#if HAVE_GTK4
 	gtk_popover_popdown(GTK_POPOVER(widget));
-#else
-	gtk_menu_popdown(GTK_MENU(widget));
-	/* doing this does not emit the "selection done" signal, unref it ourselves */
-	g_object_unref(widget);
-#endif
 
 	return TRUE;
 }
@@ -263,7 +262,7 @@ static void tab_completion_popup_cb(GtkWidget *widget, gpointer data)
 	tab_completion_emit_tab_signal(td);
 }
 
-static void tab_completion_popup_list(TabCompData *td, GList *list)
+static void tab_completion_popup_list(TabCompData *td, GList *list, GtkWidget *parent = nullptr)
 {
 	GtkWidget *menu;
 	GList *work;
@@ -280,7 +279,7 @@ static void tab_completion_popup_list(TabCompData *td, GList *list)
 	if (g_list_length(list) > 200) return;
 #endif
 
-	menu = popup_menu_short_lived();
+	menu = popover_box_new(parent);
 
 	work = list;
 	while (work && count < TAB_COMP_POPUP_MAX)
@@ -288,22 +287,23 @@ static void tab_completion_popup_list(TabCompData *td, GList *list)
 		auto name = static_cast<gchar *>(work->data);
 		GtkWidget *item;
 
-		item = menu_item_add_simple(menu, name, G_CALLBACK(tab_completion_popup_cb), name);
+		item = popover_item_add_simple(menu, name, G_CALLBACK(tab_completion_popup_cb), name);
 		g_object_set_data(G_OBJECT(item), "tab_completion_data", td);
 
 		work = work->next;
 		count++;
 		}
 
-	g_signal_connect(G_OBJECT(menu), "key_press_event",
-			 G_CALLBACK(tab_completion_popup_key_press), td);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(tab_completion_popup_key_press), td);
+	gtk_widget_add_controller(menu, controller);
 
-	gtk_menu_popup_at_widget(GTK_MENU(menu), td->entry, GDK_GRAVITY_NORTH_EAST, GDK_GRAVITY_NORTH, nullptr);
+	(void)menu;
 }
 
 static gboolean tab_completion_do(TabCompData *td)
 {
-	const gchar *entry_text = gq_gtk_entry_get_text(GTK_ENTRY(td->entry));
+	const char *entry_text = gtk_editable_get_text(GTK_EDITABLE(td->entry));
 	const gchar *entry_file;
 	gchar *ptr;
 	gboolean home_exp = FALSE;
@@ -370,7 +370,7 @@ static gboolean tab_completion_do(TabCompData *td)
 				}
 			else
 				{
-				tab_completion_popup_list(td, td->file_list);
+				tab_completion_popup_list(td, td->file_list, td->entry);
 				}
 
 			return home_exp;
@@ -448,7 +448,7 @@ static gboolean tab_completion_do(TabCompData *td)
 				gtk_editable_set_position(GTK_EDITABLE(td->entry), -1);
 
 				poss = g_list_sort(poss, reinterpret_cast<GCompareFunc>(CASE_SORT));
-				tab_completion_popup_list(td, poss);
+				tab_completion_popup_list(td, poss, td->entry);
 
 				return TRUE;
 				}
@@ -458,15 +458,16 @@ static gboolean tab_completion_do(TabCompData *td)
 	return FALSE;
 }
 
-static gboolean tab_completion_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gboolean tab_completion_key_pressed(GtkEventControllerKey *controller, guint keyval, guint, GdkModifierType state, gpointer data)
 {
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
 	auto td = static_cast<TabCompData *>(data);
 	gboolean stop_signal = FALSE;
 
-	switch (event->keyval)
+	switch (keyval)
 		{
 		case GDK_KEY_Tab:
-			if (!(event->state & GDK_CONTROL_MASK))
+			if (!(state & GDK_CONTROL_MASK))
 				{
 				if (tab_completion_do(td))
 					{
@@ -477,7 +478,7 @@ static gboolean tab_completion_key_pressed(GtkWidget *widget, GdkEventKey *event
 			break;
 		case GDK_KEY_Return: case GDK_KEY_KP_Enter:
 			if (td->fd_button &&
-			    (event->state & GDK_CONTROL_MASK))
+			    (state & GDK_CONTROL_MASK))
 				{
 				tab_completion_select_show(td);
 				stop_signal = TRUE;
@@ -490,8 +491,6 @@ static gboolean tab_completion_key_pressed(GtkWidget *widget, GdkEventKey *event
 		default:
 			break;
 		}
-
-	if (stop_signal) g_signal_stop_emission_by_name(G_OBJECT(widget), "key_press_event");
 
 	return (stop_signal);
 }
@@ -514,31 +513,12 @@ static void tab_completion_button_pressed(GtkWidget *, gpointer data)
 		}
 }
 
-static void tab_completion_button_size_allocate(GtkWidget *button, GtkAllocation *allocation, gpointer data)
-{
-	auto parent = static_cast<GtkWidget *>(data);
-	GtkAllocation parent_allocation;
-	gtk_widget_get_allocation(parent, &parent_allocation);
-
-	if (allocation->height > parent_allocation.height)
-		{
-		GtkAllocation button_allocation;
-
-		gtk_widget_get_allocation(button, &button_allocation);
-		button_allocation.height = parent_allocation.height;
-		button_allocation.y = parent_allocation.y;
-		gtk_widget_size_allocate(button, &button_allocation);
-		}
-}
-
-static GtkWidget *tab_completion_create_complete_button(GtkWidget *entry, GtkWidget *parent)
+static GtkWidget *tab_completion_create_complete_button(GtkWidget *entry)
 {
 	GtkWidget *button;
 
-	button = gtk_button_new_from_icon_name(GQ_ICON_GO_LAST, GTK_ICON_SIZE_BUTTON);
+	button = gtk_button_new_from_icon_name(GQ_ICON_GO_LAST);
 	gtk_widget_set_can_focus(button, FALSE);
-	g_signal_connect(G_OBJECT(button), "size_allocate",
-			 G_CALLBACK(tab_completion_button_size_allocate), parent);
 	g_signal_connect(G_OBJECT(button), "clicked",
 			 G_CALLBACK(tab_completion_button_pressed), entry);
 
@@ -558,8 +538,9 @@ static TabCompData *tab_completion_set_to_entry(GtkWidget *entry)
 
 	g_object_set_data_full(G_OBJECT(entry), "tab_completion_data", td, tab_completion_destroy);
 
-	g_signal_connect(G_OBJECT(entry), "key_press_event",
-	                 G_CALLBACK(tab_completion_key_pressed), td);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(tab_completion_key_pressed), td);
+	gtk_widget_add_controller(entry, controller);
 	return td;
 }
 
@@ -574,7 +555,6 @@ GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *t
 {
 	GtkWidget *box;
 	GtkWidget *combo;
-	GtkWidget *combo_entry;
 	GtkWidget *button;
 
 	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -583,9 +563,10 @@ GtkWidget *tab_completion_new_with_history(GtkWidget *parent_box, const gchar *t
 	gq_gtk_box_pack_start(GTK_BOX(box), combo, TRUE, TRUE, 0);
 	gtk_widget_show(combo);
 
-	combo_entry = gq_gtk_bin_get_child(GTK_WIDGET(combo));
+	GtkWidget *combo_entry = gtk_combo_box_get_child(GTK_COMBO_BOX(combo));
+	if (!GTK_IS_ENTRY(combo_entry)) return nullptr;
 
-	button = tab_completion_create_complete_button(combo_entry, combo);
+	button = tab_completion_create_complete_button(combo_entry);
 	gq_gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
 	gtk_widget_show(button);
 
@@ -661,7 +642,7 @@ GtkWidget *tab_completion_new(GtkWidget *parent_box, const gchar *text)
 	gq_gtk_box_pack_start(GTK_BOX(hbox), entry, TRUE, TRUE, 0);
 	gtk_widget_show(entry);
 
-	GtkWidget *button = tab_completion_create_complete_button(entry, entry);
+	GtkWidget *button = tab_completion_create_complete_button(entry);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 	gtk_widget_show(button);
 
@@ -699,39 +680,39 @@ void tab_completion_set_tab_append_func(GtkWidget *entry, const TabCompTabAppend
 	td->tab_append_func = tab_append_func;
 }
 
-static void tab_completion_response_cb(GtkFileChooser *chooser, gint response_id, gpointer data)
+static void tab_completion_response_cb(GFile *file, gpointer data)
 {
 	auto td = static_cast<TabCompData *>(data);
 
-	if (response_id == GTK_RESPONSE_ACCEPT)
+	if (file)
 		{
-		g_autofree gchar *filename = gtk_file_chooser_get_filename(chooser);
+		g_autofree gchar *filename = g_file_get_path(file);
 		gq_gtk_entry_set_text(GTK_ENTRY(td->entry), filename);
 		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
 
 	tab_completion_emit_enter_signal(td);
 }
 
 static void tab_completion_select_show(TabCompData *td)
 {
-	FileChooserDialogData fcdd{};
+	FileDialogData fdd{};
 
-	fcdd.action = td->fd_folders_only ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER : GTK_FILE_CHOOSER_ACTION_OPEN;
-	fcdd.accept_text = _("Open");
-	fcdd.data = td;
-	fcdd.filename = gtk_entry_get_text(GTK_ENTRY(td->entry));
-	fcdd.filter = td->fd_filter;
-	fcdd.filter_description = td->fd_filter_desc;
-	fcdd.history_key = td->history_key;
-	fcdd.response_callback = G_CALLBACK(tab_completion_response_cb);
-	fcdd.shortcuts = td->fd_shortcuts;
-	fcdd.title = td->fd_title;
+	fdd.action = td->fd_folders_only ? FileDialogAction::SELECT_FOLDER : FileDialogAction::OPEN;
+	fdd.accept_text = _("Open");
+	fdd.callback = tab_completion_response_cb;
+	fdd.data = td;
+	fdd.filename = gtk_editable_get_text(GTK_EDITABLE(td->entry));
+	fdd.filter = td->fd_filter;
+	fdd.filter_description = td->fd_filter_desc;
+	fdd.history_key = td->history_key;
+	fdd.title = td->fd_title;
 
-	GtkFileChooserDialog *dialog = file_chooser_dialog_new(fcdd);
+	if (!fdd.filename || fdd.filename[0] == '\0')
+		{
+		fdd.filename = td->fd_shortcuts;
+		}
 
-	gq_gtk_widget_show_all(GTK_WIDGET(dialog));
+	file_dialog_show(fdd);
 }
 
 static void tab_completion_select_pressed(GtkWidget *, gpointer data)
@@ -762,8 +743,6 @@ void tab_completion_add_select_button(GtkWidget *entry, const gchar *title, gboo
 	if (!GTK_IS_BOX(hbox)) return;
 
 	td->fd_button = gtk_button_new_with_label("…");
-	g_signal_connect(G_OBJECT(td->fd_button), "size_allocate",
-			 G_CALLBACK(tab_completion_button_size_allocate), parent);
 	g_signal_connect(G_OBJECT(td->fd_button), "clicked",
 			 G_CALLBACK(tab_completion_select_pressed), td);
 
@@ -778,6 +757,14 @@ GtkWidget *tab_completion_get_box(GtkWidget *entry)
 	if (!td) return nullptr;
 
 	return gtk_widget_get_parent(td->combo ? td->combo : td->entry);
+}
+
+GtkWidget *tab_completion_get_combo(GtkWidget *entry)
+{
+	TabCompData *td = tab_completion_get_from_entry(entry);
+	if (!td) return nullptr;
+
+	return td->combo;
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

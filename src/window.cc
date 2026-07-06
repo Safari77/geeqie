@@ -23,7 +23,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>
 #include <glib-object.h>
 
@@ -34,7 +33,6 @@
 #include "main.h"
 #include "misc.h"
 #include "options.h"
-#include "pixbuf-util.h"
 #include "ui-fileops.h"
 #include "ui-help.h"
 #include "ui-misc.h"
@@ -59,13 +57,9 @@ GtkWidget *window_new(const gchar *role, const gchar *icon, const gchar *subtitl
 
 	gtk_window_set_title(GTK_WINDOW(window), title);
 
-	g_autoptr(GdkPixbuf) pixbuf = pixbuf_inline(icon ? icon : PIXBUF_INLINE_ICON);
-	if (pixbuf)
-		{
-		gtk_window_set_icon(GTK_WINDOW(window), pixbuf);
-		}
-
-	gtk_window_set_role(GTK_WINDOW(window), role);
+	/* GTK4: per-window pixbuf icons and window roles are not supported. */
+	(void)role;
+	gtk_window_set_icon_name(GTK_WINDOW(window), icon ? icon : "org.geeqie.Geeqie");
 
 	if (options->hide_window_decorations)
 		{
@@ -77,12 +71,7 @@ GtkWidget *window_new(const gchar *role, const gchar *icon, const gchar *subtitl
 
 gboolean window_maximized(GtkWidget *window)
 {
-	GdkWindowState state;
-
-	if (!window || !gtk_widget_get_window(window)) return FALSE;
-
-	state = gdk_window_get_state(gtk_widget_get_window(window));
-	return !!(state & GDK_WINDOW_STATE_MAXIMIZED);
+	return window && gtk_window_is_maximized(GTK_WINDOW(window));
 }
 
 /*
@@ -195,17 +184,15 @@ void help_window_show(const gchar *key)
  *-----------------------------------------------------------------------------
  */
 
-static void help_search_window_show_icon_press(GtkEntry *edit_widget, GtkEntryIconPosition, GdkEvent *, gpointer)
+static void help_search_window_show_icon_press(GtkEntry *edit_widget, GtkEntryIconPosition, gpointer)
 {
 	gq_gtk_entry_set_text(edit_widget, "");
 }
 
 static void help_search_window_ok_cb(GenericDialog *, gpointer data)
 {
-	auto *edit_widget = GTK_ENTRY(data);
-
 	g_autofree gchar *search_command = g_strconcat(options->help_search_engine,
-	                                               gq_gtk_entry_get_text(edit_widget),
+	                                               gtk_editable_get_text(GTK_EDITABLE(data)),
 	                                               NULL);
 	help_browser_run(search_command);
 }
@@ -245,7 +232,7 @@ void help_search_window_show()
 
 	table = pref_table_new(gd->vbox, 3, 1, FALSE, TRUE);
 	pref_table_label(table, 0, 0, _("Search terms:"), GTK_ALIGN_END);
-	gq_gtk_grid_attach_default(GTK_GRID(table), edit_widget, 1, 2, 0, 1);
+	gtk_grid_attach(GTK_GRID(table), edit_widget, 1, 0, 1, 1);
 	generic_dialog_attach_default(gd, edit_widget);
 	gtk_widget_show(edit_widget);
 

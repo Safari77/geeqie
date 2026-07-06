@@ -27,9 +27,6 @@
 
 #include <gdk/gdk.h>
 #include <glib-object.h>
-#if HAVE_SPELL
-#  include <gspell/gspell.h>
-#endif
 
 #include "bar.h"
 #include "compat.h"
@@ -40,6 +37,9 @@
 #include "metadata.h"
 #include "options.h"
 #include "rcfile.h"
+#if HAVE_SPELL
+#  include "spell.h"
+#endif
 #include "ui-menu.h"
 #include "ui-misc.h"
 
@@ -61,9 +61,6 @@ struct PaneCommentData
 	FileData *fd;
 	gchar *key;
 	gint height;
-#if HAVE_SPELL
-	GspellTextView *gspell_view;
-#endif
 };
 
 
@@ -146,20 +143,10 @@ static void bar_pane_comment_set_fd(GtkWidget *bar, FileData *fd)
 
 static gint bar_pane_comment_event(GtkWidget *bar, GdkEvent *event)
 {
-#if HAVE_GTK4
 	(void)bar;
 	(void)event;
-	return FALSE;
-#else
-	PaneCommentData *pcd;
-
-	pcd = static_cast<PaneCommentData *>(g_object_get_data(G_OBJECT(bar), "pane_data"));
-	if (!pcd) return FALSE;
-
-	if (gtk_widget_has_focus(pcd->comment_view)) return gq_gtk_widget_key_event(pcd->comment_view, reinterpret_cast<GdkEventKey *>(event));
 
 	return FALSE;
-#endif
 }
 
 static void bar_pane_comment_write_config(GtkWidget *pane, GString *outstr, gint indent)
@@ -222,10 +209,10 @@ static void bar_pane_comment_populate_popup(GtkTextView *, GtkWidget *menu, gpoi
 {
 	auto pcd = static_cast<PaneCommentData *>(data);
 
-	menu_item_add_divider(menu);
-	menu_item_add_icon(menu, _("Add text to selected files"), GQ_ICON_ADD,
+	popover_item_add_divider(menu);
+	popover_item_add_icon(menu, _("Add text to selected files"), GQ_ICON_ADD,
 	                   G_CALLBACK(bar_pane_comment_set_selection_cb<TRUE>), pcd);
-	menu_item_add_icon(menu, _("Replace existing text in selected files"), GQ_ICON_REPLACE,
+	popover_item_add_icon(menu, _("Replace existing text in selected files"), GQ_ICON_REPLACE,
 	                   G_CALLBACK(bar_pane_comment_set_selection_cb<FALSE>), data);
 }
 
@@ -257,20 +244,17 @@ static GtkWidget *bar_pane_comment_new(const gchar *id, const gchar *title, cons
 	pcd->pane.title = bar_pane_expander_title(title);
 	pcd->pane.id = g_strdup(id);
 	pcd->pane.type = PANE_COMMENT;
-#if HAVE_SPELL
-	pcd->gspell_view = nullptr;
-#endif
 	pcd->pane.expanded = expanded;
 
 	pcd->key = g_strdup(key);
 	pcd->height = height;
 
-	GtkWidget *scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolled = gtk_scrolled_window_new();
 
 	pcd->widget = scrolled;
 	g_object_set_data_full(G_OBJECT(pcd->widget), "pane_data", pcd, bar_pane_comment_destroy);
 
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 
@@ -289,8 +273,7 @@ static GtkWidget *bar_pane_comment_new(const gchar *id, const gchar *title, cons
 		{
 		if (options->metadata.check_spelling)
 			{
-			pcd->gspell_view = gspell_text_view_get_from_gtk_text_view(GTK_TEXT_VIEW(pcd->comment_view));
-			gspell_text_view_basic_setup(pcd->gspell_view);
+			spell_text_view_enable(GTK_TEXT_VIEW(pcd->comment_view));
 			}
 	}
 #endif

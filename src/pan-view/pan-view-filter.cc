@@ -136,7 +136,7 @@ void pan_filter_ui_replace_filter_button_arrow(PanViewFilterUi *ui, const gchar 
 	GtkWidget *parent = gtk_widget_get_parent(ui->filter_button_arrow);
 
 	gq_gtk_container_remove(parent, ui->filter_button_arrow);
-	ui->filter_button_arrow = gq_gtk_image_new_from_icon_name(new_icon_name, GTK_ICON_SIZE_BUTTON);
+	ui->filter_button_arrow = gtk_image_new_from_icon_name(new_icon_name);
 
 	gq_gtk_box_pack_start(GTK_BOX(parent), ui->filter_button_arrow, FALSE, FALSE, 0);
 	gq_gtk_box_reorder_child(GTK_BOX(parent), ui->filter_button_arrow, 0);
@@ -176,7 +176,7 @@ void pan_filter_toggle_button_cb(GtkWidget *, gpointer data)
 
 	for (gint i = 0; i < FILE_FORMAT_CLASSES; i++)
 	{
-		ui->filter_classes |= gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ui->filter_check_buttons[i])) ? 1 << i : 0;
+		ui->filter_classes |= gtk_check_button_get_active(GTK_CHECK_BUTTON(ui->filter_check_buttons[i])) ? 1 << i : 0;
 	}
 
 	if (ui->filter_classes != old_classes)
@@ -267,12 +267,12 @@ PanViewFilterUi *pan_filter_ui_new(PanWindow *pw)
 
 	// Build the spin-button to show/hide the filter UI.
 	ui->filter_button = gtk_toggle_button_new();
-	gtk_button_set_relief(GTK_BUTTON(ui->filter_button), GTK_RELIEF_NONE);
+	gtk_widget_add_css_class(ui->filter_button, "flat");
 	gtk_widget_set_focus_on_click(ui->filter_button, FALSE);
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
 	gq_gtk_container_add(ui->filter_button, hbox);
 	gtk_widget_show(hbox);
-	ui->filter_button_arrow = gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_UP, GTK_ICON_SIZE_BUTTON);
+	ui->filter_button_arrow = gtk_image_new_from_icon_name(GQ_ICON_PAN_UP);
 	gq_gtk_box_pack_start(GTK_BOX(hbox), ui->filter_button_arrow, FALSE, FALSE, 0);
 	gtk_widget_show(ui->filter_button_arrow);
 	pref_label_new(hbox, _("Filter"));
@@ -288,14 +288,14 @@ PanViewFilterUi *pan_filter_ui_new(PanWindow *pw)
 		gtk_widget_show(ui->filter_check_buttons[i]);
 		}
 
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_IMAGE]), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_RAWIMAGE]), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_VIDEO]), TRUE);
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_IMAGE]), TRUE);
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_RAWIMAGE]), TRUE);
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(ui->filter_check_buttons[FORMAT_CLASS_VIDEO]), TRUE);
 	ui->filter_classes = (1 << FORMAT_CLASS_IMAGE) | (1 << FORMAT_CLASS_RAWIMAGE) | (1 << FORMAT_CLASS_VIDEO);
 
 	// Connecting the signal before setting the state causes segfault as pw is not yet prepared
 	for (GtkWidget *filter_check_button : ui->filter_check_buttons)
-		g_signal_connect(GTK_TOGGLE_BUTTON(filter_check_button), "toggled", G_CALLBACK(pan_filter_toggle_button_cb), pw);
+		g_signal_connect(filter_check_button, "toggled", G_CALLBACK(pan_filter_toggle_button_cb), pw);
 
 	return ui;
 }

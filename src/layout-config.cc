@@ -102,7 +102,10 @@ void layout_config_widget_click_cb(GtkWidget *widget, gpointer data)
 
 	lc = static_cast<LayoutConfig *>(g_object_get_data(G_OBJECT(widget), "layout_config"));
 
-	if (lc) lc->style = GPOINTER_TO_INT(data);
+	if (lc && gtk_check_button_get_active(GTK_CHECK_BUTTON(widget)))
+		{
+		lc->style = GPOINTER_TO_INT(data);
+		}
 }
 
 void layout_config_table_button(GtkWidget *table, LayoutLocation l, const gchar *text)
@@ -126,7 +129,7 @@ void layout_config_table_button(GtkWidget *table, LayoutLocation l, const gchar 
 
 	button = gtk_button_new_with_label(text);
 	gtk_widget_set_sensitive(button, FALSE);
-	gtk_widget_set_can_focus(button, FALSE);
+	gtk_widget_set_focusable(button, FALSE);
 	gtk_grid_attach(GTK_GRID(table), button, x1, y1, x2 - x1, y2 - y1);
 	gtk_widget_show(button);
 }
@@ -140,23 +143,17 @@ GtkWidget *layout_config_widget(GtkWidget *group, GtkWidget *box, gint style, La
 
 	if (group)
 		{
-#if HAVE_GTK4
-		group = gtk_toggle_button_new();
-		gtk_toggle_button_set_group(button, group);
-#else
-		group = gtk_radio_button_new(gtk_radio_button_get_group(GTK_RADIO_BUTTON(group)));
-#endif
+		GtkWidget *sibling = group;
+		group = gtk_check_button_new();
+		gtk_check_button_set_group(GTK_CHECK_BUTTON(group), GTK_CHECK_BUTTON(sibling));
 		}
 	else
 		{
-#if HAVE_GTK4
-		group = gtk_toggle_button_new();
-#else
-		group = gtk_radio_button_new(nullptr);
-#endif
+		group = gtk_check_button_new();
 		}
+
 	g_object_set_data(G_OBJECT(group), "layout_config", lc);
-	g_signal_connect(G_OBJECT(group), "clicked",
+	g_signal_connect(G_OBJECT(group), "toggled",
 	                 G_CALLBACK(layout_config_widget_click_cb), GINT_TO_POINTER(style));
 	gq_gtk_box_pack_start(GTK_BOX(box), group, FALSE, FALSE, 0);
 
@@ -167,7 +164,7 @@ GtkWidget *layout_config_widget(GtkWidget *group, GtkWidget *box, gint style, La
 	layout_config_table_button(table, ls.c, "3");
 
 	gtk_widget_set_size_request(table, LAYOUT_STYLE_SIZE, LAYOUT_STYLE_SIZE);
-	gq_gtk_container_add(group, table);
+	gtk_check_button_set_child(GTK_CHECK_BUTTON(group), table);
 	gtk_widget_show(table);
 
 	gtk_widget_show(group);
@@ -267,12 +264,12 @@ GtkWidget *layout_config_new(gint style, const gchar *order)
 		group = layout_config_widget(group, hbox, i, lc);
 		lc->style_widgets.push_back(group);
 		}
-	style = std::clamp<int>(style, 0, layout_config_styles.size());
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(lc->style_widgets[style]), TRUE);
+	style = std::clamp<int>(style, 0, layout_config_styles.size() - 1);
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(lc->style_widgets[style]), TRUE);
 	gtk_widget_show(hbox);
 
-	scrolled = gq_gtk_scrolled_window_new(nullptr, nullptr);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+	scrolled = gtk_scrolled_window_new();
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_NEVER, GTK_POLICY_NEVER);
 	gq_gtk_box_pack_start(GTK_BOX(box), scrolled, FALSE, FALSE, 0);

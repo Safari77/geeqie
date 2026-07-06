@@ -30,6 +30,7 @@
 
 #include <glib-object.h>
 
+#include "actions.h"
 #include "collect-dlg.h"
 #include "collect-io.h"
 #include "collect-table.h"
@@ -869,14 +870,14 @@ static void collection_notify_cb(FileData *fd, NotifyType type, gpointer data)
  *-------------------------------------------------------------------
  */
 
-static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpointer data)
+static gboolean collection_window_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
 {
 	auto cw = static_cast<CollectWindow *>(data);
 	gboolean stop_signal = TRUE;
 
-	if (event->state & GDK_CONTROL_MASK)
+	if (state & GDK_CONTROL_MASK)
 		{
-		switch (event->keyval)
+		switch (keyval)
 			{
 			case '1':
 			case '2':
@@ -890,7 +891,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 			case '0':
 				break;
 			case 'A': case 'a':
-				if (event->state & GDK_SHIFT_MASK)
+				if (state & GDK_SHIFT_MASK)
 					{
 					collection_table_unselect_all(cw->table);
 					}
@@ -933,7 +934,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 		}
 	else
 		{
-		switch (event->keyval)
+		switch (keyval)
 			{
 			case GDK_KEY_Return: case GDK_KEY_KP_Enter:
 				layout_image_set_collection(nullptr, cw->cd,
@@ -966,7 +967,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 				collection_set_sort_method(cw->cd, SORT_SIZE);
 				break;
 			case 'P': case 'p':
-				if (event->state & GDK_SHIFT_MASK)
+				if (state & GDK_SHIFT_MASK)
 					{
 					print_window_new(collection_table_selection_get_list(cw->table), cw->window);
 					}
@@ -976,7 +977,7 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 					}
 				break;
 			case 'R': case 'r':
-				if (event->state & GDK_MOD1_MASK)
+				if (state & GDK_ALT_MASK)
 					{
 						options->collections.rectangular_selection = !(options->collections.rectangular_selection);
 					}
@@ -1001,11 +1002,8 @@ static gboolean collection_window_keypress(GtkWidget *, GdkEventKey *event, gpoi
 			}
 		}
 
-	if (!stop_signal && is_help_key(event))
-		{
-		help_window_show("GuideCollections.html");
-		stop_signal = TRUE;
-		}
+/* @FIXME GTK4 menus
+*/
 
 	return stop_signal;
 }
@@ -1221,7 +1219,7 @@ gboolean collection_window_modified_exists()
 	return ret;
 }
 
-static gboolean collection_window_delete(GtkWidget *, GdkEvent *, gpointer data)
+static gboolean collection_window_delete(GtkWidget *, gpointer data)
 {
 	auto cw = static_cast<CollectWindow *>(data);
 	collection_window_close(cw);
@@ -1235,7 +1233,6 @@ CollectWindow *collection_window_new(const gchar *path)
 	GtkWidget *vbox;
 	GtkWidget *status_label;
 	GtkWidget *extra_label;
-	GdkGeometry geometry;
 
 	/* If the collection is already opened in another window, return that one */
 	cw = collection_window_find_by_path(path);
@@ -1253,12 +1250,7 @@ CollectWindow *collection_window_new(const gchar *path)
 	cw->window = window_new("collection", PIXBUF_INLINE_ICON_BOOK, nullptr);
 	DEBUG_NAME(cw->window);
 
-	geometry.min_width = DEFAULT_MINIMAL_WINDOW_SIZE;
-	geometry.min_height = DEFAULT_MINIMAL_WINDOW_SIZE;
-	geometry.base_width = COLLECT_DEF_WIDTH;
-	geometry.base_height = COLLECT_DEF_HEIGHT;
-	gtk_window_set_geometry_hints(GTK_WINDOW(cw->window), nullptr, &geometry,
-				      static_cast<GdkWindowHints>(GDK_HINT_MIN_SIZE | GDK_HINT_BASE_SIZE));
+	gtk_widget_set_size_request(cw->window, DEFAULT_MINIMAL_WINDOW_SIZE, DEFAULT_MINIMAL_WINDOW_SIZE);
 
 	if (options->collections_on_top)
 		{
@@ -1268,7 +1260,6 @@ CollectWindow *collection_window_new(const gchar *path)
 	if (options->save_window_positions && path && collection_load_only_geometry(cw->cd, path))
 		{
 		gtk_window_set_default_size(GTK_WINDOW(cw->window), cw->cd->window.width, cw->cd->window.height);
-		gq_gtk_window_move(GTK_WINDOW(cw->window), cw->cd->window.x, cw->cd->window.y);
 		}
 	else
 		{
@@ -1279,11 +1270,12 @@ CollectWindow *collection_window_new(const gchar *path)
 	collection_window_update_title(cw);
 	gq_gtk_widget_set_border_width(cw->window, 0);
 
-	g_signal_connect(G_OBJECT(cw->window), "delete_event",
+	g_signal_connect(G_OBJECT(cw->window), "close-request",
 			 G_CALLBACK(collection_window_delete), cw);
 
-	g_signal_connect(G_OBJECT(cw->window), "key_press_event",
-			 G_CALLBACK(collection_window_keypress), cw);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(collection_window_keypress), cw);
+	gtk_widget_add_controller(cw->window, controller);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gq_gtk_container_add(cw->window, vbox);
@@ -1299,7 +1291,7 @@ CollectWindow *collection_window_new(const gchar *path)
 
 	GtkWidget *frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
-	gq_gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
+	gtk_widget_add_css_class(frame, "frame");
 	gq_gtk_box_pack_start(GTK_BOX(cw->status_box), frame, TRUE, TRUE, 0);
 	gtk_widget_show(frame);
 

@@ -76,43 +76,40 @@ static LogWindow *logwindow = nullptr;
  * <options->log_window.action> <selected text>
  *
 */
-static gboolean log_window_key_pressed_cb(GtkWidget *window, GdkEventKey *event, gpointer user_data)
+static gboolean log_window_key_pressed_cb(GtkEventControllerKey *controller, guint keyval, guint  /*keycode*/, GdkModifierType  /*state*/, gpointer user_data)
 {
-	if (event)
+	if (keyval == GDK_KEY_Escape)
 		{
-		if (event->keyval == GDK_KEY_Escape)
+		gtk_widget_hide(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
+		}
+	else if (keyval == GDK_KEY_F1 && options->log_window.action[0] != '\0')
+		{
+		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(user_data));
+
+		if (!gtk_text_buffer_get_has_selection(buffer))
 			{
-			gtk_widget_hide(window);
+			GtkTextMark *cursor_mark = gtk_text_buffer_get_insert(buffer);
+			GtkTextIter cursor_iter;
+			gtk_text_buffer_get_iter_at_mark(buffer, &cursor_iter, cursor_mark);
+
+			GtkTextIter line_start = cursor_iter;
+			gtk_text_iter_set_line_offset(&line_start, 0);
+
+			GtkTextIter line_end = cursor_iter;
+			gtk_text_iter_forward_to_line_end(&line_end);
+
+			gtk_text_buffer_select_range(buffer, &line_start, &line_end);
 			}
-		else if (event->keyval == GDK_KEY_F1 && options->log_window.action[0] != '\0')
+
+		GtkTextIter chr_start;
+		GtkTextIter chr_end;
+		if (gtk_text_buffer_get_selection_bounds(buffer, &chr_start, &chr_end))
 			{
-			GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(user_data));
+			g_autofree gchar *sel_text = gtk_text_buffer_get_text(buffer, &chr_start, &chr_end, FALSE);
 
-			if (!gtk_text_buffer_get_has_selection(buffer))
-				{
-				GtkTextMark *cursor_mark = gtk_text_buffer_get_insert(buffer);
-				GtkTextIter cursor_iter;
-				gtk_text_buffer_get_iter_at_mark(buffer, &cursor_iter, cursor_mark);
+			g_autofree gchar *cmd_line = g_strdup_printf("%s \"%s\"", options->log_window.action, sel_text);
 
-				GtkTextIter line_start = cursor_iter;
-				gtk_text_iter_set_line_offset(&line_start, 0);
-
-				GtkTextIter line_end = cursor_iter;
-				gtk_text_iter_forward_to_line_end(&line_end);
-
-				gtk_text_buffer_select_range(buffer, &line_start, &line_end);
-				}
-
-			GtkTextIter chr_start;
-			GtkTextIter chr_end;
-			if (gtk_text_buffer_get_selection_bounds(buffer, &chr_start, &chr_end))
-				{
-				g_autofree gchar *sel_text = gtk_text_buffer_get_text(buffer, &chr_start, &chr_end, FALSE);
-
-				g_autofree gchar *cmd_line = g_strdup_printf("%s \"%s\"", options->log_window.action, sel_text);
-
-				runcmd(cmd_line);
-				}
+			runcmd(cmd_line);
 			}
 		}
 
@@ -144,7 +141,7 @@ static void log_window_timer_data_cb(GtkWidget *, gpointer)
 
 static void log_window_regexp_cb(GtkWidget *text_entry, gpointer)
 {
-	const gchar *new_regexp = gq_gtk_entry_get_text(GTK_ENTRY(text_entry));
+	const char *new_regexp = gtk_editable_get_text(GTK_EDITABLE(text_entry));
 	set_regexp(new_regexp);
 }
 
@@ -154,10 +151,9 @@ static void remove_green_bg(LogWindow *logwin)
 	GtkTextIter start_match;
 	GtkTextIter end_match;
 	GtkTextBuffer *buffer;
-	const gchar *text;
 	gint offset;
 
-	text = gq_gtk_entry_get_text(GTK_ENTRY(logwin->search_entry_box));
+	const char *text = gtk_editable_get_text(GTK_EDITABLE(logwin->search_entry_box));
 	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(logwin->text));
 	gtk_text_buffer_get_start_iter(buffer, &start_find);
 
@@ -188,11 +184,10 @@ static void search_activate_event(GtkEntry *, LogWindow *logwin)
 	GtkTextBuffer *buffer;
 	GtkTextMark *cursor_mark;
 	GtkTextIter cursor_iter;
-	const gchar *text;
 	gint offset;
 
 	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(logwin->text));
-	text = gq_gtk_entry_get_text(GTK_ENTRY(logwin->search_entry_box));
+	const char *text = gtk_editable_get_text(GTK_EDITABLE(logwin->search_entry_box));
 
 	if (logwin->highlight_all)
 		{
@@ -218,7 +213,7 @@ static void search_activate_event(GtkEntry *, LogWindow *logwin)
 }
 
 template<LogWindow::SearchDirection direction>
-static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *logwin)
+static void search_keypress_event_cb(GtkButton *, LogWindow *logwin)
 {
 	GtkTextIter start_find;
 	GtkTextIter start_match;
@@ -229,7 +224,7 @@ static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *
 	gtk_text_buffer_get_start_iter(buffer, &start_find);
 
 	g_autofree gchar *selected = nullptr;
-	const gchar *text = gq_gtk_entry_get_text(GTK_ENTRY(logwin->search_entry_box));
+	const char *text = gtk_editable_get_text(GTK_EDITABLE(logwin->search_entry_box));
 	if (text[0] == '\0')
 		{
 		GtkTextIter start_sel;
@@ -261,7 +256,7 @@ static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *
 		{
 		remove_green_bg(logwin);
 
-		gtk_text_buffer_apply_tag_by_name(buffer, "green_bg",  &start_match, &end_match);
+		gtk_text_buffer_apply_tag_by_name(buffer, "green_bg", &start_match, &end_match);
 
 		if (direction == LogWindow::SEARCH_BACKWARDS)
 			{
@@ -275,8 +270,6 @@ static gboolean search_keypress_event_cb(GtkWidget *, GdkEventKey *, LogWindow *
 		cursor_mark = gtk_text_buffer_get_insert(buffer);
 		gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(logwin->text), cursor_mark, 0.2, FALSE, 0.0, 0.0);
 		}
-
-	return FALSE;
 }
 
 static gboolean all_keypress_event_cb(GtkToggleButton *widget, LogWindow *logwin)
@@ -316,6 +309,13 @@ static void filter_entry_icon_cb(GtkEntry *entry, GtkEntryIconPosition, GdkEvent
 }
 #endif
 
+static gboolean hide_on_close_request(GtkWindow *window, gpointer)
+{
+	gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+
+	return TRUE; /* prevent destruction */
+}
+
 static LogWindow *log_window_create(GdkRectangle log_window)
 {
 	LogWindow *logwin;
@@ -332,18 +332,14 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	gq_gtk_container_add(window, win_vbox);
 	gtk_widget_show(win_vbox);
 
-	gq_gtk_window_resize(GTK_WINDOW(window), log_window.width, log_window.height);
-	gq_gtk_window_move(GTK_WINDOW(window), log_window.x, log_window.y);
+	gtk_window_set_default_size(GTK_WINDOW(window), log_window.width, log_window.height);
 
-	g_signal_connect(G_OBJECT(window), "delete_event",
-			 G_CALLBACK(gtk_widget_hide_on_delete), NULL);
-	gtk_widget_realize(window);
+	g_signal_connect(window, "close-request",  G_CALLBACK(hide_on_close_request), nullptr);
 
-	GtkWidget *scrolledwin = gq_gtk_scrolled_window_new(nullptr, nullptr);
+	GtkWidget *scrolledwin = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolledwin),
 				       GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
-	gq_gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolledwin),
-					    GTK_SHADOW_IN);
+	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolledwin), true);
 
 	gq_gtk_box_pack_start(GTK_BOX(win_vbox), scrolledwin, TRUE, TRUE, 0);
 	gtk_widget_show(scrolledwin);
@@ -357,8 +353,9 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	gq_gtk_container_add(scrolledwin, text);
 	gtk_widget_show(text);
 
-	g_signal_connect(G_OBJECT(window), "key-press-event",
-	                 G_CALLBACK(log_window_key_pressed_cb), text);
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(log_window_key_pressed_cb), text);
+	gtk_widget_add_controller(window, controller);
 
 #ifdef DEBUG
 	gtk_text_buffer_create_tag(buffer, "gray_bg", "background", "gray", NULL);
@@ -406,31 +403,24 @@ static LogWindow *log_window_create(GdkRectangle log_window)
 	g_signal_connect(logwin->search_entry_box, "icon-press", G_CALLBACK(search_entry_icon_cb), logwin);
 	g_signal_connect(logwin->search_entry_box, "activate", G_CALLBACK(search_activate_event), logwin);
 
-	GtkWidget *backwards_button = gtk_button_new();
-	gtk_button_set_image(GTK_BUTTON(backwards_button),
-	                     gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_UP, GTK_ICON_SIZE_LARGE_TOOLBAR));
+	GtkWidget *backwards_button = gtk_button_new_from_icon_name(GQ_ICON_PAN_UP);
 	gtk_widget_set_tooltip_text(backwards_button, _("Search backwards"));
 	gq_gtk_box_pack_start(GTK_BOX(search_box), backwards_button, FALSE, FALSE, 0);
-	gtk_widget_show(backwards_button);
-	g_signal_connect(backwards_button, "button_release_event",
-	                 G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_BACKWARDS>), logwin);
+	g_signal_connect(backwards_button, "clicked", G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_BACKWARDS>), logwin);
 
-	GtkWidget *forwards_button = gtk_button_new();
-	gtk_button_set_image(GTK_BUTTON(forwards_button),
-	                     gq_gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN, GTK_ICON_SIZE_LARGE_TOOLBAR));
+	GtkWidget *forwards_button = gtk_button_new_from_icon_name(GQ_ICON_PAN_DOWN);
 	gtk_widget_set_tooltip_text(forwards_button, _("Search forwards"));
 	gq_gtk_box_pack_start(GTK_BOX(search_box), forwards_button, FALSE, FALSE, 0);
-	gtk_widget_show(forwards_button);
-	g_signal_connect(forwards_button, "button_release_event",
-	                 G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_FORWARDS>), logwin);
+	g_signal_connect(forwards_button, "clicked", G_CALLBACK(search_keypress_event_cb<LogWindow::SEARCH_FORWARDS>), logwin);
 
 	GtkWidget *all_button = gtk_toggle_button_new();
-	gtk_button_set_image(GTK_BUTTON(all_button),
-	                     gq_gtk_image_new_from_icon_name("edit-select-all-symbolic", GTK_ICON_SIZE_LARGE_TOOLBAR));
+
+	gtk_button_set_child(GTK_BUTTON(all_button), gtk_image_new_from_icon_name("edit-select-all-symbolic"));
+
 	gtk_widget_set_tooltip_text(all_button, _("Highlight all"));
-	gq_gtk_box_pack_start(GTK_BOX(search_box), all_button, FALSE, FALSE, 0) ;
+	gq_gtk_box_pack_start(GTK_BOX(search_box), all_button, FALSE, FALSE, 0);
+
 	g_signal_connect(all_button, "toggled", G_CALLBACK(all_keypress_event_cb), logwin);
-	gq_gtk_widget_show_all(all_button);
 
 	pref_label_new(hbox, _("Filter regexp"));
 

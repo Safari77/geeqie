@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "compat-deprecated.h"
 #include "geometry.h"
 #include "main-defines.h"
 #include "misc.h"
@@ -81,10 +80,8 @@ enum {
 enum {
 	SIGNAL_ZOOM = 0,
 	SIGNAL_CLICKED,
-#if HAVE_GTK4
 	SIGNAL_BUTTON_PRESS,
 	SIGNAL_BUTTON_RELEASE,
-#endif
 	SIGNAL_SCROLL_NOTIFY,
 	SIGNAL_RENDER_COMPLETE,
 	SIGNAL_DRAG,
@@ -143,13 +140,11 @@ static void pr_zoom_sync(PixbufRenderer *pr, gdouble zoom,
 			 PrZoomFlags flags, gint px, gint py);
 
 static void pr_signals_connect(PixbufRenderer *pr);
-static void pr_size_cb(GtkWidget *widget, GtkAllocation *allocation, gpointer data);
+static void pr_resize_cb(GtkDrawingArea *area, gint width, gint height, gpointer data);
 static void pr_stereo_temp_disable(PixbufRenderer *pr, gboolean disable);
-#if HAVE_GTK4
 static void pr_clicked_signal_button(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
 static void pr_button_press_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
 static void pr_button_release_signal(PixbufRenderer *pr, guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count);
-#endif
 
 
 /*
@@ -369,17 +364,10 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 			     G_SIGNAL_RUN_LAST,
 			     G_STRUCT_OFFSET(PixbufRendererClass, clicked),
 			     nullptr, nullptr,
-#if HAVE_GTK4
 			     g_cclosure_marshal_VOID__POINTER,
 			     G_TYPE_NONE, 1,
 			     G_TYPE_POINTER);
-#else
-			     g_cclosure_marshal_VOID__BOXED,
-			     G_TYPE_NONE, 1,
-			     GDK_TYPE_EVENT);
-#endif
 
-#if HAVE_GTK4
 	signals[SIGNAL_BUTTON_PRESS] =
 		g_signal_new("button-press",
 			     G_OBJECT_CLASS_TYPE(gobject_class),
@@ -399,7 +387,6 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 			     g_cclosure_marshal_VOID__POINTER,
 			     G_TYPE_NONE, 1,
 			     G_TYPE_POINTER);
-#endif
 
 	signals[SIGNAL_SCROLL_NOTIFY] =
 		g_signal_new("scroll-notify",
@@ -425,9 +412,9 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 			     G_SIGNAL_RUN_LAST,
 			     G_STRUCT_OFFSET(PixbufRendererClass, drag),
 			     nullptr, nullptr,
-			     g_cclosure_marshal_VOID__BOXED,
+			     g_cclosure_marshal_VOID__POINTER,
 			     G_TYPE_NONE, 1,
-			     GDK_TYPE_EVENT);
+			     G_TYPE_POINTER);
 
 	signals[SIGNAL_UPDATE_PIXEL] =
 		g_signal_new("update-pixel",
@@ -485,10 +472,7 @@ static void pixbuf_renderer_init(PixbufRenderer *pr)
 
 	pr->renderer2 = nullptr;
 
-	deprecated_gtk_widget_set_double_buffered(box, FALSE);
-	gtk_widget_set_app_paintable(box, TRUE);
-	g_signal_connect_after(G_OBJECT(box), "size_allocate",
-			       G_CALLBACK(pr_size_cb), pr);
+	g_signal_connect(box, "resize", G_CALLBACK(pr_resize_cb), pr);
 
 	pr_signals_connect(pr);
 }
@@ -654,17 +638,53 @@ static void pixbuf_renderer_get_property(GObject *object, guint prop_id,
 
 static gboolean pr_parent_window_sizable(PixbufRenderer *pr)
 {
-	GdkWindowState state;
-
 	if (!pr->parent_window) return FALSE;
 	if (!pr->window_fit) return FALSE;
-	if (!gtk_widget_get_window(GTK_WIDGET(pr))) return FALSE;
 
-	if (!gtk_widget_get_window(pr->parent_window)) return FALSE;
-	state = gdk_window_get_state(gtk_widget_get_window(pr->parent_window));
-	if (state & GDK_WINDOW_STATE_MAXIMIZED) return FALSE;
+	GtkRoot *root = gtk_widget_get_root(GTK_WIDGET(pr));
+	if (!GTK_IS_WINDOW(root)) return FALSE;
+
+	GtkRoot *parent_root = gtk_widget_get_root(pr->parent_window);
+	if (!GTK_IS_WINDOW(parent_root)) return FALSE;
+
+	if (gtk_window_is_maximized(GTK_WINDOW(parent_root))) return FALSE;
 
 	return TRUE;
+}
+
+static void pr_get_monitor_size(PixbufRenderer *pr, gint *width, gint *height)
+{
+	GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(pr));
+	GdkMonitor *monitor = nullptr;
+
+	if (pr->parent_window)
+		{
+		if (auto *native = gtk_widget_get_native(pr->parent_window))
+			{
+			GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(native));
+			if (surface)
+				{
+					monitor = gdk_display_get_monitor_at_surface(display, surface);
+				}
+			}
+		}
+
+	if (!monitor)
+		{
+		GListModel *monitors = gdk_display_get_monitors(display);
+		if (monitors && g_list_model_get_n_items(monitors) > 0)
+			{
+			monitor = GDK_MONITOR(g_list_model_get_item(monitors, 0));
+			}
+		}
+
+	GdkRectangle geometry;
+	gdk_monitor_get_geometry(monitor, &geometry);
+
+	*width = geometry.width;
+	*height = geometry.height;
+
+	g_clear_object(&monitor);
 }
 
 static gboolean pr_parent_window_resize(PixbufRenderer *pr, gint w, gint h)
@@ -676,8 +696,12 @@ static gboolean pr_parent_window_resize(PixbufRenderer *pr, gint w, gint h)
 
 	if (pr->window_limit)
 		{
-		gint sw = deprecated_gdk_screen_width() * pr->window_limit_size / 100;
-		gint sh = deprecated_gdk_screen_height() * pr->window_limit_size / 100;
+		gint sw;
+		gint sh;
+		pr_get_monitor_size(pr, &sw, &sh);
+
+		sw = sw * pr->window_limit_size / 100;
+		sh = sh * pr->window_limit_size / 100;
 
 		w = std::min(w, sw);
 		h = std::min(h, sh);
@@ -688,15 +712,15 @@ static gboolean pr_parent_window_resize(PixbufRenderer *pr, gint w, gint h)
 	gtk_widget_get_allocation(widget, &widget_allocation);
 	gtk_widget_get_allocation(pr->parent_window, &parent_allocation);
 
-	w += (parent_allocation.width - widget_allocation.width);
-	h += (parent_allocation.height - widget_allocation.height);
+	w += parent_allocation.width - widget_allocation.width;
+	h += parent_allocation.height - widget_allocation.height;
 
-	GdkWindow *window = gtk_widget_get_window(pr->parent_window);
-	if (w == gdk_window_get_width(window) &&
-	    h == gdk_window_get_height(window))
+	if (w == parent_allocation.width && h == parent_allocation.height)
+		{
 		return FALSE;
+		}
 
-	gdk_window_resize(window, w, h);
+	gtk_window_set_default_size(GTK_WINDOW(pr->parent_window), w, h);
 
 	return TRUE;
 }
@@ -1302,12 +1326,6 @@ static void pr_zoom_signal(PixbufRenderer *pr)
 	g_signal_emit(pr, signals[SIGNAL_ZOOM], 0, pr->zoom);
 }
 
-static void pr_clicked_signal(PixbufRenderer *pr, GdkEventButton *bevent)
-{
-	g_signal_emit(pr, signals[SIGNAL_CLICKED], 0, bevent);
-}
-
-#if HAVE_GTK4
 static GqMouseButtonEvent pr_button_event_new(guint button, gdouble x, gdouble y, GdkModifierType state, guint press_count)
 {
 	return {button, x, y, state, press_count};
@@ -1330,7 +1348,6 @@ static void pr_button_release_signal(PixbufRenderer *pr, guint button, gdouble x
 	GqMouseButtonEvent event = pr_button_event_new(button, x, y, state, press_count);
 	g_signal_emit(pr, signals[SIGNAL_BUTTON_RELEASE], 0, &event);
 }
-#endif
 
 static void pr_scroll_notify_signal(PixbufRenderer *pr)
 {
@@ -1351,7 +1368,7 @@ void pr_render_complete_signal(PixbufRenderer *pr)
 		}
 }
 
-static void pr_drag_signal(PixbufRenderer *pr, GdkEventMotion *event)
+static void pr_drag_signal(PixbufRenderer *pr, const GqPointerMotionEvent *event)
 {
 	g_signal_emit(pr, signals[SIGNAL_DRAG], 0, event);
 }
@@ -1674,8 +1691,7 @@ static gboolean pr_zoom_clamp(PixbufRenderer *pr, gdouble zoom,
 
 		if (sizeable)
 			{
-			max_w = deprecated_gdk_screen_width();
-			max_h = deprecated_gdk_screen_height();
+			pr_get_monitor_size(pr, &max_w, &max_h);
 
 			if (pr->window_limit)
 				{
@@ -1928,11 +1944,11 @@ static void pr_size_sync(PixbufRenderer *pr, gint new_width, gint new_height)
 	pr_update_signal(pr);
 }
 
-static void pr_size_cb(GtkWidget *, GtkAllocation *allocation, gpointer data)
+static void pr_resize_cb(GtkDrawingArea *, gint width, gint height, gpointer data)
 {
 	auto pr = static_cast<PixbufRenderer *>(data);
 
-	pr_size_sync(pr, allocation->width, allocation->height);
+	pr_size_sync(pr, width, height);
 }
 
 /*
@@ -2018,38 +2034,25 @@ void pixbuf_renderer_set_scroll_center(PixbufRenderer *pr, gdouble x, gdouble y)
  *-------------------------------------------------------------------
  */
 
-static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpointer)
+static gboolean pr_mouse_motion_cb(GtkEventControllerMotion *controller, double x, double y, gpointer  /*data*/)
 {
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
 	PixbufRenderer *pr;
 	gint accel;
-	GdkSeat *seat;
-	GdkDevice *device;
-
-	/* This is a hack, but work far the best, at least for single pointer systems.
-	 * See https://bugzilla.gnome.org/show_bug.cgi?id=587714 for more. */
-	gint x;
-	gint y;
-	seat = gdk_display_get_default_seat(gdk_window_get_display(event->window));
-	device = gdk_seat_get_pointer(seat);
-
-	get_pointer_position(widget, device, &x, &y, nullptr);
-
-	event->x = x;
-	event->y = y;
 
 	pr = PIXBUF_RENDERER(widget);
 
 	if (pr->scroller_id)
 		{
-		pr->scroller_xpos = event->x;
-		pr->scroller_ypos = event->y;
+		pr->scroller_xpos = x;
+		pr->scroller_ypos = y;
 		}
 
-	pr->mouse.x = event->x;
-	pr->mouse.y = event->y;
+	pr->mouse.x = x;
+	pr->mouse.y = y;
 	pr_update_pixel_signal(pr);
 
-	if (!pr->in_drag || !gdk_display_device_is_grabbed(gdk_device_get_display(device), device)) return FALSE;
+	if (!pr->in_drag) return FALSE;
 
 	if (pr->drag_moved < PR_DRAG_SCROLL_THRESHHOLD)
 		{
@@ -2057,10 +2060,17 @@ static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpo
 		}
 	else
 		{
-		widget_set_cursor(widget, GDK_FLEUR);
+		gtk_widget_set_cursor_from_name(widget, "crosshair");
 		}
 
-	if (event->state & GDK_CONTROL_MASK)
+	auto state = static_cast<GdkModifierType>(0);
+
+	if (GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller)))
+		{
+		state = gdk_event_get_modifier_state(event);
+		}
+
+	if (state & GDK_CONTROL_MASK)
 		{
 		accel = PR_PAN_SHIFT_MULTIPLIER;
 		}
@@ -2072,13 +2082,21 @@ static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpo
 	/* do the scroll - not when drawing rectangle*/
 	if (!options->draw_rectangle)
 		{
-		pixbuf_renderer_scroll(pr, (pr->drag_last_x - event->x) * accel,
-					(pr->drag_last_y - event->y) * accel);
+		pixbuf_renderer_scroll(pr, (pr->drag_last_x - x) * accel,
+					(pr->drag_last_y - y) * accel);
 		}
-	pr_drag_signal(pr, event);
 
-	pr->drag_last_x = event->x;
-	pr->drag_last_y = event->y;
+	const GqPointerMotionEvent event{
+		x,
+		y,
+		static_cast<gdouble>(pr->drag_last_x - x) * accel,
+		static_cast<gdouble>(pr->drag_last_y - y) * accel,
+		state
+	};
+	pr_drag_signal(pr, &event);
+
+	pr->drag_last_x = x;
+	pr->drag_last_y = y;
 
 	/* This is recommended by the GTK+ documentation, but does not work properly.
 	 * Use deprecated way until GTK+ gets a solution for correct motion hint handling:
@@ -2088,23 +2106,16 @@ static gboolean pr_mouse_motion_cb(GtkWidget *widget, GdkEventMotion *event, gpo
 	return FALSE;
 }
 
-#if HAVE_GTK4
 static void pr_leave_notify_cb(GtkEventControllerMotion *controller, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
-#else
-static gboolean pr_leave_notify_cb(GtkWidget *widget, GdkEventCrossing *, gpointer)
-#endif
-{
+
 	PixbufRenderer *pr;
 
 	pr = PIXBUF_RENDERER(widget);
 	pr->mouse = { -1, -1 };
 
 	pr_update_pixel_signal(pr);
-#if !HAVE_GTK4
-	return FALSE;
-#endif
 }
 
 static gboolean pr_mouse_press_common(GtkWidget *widget,
@@ -2124,12 +2135,6 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 			pr->drag_last_y = y;
 			pr->drag_moved = 0;
 
-#if !HAVE_GTK4
-			widget_input_grab(widget, GDK_SEAT_CAPABILITY_ALL_POINTING, FALSE,
-			                  static_cast<GdkEventMask>(GDK_POINTER_MOTION_MASK |
-			                                            GDK_POINTER_MOTION_HINT_MASK |
-			                                            GDK_BUTTON_RELEASE_MASK));
-#endif
 			break;
 
 		case GDK_BUTTON_MIDDLE:
@@ -2137,12 +2142,7 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 			break;
 
 		case GDK_BUTTON_SECONDARY:
-#if !HAVE_GTK4
-			/* keep old signal path if pr_clicked_signal needs GdkEventButton */
-			return FALSE;
-#else
 			pr_clicked_signal_button(pr, button, x, y, static_cast<GdkModifierType>(0), 1);
-#endif
 			break;
 
 		default:
@@ -2158,20 +2158,6 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 	return FALSE;
 }
 
-#if !HAVE_GTK4
-static gboolean pr_mouse_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
-{
-	if (bevent->button == GDK_BUTTON_SECONDARY)
-		{
-		pr_clicked_signal(PIXBUF_RENDERER(widget), bevent);
-		return FALSE;
-		}
-
-	return pr_mouse_press_common(widget, bevent->button, bevent->x, bevent->y);
-}
-#endif
-
-#if HAVE_GTK4
 static void pr_mouse_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
@@ -2182,9 +2168,7 @@ static void pr_mouse_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x,
 
 	pr_mouse_press_common(widget, button, x, y);
 }
-#endif
 
-#if HAVE_GTK4
 static void pr_mouse_release_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
@@ -2214,53 +2198,10 @@ static void pr_mouse_release_cb(GtkGestureClick *gesture, gint n_press, gdouble 
 
 	pr->in_drag = FALSE;
 }
-#endif
 
-static gboolean pr_mouse_release_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer)
-{
-	PixbufRenderer *pr;
-
-	pr = PIXBUF_RENDERER(widget);
-
-	if (pr->scroller_id)
-		{
-		pr_scroller_stop(pr);
-		return TRUE;
-		}
-
-	GdkSeat *seat = gdk_display_get_default_seat(gdk_window_get_display(bevent->window));
-	GdkDevice *device = gdk_seat_get_pointer(seat);
-	if (gdk_display_device_is_grabbed(gdk_device_get_display(device), device) && gtk_widget_has_grab(GTK_WIDGET(pr)))
-		{
-		widget_input_ungrab(widget);
-		widget_set_cursor(widget, -1);
-		}
-
-	if (pr->drag_moved < PR_DRAG_SCROLL_THRESHHOLD)
-		{
-		if (bevent->button == GDK_BUTTON_PRIMARY && (bevent->state & GDK_CONTROL_MASK))
-			{
-			pr_scroller_start(pr, bevent->x, bevent->y);
-			}
-		else if (bevent->button == GDK_BUTTON_PRIMARY || bevent->button == GDK_BUTTON_MIDDLE)
-			{
-			pr_clicked_signal(pr, bevent);
-			}
-		}
-
-	pr->in_drag = FALSE;
-
-	return FALSE;
-}
-
-#if HAVE_GTK4
 static void pr_mouse_leave_cb(GtkEventControllerMotion *controller, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
-#else
-static gboolean pr_mouse_leave_cb(GtkWidget *widget, GdkEventCrossing *, gpointer)
-#endif
-{
 	PixbufRenderer *pr;
 
 	pr = PIXBUF_RENDERER(widget);
@@ -2272,26 +2213,15 @@ static gboolean pr_mouse_leave_cb(GtkWidget *widget, GdkEventCrossing *, gpointe
 		pr->scroller_xinc = 0;
 		pr->scroller_yinc = 0;
 		}
-
-#if !HAVE_GTK4
-	return FALSE;
-#endif
-}
-
-static void pr_mouse_drag_cb(GtkWidget *widget, GdkDragContext *, gpointer)
-{
-	PixbufRenderer *pr;
-
-	pr = PIXBUF_RENDERER(widget);
-
-	pr->drag_moved = PR_DRAG_SCROLL_THRESHHOLD;
 }
 
 static void pr_signals_connect(PixbufRenderer *pr)
 {
-	g_signal_connect(G_OBJECT(pr), "motion_notify_event",
-			 G_CALLBACK(pr_mouse_motion_cb), pr);
-#if HAVE_GTK4
+
+	GtkEventController *controller = gtk_event_controller_motion_new();
+	g_signal_connect(controller, "motion", G_CALLBACK(pr_mouse_motion_cb), pr);
+	gtk_widget_add_controller(GTK_WIDGET(pr), controller);
+
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
 	g_signal_connect(gesture, "pressed", G_CALLBACK(pr_mouse_press_cb), pr);
@@ -2302,24 +2232,6 @@ static void pr_signals_connect(PixbufRenderer *pr)
 	g_signal_connect(motion_controller, "leave", G_CALLBACK(pr_mouse_leave_cb), pr);
 	g_signal_connect(motion_controller, "leave", G_CALLBACK(pr_leave_notify_cb), pr);
 	gtk_widget_add_controller(GTK_WIDGET(pr), motion_controller);
-#else
-	g_signal_connect(G_OBJECT(pr), "button_press_event",
-			 G_CALLBACK(pr_mouse_press_cb), pr);
-	g_signal_connect(G_OBJECT(pr), "button_release_event",
-			 G_CALLBACK(pr_mouse_release_cb), pr);
-	g_signal_connect(G_OBJECT(pr), "leave_notify_event",
-			 G_CALLBACK(pr_mouse_leave_cb), pr);
-	g_signal_connect(G_OBJECT(pr), "leave_notify_event",
-			 G_CALLBACK(pr_leave_notify_cb), pr);
-#endif
-
-	gtk_widget_set_events(GTK_WIDGET(pr), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK |
-					      static_cast<GdkEventMask>(GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK |
-					      GDK_LEAVE_NOTIFY_MASK));
-
-	g_signal_connect(G_OBJECT(pr), "drag_begin",
-			 G_CALLBACK(pr_mouse_drag_cb), pr);
-
 }
 
 /*

@@ -22,17 +22,11 @@
 
 #include <config.h>
 
-#include "compat-deprecated.h"
-#if HAVE_GTK4
-#  include "main-defines.h"
-#endif
+#include "main-defines.h"
 
 namespace
 {
 
-#if HAVE_GTK4
-constexpr auto GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY = "gq-gtk4-drag-source-controller";
-constexpr auto GTK4_DROP_TARGET_CONTROLLER_DATA_KEY = "gq-gtk4-drop-target-controller";
 constexpr auto GTK4_BOX_PACK_END_DATA_KEY = "gq-gtk4-box-pack-end";
 constexpr auto GTK4_WINDOW_POSITION_DATA_KEY = "gq-gtk4-window-position";
 constexpr auto GTK4_WINDOW_POSITION_POLICY_DATA_KEY = "gq-gtk4-window-position-policy";
@@ -43,15 +37,6 @@ struct GqWindowPosition
 	gint x;
 	gint y;
 };
-
-guint start_button_mask_to_button(GdkModifierType start_button_mask)
-{
-	if (start_button_mask & GDK_BUTTON1_MASK) return GDK_BUTTON_PRIMARY;
-	if (start_button_mask & GDK_BUTTON2_MASK) return GDK_BUTTON_MIDDLE;
-	if (start_button_mask & GDK_BUTTON3_MASK) return GDK_BUTTON_SECONDARY;
-
-	return 0;
-}
 
 const gchar *stock_id_to_icon_name(const gchar *stock_id)
 {
@@ -104,14 +89,43 @@ void gtk4_box_apply_child_packing(GtkBox *box, GtkWidget *child, gboolean expand
 		gtk_widget_set_margin_bottom(child, padding);
 		}
 }
-#endif
+
+GtkWidget *gtk4_box_get_first_pack_end_child(GtkBox *box)
+{
+	for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
+	     work != nullptr;
+	     work = gtk_widget_get_next_sibling(work))
+		{
+		if (g_object_get_data(G_OBJECT(work), GTK4_BOX_PACK_END_DATA_KEY))
+			{
+			return work;
+			}
+		}
+
+	return nullptr;
+}
 
 } // namespace
 
-#if HAVE_GTK4
 void gq_gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
 {
-	gtk_box_append(box, child);
+	if (GtkWidget *first_end_child = gtk4_box_get_first_pack_end_child(box))
+		{
+		GtkWidget *previous = gtk_widget_get_prev_sibling(first_end_child);
+		if (previous)
+			{
+			gtk_box_insert_child_after(box, child, previous);
+			}
+		else
+			{
+			gtk_box_prepend(box, child);
+			}
+		}
+	else
+		{
+		gtk_box_append(box, child);
+		}
+
 	gtk4_box_apply_child_packing(box, child, expand, fill, padding);
 }
 
@@ -119,32 +133,22 @@ void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolea
 {
 	g_object_set_data(G_OBJECT(child), GTK4_BOX_PACK_END_DATA_KEY, GINT_TO_POINTER(TRUE));
 
-	GtkWidget *first_end_child = nullptr;
-	for (GtkWidget *work = gtk_widget_get_first_child(GTK_WIDGET(box));
-	     work != nullptr;
-	     work = gtk_widget_get_next_sibling(work))
-		{
-		if (g_object_get_data(G_OBJECT(work), GTK4_BOX_PACK_END_DATA_KEY))
-			{
-			first_end_child = work;
-			break;
-			}
-		}
-
+	GtkWidget *first_end_child = gtk4_box_get_first_pack_end_child(box);
 	if (!first_end_child)
 		{
 		gtk_box_append(box, child);
-		return;
-		}
-
-	GtkWidget *previous = gtk_widget_get_prev_sibling(first_end_child);
-	if (previous)
-		{
-		gtk_box_insert_child_after(box, child, previous);
 		}
 	else
 		{
-		gtk_box_prepend(box, child);
+		GtkWidget *previous = gtk_widget_get_prev_sibling(first_end_child);
+		if (previous)
+			{
+			gtk_box_insert_child_after(box, child, previous);
+			}
+		else
+			{
+			gtk_box_prepend(box, child);
+			}
 		}
 
 	gtk4_box_apply_child_packing(box, child, expand, fill, padding);
@@ -198,44 +202,6 @@ void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position)
 	gtk_box_reorder_child_after(box, child, previous);
 }
 
-gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
-{
-	auto *position = static_cast<GqWindowPosition *>(g_object_get_data(G_OBJECT(window), GTK4_WINDOW_POSITION_DATA_KEY));
-	if (position)
-		{
-		if (x) *x = position->x;
-		if (y) *y = position->y;
-		return TRUE;
-		}
-
-	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(window));
-	if (!surface)
-		{
-		return FALSE;
-		}
-
-	gint surface_x;
-	gint surface_y;
-	gdk_surface_get_position(surface, &surface_x, &surface_y);
-	if (x) *x = surface_x;
-	if (y) *y = surface_y;
-
-	return TRUE;
-}
-
-void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
-{
-	auto *position = g_new(GqWindowPosition, 1);
-	position->x = x;
-	position->y = y;
-	g_object_set_data_full(G_OBJECT(window), GTK4_WINDOW_POSITION_DATA_KEY, position, g_free);
-
-	if (gtk_widget_get_visible(GTK_WIDGET(window)))
-		{
-		gtk_window_present(window);
-		}
-}
-
 void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting)
 {
 	g_object_set_data(G_OBJECT(window), GTK4_WINDOW_KEEP_ABOVE_DATA_KEY, GINT_TO_POINTER(setting));
@@ -243,25 +209,6 @@ void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting)
 	if (setting && gtk_widget_get_visible(GTK_WIDGET(window)))
 		{
 		gtk_window_present(window);
-		}
-}
-
-void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
-{
-	g_object_set_data(G_OBJECT(window), GTK4_WINDOW_POSITION_POLICY_DATA_KEY, GINT_TO_POINTER(static_cast<gint>(position)));
-
-	switch (position)
-		{
-		case GTK_WIN_POS_CENTER:
-		case GTK_WIN_POS_CENTER_ON_PARENT:
-		case GTK_WIN_POS_MOUSE:
-			if (gtk_widget_get_visible(GTK_WIDGET(window)))
-				{
-				gtk_window_present(window);
-				}
-			break;
-		default:
-			break;
 		}
 }
 
@@ -279,32 +226,15 @@ void gq_gtk_widget_show_all(GtkWidget *widget)
 		}
 }
 
-void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
-{
-	if (type == GTK_SHADOW_NONE)
-		{
-		gtk_widget_remove_css_class(GTK_WIDGET(frame), "frame");
-		}
-	else
-		{
-		gtk_widget_add_css_class(GTK_WIDGET(frame), "frame");
-		}
-}
-
-void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
-{
-	gtk_scrolled_window_set_has_frame(scrolled_window, type != GTK_SHADOW_NONE);
-}
-
 void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 {
-	if (GTK_IS_BUTTON(container))
+	if (GTK_IS_BOX(container))
+		{
+		gtk_box_append(GTK_BOX(container), widget);
+		}
+	else if (GTK_IS_BUTTON(container))
 		{
 		gtk_button_set_child(GTK_BUTTON(container), widget);
-		}
-	else if (GTK_IS_BUTTON_BOX(container))
-		{
-		gtk_box_set_child(GTK_BUTTON_BOX(container), widget);
 		}
 	else if (GTK_IS_EXPANDER(container))
 		{
@@ -314,21 +244,13 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 		{
 		gtk_frame_set_child(GTK_FRAME(container), widget);
 		}
-	else if (GTK_IS_MENU_ITEM(container))
-		{
-		gtk_frame_set_child(container, widget); /* @FIXME GTK4 menu */
-		}
 	else if (GTK_IS_POPOVER(container))
 		{
 		gtk_popover_set_child(GTK_POPOVER(container), widget);
 		}
-	else if (GTK_IS_TOGGLE_BUTTON(container))
+	else if (GTK_IS_SCROLLED_WINDOW(container))
 		{
-		gtk_toggle_button_set_child(GTK_TOGGLE_BUTTON(container), widget);
-		}
-	else if (GTK_IS_TOOLBAR(container))
-		{
-		gtk_toolbar_set_child(GTK_TOOLBAR(container), widget);
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(container), widget);
 		}
 	else if (GTK_IS_VIEWPORT(container))
 		{
@@ -401,16 +323,6 @@ void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
 		}
 }
 
-void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data)
-{
-	for (GtkWidget *child = gtk_widget_get_first_child(container);
-	     child;
-	     child = gtk_widget_get_next_sibling(child))
-		{
-		callback(child, callback_data);
-		}
-}
-
 void gq_gtk_widget_destroy(GtkWidget *widget)
 {
 	if (!widget) return;
@@ -436,35 +348,10 @@ void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
 	gtk_widget_set_margin_end(widget, width);
 }
 
-gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height)
-{
-	gint dimension = 16;
-
-	switch (size)
-		{
-		case GTK_ICON_SIZE_MENU:
-		case GTK_ICON_SIZE_BUTTON:
-			dimension = 16;
-			break;
-		default:
-			break;
-		}
-
-	if (width) *width = dimension;
-	if (height) *height = dimension;
-
-	return TRUE;
-}
-
-GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
+GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, gint size)
 {
 	(void)size;
 	return gtk_image_new_from_icon_name(stock_id_to_icon_name(stock_id));
-}
-
-GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
-{
-	return gtk_widget_get_first_child(widget);
 }
 
 GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget)
@@ -480,227 +367,5 @@ GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget)
 
 	return nullptr;
 }
-
-GList *gq_gtk_widget_get_children(GtkWidget *widget)
-{
-	GList *list = NULL;
-
-	for (GtkWidget *child = gtk_widget_get_first_child(widget);
-		child;
-		child = gtk_widget_get_next_sibling(child))
-		{
-		list = g_list_prepend(list, child);
-		}
-
-	return g_list_reverse(list);
-}
-
-void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
-{
-	if (type == GTK_SHADOW_NONE)
-		{
-		gtk_widget_remove_css_class(viewport, "frame");
-		}
-	else
-		{
-		gtk_widget_add_css_class(viewport, "frame");
-		}
-}
-
-void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
-{
-	g_signal_connect(instance, detailed_signal, c_handler, data);
-}
-
-void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
-{
-	g_signal_connect_swapped(instance, detailed_signal, c_handler, data);
-}
-
-void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, gpointer, gint n_targets, GdkDragAction actions)
-{
-	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY));
-	if (controller)
-		{
-		gtk_widget_remove_controller(widget, controller);
-		}
-
-	auto *drag_source = gtk_drag_source_new();
-	gtk_drag_source_set_actions(drag_source, actions);
-	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_source), start_button_mask_to_button(start_button_mask));
-	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drag_source));
-	g_object_set_data(G_OBJECT(widget), GTK4_DRAG_SOURCE_CONTROLLER_DATA_KEY, drag_source);
-}
-
-void gq_gtk_drag_dest_set(GtkWidget *widget, gpointer, gpointer, gint n_targets, GdkDragAction actions)
-{
-	(void)n_targets;
-
-	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
-	if (controller)
-		{
-		gtk_widget_remove_controller(widget, controller);
-		}
-
-	auto *drop_target = gtk_drop_target_async_new(actions);
-	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drop_target));
-	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, drop_target);
-}
-
-void gq_gtk_drag_dest_unset(GtkWidget *widget)
-{
-	auto *controller = static_cast<GtkEventController *>(g_object_get_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY));
-	if (!controller) return;
-
-	g_object_set_data(G_OBJECT(widget), GTK4_DROP_TARGET_CONTROLLER_DATA_KEY, nullptr);
-	gtk_widget_remove_controller(widget, controller);
-}
-
-#else
-gint gq_gtk_box_get_child_position(GtkBox *box, GtkWidget *child)
-{
-	gint position = -1;
-	gtk_container_child_get(GTK_CONTAINER(box), child, "position", &position, NULL);
-	return position;
-}
-
-void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position)
-{
-	gtk_box_reorder_child(box, child, position);
-}
-
-gboolean gq_gtk_window_get_position(GtkWindow *window, gint *x, gint *y)
-{
-	GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
-	if (!gdk_window)
-		{
-		return FALSE;
-		}
-
-	gint window_x;
-	gint window_y;
-	gdk_window_get_position(gdk_window, &window_x, &window_y);
-	if (x) *x = window_x;
-	if (y) *y = window_y;
-
-	return TRUE;
-}
-
-void gq_gtk_window_move(GtkWindow *window, gint x, gint y)
-{
-	gtk_window_move(window, x, y);
-}
-
-void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting)
-{
-	gtk_window_set_keep_above(window, setting);
-}
-
-void gq_gtk_window_set_position(GtkWindow *window, GtkWindowPosition position)
-{
-	gtk_window_set_position(window, position);
-}
-
-void gq_gtk_widget_show_all(GtkWidget *widget)
-{
-	gtk_widget_show_all(widget);
-}
-
-void gq_gtk_frame_set_shadow_type(GtkFrame *frame, GtkShadowType type)
-{
-	gtk_frame_set_shadow_type(frame, type);
-}
-
-void gq_gtk_scrolled_window_set_shadow_type(GtkScrolledWindow *scrolled_window, GtkShadowType type)
-{
-	gtk_scrolled_window_set_shadow_type(scrolled_window, type);
-}
-
-void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
-{
-	gtk_container_add(GTK_CONTAINER(container), widget);
-}
-
-void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
-{
-	gtk_container_remove(GTK_CONTAINER(container), widget);
-}
-
-void gq_gtk_container_foreach(GtkWidget *container, GtkCallback callback, gpointer callback_data)
-{
-	gtk_container_foreach(GTK_CONTAINER(container), callback, callback_data);
-}
-
-void gq_gtk_widget_destroy(GtkWidget *widget)
-{
-	gtk_widget_destroy(widget);
-}
-
-void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width)
-{
-	gtk_container_set_border_width(GTK_CONTAINER(widget), width);
-}
-
-gboolean gq_gtk_icon_size_lookup(GtkIconSize size, gint *width, gint *height)
-{
-	return gtk_icon_size_lookup(size, width, height);
-}
-
-GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, GtkIconSize size)
-{
-	return deprecated_gtk_image_new_from_stock(stock_id, size);
-}
-
-GtkWidget *gq_gtk_bin_get_child(GtkWidget *widget)
-{
-	return gtk_bin_get_child(GTK_BIN(widget));
-}
-
-GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget)
-{
-	return gtk_container_get_focus_child(GTK_CONTAINER(widget));
-}
-
-GList *gq_gtk_widget_get_children(GtkWidget *widget)
-{
-	return gtk_container_get_children(GTK_CONTAINER(widget));
-}
-
-void gq_gtk_viewport_set_shadow_type(GtkWidget *viewport, int type)
-{
-	gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), static_cast<GtkShadowType>(type));
-}
-
-gboolean gq_gtk_widget_key_event(GtkWidget *widget, GdkEventKey *event)
-{
-	return gtk_widget_event(widget, reinterpret_cast<GdkEvent *>(event));
-}
-
-void gq_drag_g_signal_connect(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
-{
-	g_signal_connect(instance, detailed_signal, c_handler, data);
-}
-
-void gq_drag_g_signal_swapped(GObject *instance, const gchar *detailed_signal, GCallback c_handler, gpointer data)
-{
-	g_signal_connect_swapped(instance, detailed_signal, c_handler, data);
-}
-
-void gq_gtk_drag_source_set(GtkWidget *widget, GdkModifierType start_button_mask, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions)
-{
-	gtk_drag_source_set(widget, start_button_mask, targets, n_targets, actions);
-}
-
-void gq_gtk_drag_dest_set(GtkWidget *widget, GtkDestDefaults flags, const GtkTargetEntry *targets, gint n_targets, GdkDragAction actions)
-{
-	gtk_drag_dest_set(widget, flags, targets, n_targets, actions);
-}
-
-void gq_gtk_drag_dest_unset(GtkWidget *widget)
-{
-	gtk_drag_dest_unset(widget);
-}
-
-#endif
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

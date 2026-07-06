@@ -60,9 +60,18 @@ struct AutoScrollData
 
 static void tree_edit_close(TreeEditData *ted)
 {
-	widget_input_ungrab(ted->window);
+	if (ted->closing) return;
+	ted->closing = TRUE;
 
-	gq_gtk_widget_destroy(ted->window);
+	if (GTK_IS_POPOVER(ted->window))
+		{
+		gtk_popover_popdown(GTK_POPOVER(ted->window));
+		gtk_widget_unparent(ted->window);
+		}
+	else
+		{
+		gq_gtk_widget_destroy(ted->window);
+		}
 
 	g_free(ted->old_name);
 	gtk_tree_path_free(ted->path);
@@ -74,7 +83,7 @@ static void tree_edit_do(TreeEditData *ted)
 {
 	if (!ted->edit_func) return;
 
-	const gchar *new_name = gq_gtk_entry_get_text(GTK_ENTRY(ted->entry));
+	const char *new_name = gtk_editable_get_text(GTK_EDITABLE(ted->entry));
 	if (strcmp(new_name, ted->old_name) == 0) return;
 
 	if (ted->edit_func(ted, ted->old_name, new_name, ted->edit_data))
@@ -83,38 +92,20 @@ static void tree_edit_do(TreeEditData *ted)
 		}
 }
 
-static gboolean tree_edit_click_end_cb(GtkWidget *, GdkEventButton *, gpointer data)
+static void tree_edit_focus_out_cb(GtkEventControllerFocus *, gpointer data)
 {
 	auto ted = static_cast<TreeEditData *>(data);
+	if (ted->closing) return;
 
 	tree_edit_do(ted);
 	tree_edit_close(ted);
-
-	return TRUE;
 }
 
-static gboolean tree_edit_click_cb(GtkWidget *, GdkEventButton *event, gpointer data)
+static gboolean tree_edit_key_press_cb(GtkEventControllerKey *, guint keyval, guint, GdkModifierType, gpointer data)
 {
 	auto ted = static_cast<TreeEditData *>(data);
 
-	auto xr = static_cast<gint>(event->x_root);
-	auto yr = static_cast<gint>(event->y_root);
-
-	if (!widget_received_event(ted->window, {xr, yr}))
-		{
-		/* gobble the release event, so it does not propgate to an underlying widget */
-		g_signal_connect(G_OBJECT(ted->window), "button_release_event",
-				 G_CALLBACK(tree_edit_click_end_cb), ted);
-		return TRUE;
-		}
-	return FALSE;
-}
-
-static gboolean tree_edit_key_press_cb(GtkWidget *, GdkEventKey *event, gpointer data)
-{
-	auto ted = static_cast<TreeEditData *>(data);
-
-	switch (event->keyval)
+	switch (keyval)
 		{
 		case GDK_KEY_Return:
 		case GDK_KEY_KP_Enter:
@@ -148,8 +139,6 @@ static gboolean tree_edit_by_path_idle_cb(gpointer data)
 	gint y;
 	gint w;
 	gint h;	/* geometry of cell within tree */
-	gint wx;
-	gint wy;		/* geometry of tree from root window */
 	gint sx;
 	gint sw;
 
@@ -166,17 +155,12 @@ static gboolean tree_edit_by_path_idle_cb(gpointer data)
 		w = std::max(w - sx, sw);
 		}
 
-	gdk_window_get_origin(gtk_widget_get_window(gtk_widget_get_parent(GTK_WIDGET(ted->tree))), &wx, &wy);
+	GdkRectangle pointing_to{x - 2, y - 2, w, h};
 
-	x += wx - 2; /* the -val is to 'fix' alignment of entry position */
-	y += wy - 2;
-
-	/* now show it */
-	gtk_widget_set_size_request(ted->window, w, h);
-	gtk_widget_realize(ted->window);
-	gq_gtk_window_move(GTK_WINDOW(ted->window), x, y);
-	gq_gtk_window_resize(GTK_WINDOW(ted->window), w, h);
+	gtk_widget_set_size_request(ted->entry, w, h);
+	gtk_popover_set_pointing_to(GTK_POPOVER(ted->window), &pointing_to);
 	gtk_widget_show(ted->window);
+	gtk_popover_popup(GTK_POPOVER(ted->window));
 
 	/* grab it */
 	gtk_widget_grab_focus(ted->entry);
@@ -184,10 +168,6 @@ static gboolean tree_edit_by_path_idle_cb(gpointer data)
 	 * is not set, and causes no edit cursor to appear ( popups not allowed focus? )
 	 */
 	gtk_widget_grab_focus(ted->entry);
-#if !HAVE_GTK4
-	widget_input_grab(ted->window, GDK_SEAT_CAPABILITY_ALL, TRUE,
-	                  static_cast<GdkEventMask>(GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK));
-#endif
 
 	return G_SOURCE_REMOVE;
 }
@@ -243,22 +223,24 @@ gboolean tree_edit_by_path(GtkTreeView *tree, GtkTreePath *tpath, gint column, c
 
 	/* create the window */
 
-	ted->window = gtk_window_new(GTK_WINDOW_POPUP);
-
-	LayoutWindow * lw = get_current_layout();
-	gtk_window_set_transient_for(GTK_WINDOW(ted->window), GTK_WINDOW(lw->window));
-
-	gtk_window_set_resizable(GTK_WINDOW(ted->window), FALSE);
-	g_signal_connect(G_OBJECT(ted->window), "button_press_event",
-			 G_CALLBACK(tree_edit_click_cb), ted);
-	g_signal_connect(G_OBJECT(ted->window), "key_press_event",
-			 G_CALLBACK(tree_edit_key_press_cb), ted);
-
 	ted->entry = gtk_entry_new();
 	gq_gtk_entry_set_text(GTK_ENTRY(ted->entry), ted->old_name);
 	gtk_editable_select_region(GTK_EDITABLE(ted->entry), 0, strlen(ted->old_name));
-	gq_gtk_container_add(ted->window, ted->entry);
 	gtk_widget_show(ted->entry);
+
+	ted->window = gtk_popover_new();
+	gtk_widget_set_parent(ted->window, GTK_WIDGET(ted->tree));
+	gtk_popover_set_autohide(GTK_POPOVER(ted->window), FALSE);
+	gtk_popover_set_has_arrow(GTK_POPOVER(ted->window), FALSE);
+	gtk_popover_set_position(GTK_POPOVER(ted->window), GTK_POS_BOTTOM);
+	gtk_popover_set_child(GTK_POPOVER(ted->window), ted->entry);
+
+	GtkEventController *controller = gtk_event_controller_key_new();
+	g_signal_connect(controller, "key-pressed", G_CALLBACK(tree_edit_key_press_cb), ted);
+	gtk_widget_add_controller(ted->entry, controller);
+	GtkEventController *focus_controller = gtk_event_controller_focus_new();
+	g_signal_connect(focus_controller, "leave", G_CALLBACK(tree_edit_focus_out_cb), ted);
+	gtk_widget_add_controller(ted->entry, focus_controller);
 
 	/* due to the fact that gtktreeview scrolls in an idle loop, we cannot
 	 * reliably get the cell position until those scroll priority signals are processed
@@ -395,8 +377,6 @@ static gboolean widget_auto_scroll_cb(gpointer data)
 		sd->max_step = std::min(sd->region_size, sd->max_step + 2);
 		}
 
-	GdkWindow *window = gtk_widget_get_window(sd->widget);
-
 	GqPoint pos;
 	if (!widget_get_pointer_position(sd->widget, pos))
 		{
@@ -405,7 +385,7 @@ static gboolean widget_auto_scroll_cb(gpointer data)
 		return G_SOURCE_REMOVE;
 		}
 
-	gint h = gdk_window_get_height(window);
+	gint h = gtk_widget_get_height(sd->widget);
 
 	if (h < sd->region_size * 3)
 		{

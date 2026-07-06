@@ -167,7 +167,7 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 	while (work)
 		{
 		gint match;
-		GdkPixbuf *pixbuf;
+		GIcon *icon;
 		const gchar *date = "";
 		gboolean done = FALSE;
 
@@ -177,30 +177,30 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 			{
 			if (islink(fd->path))
 				{
-				pixbuf = vd->pf->link;
+				icon = vd->pf->link;
 				}
 			else if (fd->name[0] == '.' && fd->name[1] == '\0')
 				{
-				pixbuf = vd->pf->open;
+				icon = vd->pf->open;
 				}
 			else if (fd->name[0] == '.' && fd->name[1] == '.' && fd->name[2] == '\0')
 				{
-				pixbuf = vd->pf->parent;
+				icon = vd->pf->parent;
 				}
 			else if (!access_file(fd->path, W_OK) )
 				{
-				pixbuf = vd->pf->read_only;
+				icon = vd->pf->read_only;
 				}
 			else
 				{
-				pixbuf = vd->pf->close;
+				icon = vd->pf->close;
 				if (vd->layout && vd->layout->options.show_directory_date)
 					date = text_from_time(fd->date);
 				}
 			}
 		else
 			{
-			pixbuf = vd->pf->deny;
+			icon = vd->pf->deny;
 			}
 
 		while (!done)
@@ -251,7 +251,7 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 
 				gtk_list_store_set(store, &new_iter,
 						   DIR_COLUMN_POINTER, fd,
-						   DIR_COLUMN_ICON, pixbuf,
+						   DIR_COLUMN_ICON, icon,
 						   DIR_COLUMN_NAME, fd->name,
 						   DIR_COLUMN_LINK, link,
 						   DIR_COLUMN_DATE, date,
@@ -266,7 +266,7 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 			else
 				{
 				gtk_list_store_set(store, &iter,
-						   DIR_COLUMN_ICON, pixbuf,
+						   DIR_COLUMN_ICON, icon,
 						   DIR_COLUMN_NAME, fd->name,
 						   DIR_COLUMN_LINK, link,
 						   DIR_COLUMN_DATE, date,
@@ -339,7 +339,7 @@ void vdlist_refresh(ViewDir *vd)
 	vdlist_populate(vd, FALSE);
 }
 
-gboolean vdlist_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
+gboolean vdlist_press_key_cb(GtkWidget *widget, const GqKeyEvent *event, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 
@@ -363,29 +363,19 @@ gboolean vdlist_press_key_cb(GtkWidget *widget, GdkEventKey *event, gpointer dat
 
 	vd_color_set(vd, vd->click_fd, TRUE);
 
-	vd->popup = vd_pop_menu(vd, vd->click_fd);
-
-	gtk_menu_popup_at_pointer(GTK_MENU(vd->popup), nullptr);
+	vd_pop_menu(vd, vd->click_fd);
 
 	return TRUE;
 }
 
-#if HAVE_GTK4
 gboolean vdlist_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
-#else
-gboolean vdlist_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer data)
-#endif
 {
 	auto vd = static_cast<ViewDir *>(data);
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
-#if HAVE_GTK4
 	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
-#else
-	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), bevent->x, bevent->y,
-#endif
 	                                  &tpath, nullptr, nullptr, nullptr))
 		{
 		GtkTreeModel *store;
@@ -401,26 +391,21 @@ gboolean vdlist_press_cb(GtkWidget *widget, GdkEventButton *bevent, gpointer dat
 	if (options->view_dir_list_single_click_enter)
 		vd_color_set(vd, vd->click_fd, TRUE);
 
-#if HAVE_GTK4
 	if (event->button == GDK_BUTTON_SECONDARY)
-#else
-	if (bevent->button == GDK_BUTTON_SECONDARY)
-#endif
 		{
-		vd->popup = vd_pop_menu(vd, vd->click_fd);
-		gtk_menu_popup_at_pointer(GTK_MENU(vd->popup), nullptr);
+		vd_pop_menu(vd, vd->click_fd);
 		return TRUE;
 		}
 
 	return options->view_dir_list_single_click_enter;
 }
 
-void vdlist_destroy_cb(GtkWidget *, gpointer data)
+void vdlist_destroy_cb(GtkWidget *widget, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 
 	vd_dnd_drop_scroll_cancel(vd);
-	widget_auto_scroll_stop(vd->view);
+	widget_auto_scroll_stop(widget);
 
 	file_data_list_free(VDLIST(vd)->list);
 }
@@ -436,7 +421,7 @@ ViewDir *vdlist_new(ViewDir *vd)
 
 	vd->type = DIRVIEW_LIST;
 
-	store = gtk_list_store_new(6, G_TYPE_POINTER, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING);
+	store = gtk_list_store_new(6, G_TYPE_POINTER, G_TYPE_ICON, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING);
 	vd->view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
 	g_object_unref(store);
 
@@ -451,7 +436,7 @@ ViewDir *vdlist_new(ViewDir *vd)
 
 	renderer = gtk_cell_renderer_pixbuf_new();
 	gtk_tree_view_column_pack_start(column, renderer, FALSE);
-	gtk_tree_view_column_add_attribute(column, renderer, "pixbuf", DIR_COLUMN_ICON);
+	gtk_tree_view_column_add_attribute(column, renderer, "gicon", DIR_COLUMN_ICON);
 	gtk_tree_view_column_set_cell_data_func(column, renderer, vd_color_cb, vd, nullptr);
 
 	renderer = gtk_cell_renderer_text_new();

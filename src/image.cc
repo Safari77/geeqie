@@ -57,6 +57,16 @@ namespace
 
 constexpr gdouble aspect_ratios[5] {0.0, gdouble(1.0), gdouble(4.0) / 3, gdouble(3) / 2, gdouble(16) / 9};
 
+GdkScrollDirection scroll_direction_from_deltas(gdouble dx, gdouble dy)
+{
+	if (std::abs(dx) > std::abs(dy))
+		{
+		return dx < 0 ? GDK_SCROLL_LEFT : GDK_SCROLL_RIGHT;
+		}
+
+	return dy < 0 ? GDK_SCROLL_UP : GDK_SCROLL_DOWN;
+}
+
 /*
  * SelectionRectangle
  */
@@ -128,11 +138,7 @@ static void image_cache_set(ImageWindow *imd, FileData *fd);
  *-------------------------------------------------------------------
  */
 
-#if HAVE_GTK4
 static void image_click_cb(PixbufRenderer *, GqMouseButtonEvent *event, gpointer data)
-#else
-static void image_click_cb(PixbufRenderer *, GdkEventButton *event, gpointer data)
-#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	if (!options->image_lm_click_nav && event->button == GDK_BUTTON_MIDDLE)
@@ -198,11 +204,7 @@ static void switch_coords_orientation(ImageWindow *imd, gint x, gint y, gint wid
 		}
 }
 
-#if HAVE_GTK4
 static void image_press_cb(PixbufRenderer *pr, GqMouseButtonEvent *event, gpointer data)
-#else
-static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer data)
-#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	LayoutWindow *lw;
@@ -226,22 +228,14 @@ static void image_press_cb(PixbufRenderer *pr, GdkEventButton *event, gpointer d
 		lw = get_current_layout();
 		}
 
-#if HAVE_GTK4
 	if (lw && event->button == GDK_BUTTON_PRIMARY && event->press_count == 2
-#else
-	if (lw && event->button == GDK_BUTTON_PRIMARY && event->type == GDK_2BUTTON_PRESS
-#endif
 												&& !options->image_lm_click_nav)
 		{
 		layout_image_full_screen_toggle(lw);
 		}
 }
 
-#if HAVE_GTK4
 static void image_release_cb(PixbufRenderer *, GqMouseButtonEvent *event, gpointer data)
-#else
-static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer data)
-#endif
 {
 	auto imd = static_cast<ImageWindow *>(data);
 	LayoutWindow *lw;
@@ -252,10 +246,13 @@ static void image_release_cb(PixbufRenderer *, GdkEventButton *event, gpointer d
 		lw = get_current_layout();
 		}
 
+/** @FIXME GTK4
 	layout_handle_user_defined_mouse_buttons(lw, event->button);
+*/
+	(void)event;
 }
 
-static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer data)
+static void image_drag_cb(PixbufRenderer *pr, GqPointerMotionEvent *event, gpointer data)
 {
 	auto imd = static_cast<ImageWindow *>(data);
 
@@ -293,11 +290,14 @@ static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer da
 			}
 
 		if (selection_rectangle.height <= 0)
+			{
 			selection_rectangle.height = 1;
+			}
 		if (selection_rectangle.width <= 0)
+			{
 			selection_rectangle.width = 1;
+			}
 
-		// decorative border
 		g_autoptr(GdkPixbuf) rect_pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, selection_rectangle.width, selection_rectangle.height);
 		pixbuf_set_rect_fill(rect_pixbuf, 0, 0, selection_rectangle.width, selection_rectangle.height, {255, 255, 255, 0});
 		pixbuf_set_rect(rect_pixbuf, 1, 1, selection_rectangle.width-2, selection_rectangle.height - 2, {0, 0, 0, 255}, 1, 1, 1, 1);
@@ -308,7 +308,9 @@ static void image_drag_cb(PixbufRenderer *pr, GdkEventMotion *event, gpointer da
 
 	if (imd->func_drag)
 		{
-		imd->func_drag(imd, event, static_cast<gfloat>(selection_rectangle.x) / selection_rectangle.width, static_cast<gfloat>(selection_rectangle.y) / selection_rectangle.height, imd->data_drag);
+		imd->func_drag(imd,
+		               event,
+		               imd->data_drag);
 		}
 }
 
@@ -427,39 +429,15 @@ void image_update_title(ImageWindow *imd)
  * rotation, flip, etc.
  *-------------------------------------------------------------------
  */
-static bool image_get_x11_screen_profile(const ImageWindow *imd, ColorManMemData &screen_data)
+static bool image_get_x11_screen_profile(ColorManMemData &screen_data)
 {
 	screen_data.ptr.reset();
 	screen_data.len = 0;
 
-#if HAVE_GTK4
 	/* GTK4: direct X11 root-window ICC profile access is not supported.
 	* Color management must be done via GdkColorProfile / colord.
 	*/
 	return false;
-#else
-	GdkScreen *screen = gtk_widget_get_screen(imd->widget);
-	GdkAtom    type   = GDK_NONE;
-	gint       format = 0;
-
-	g_autofree guchar *screen_profile = nullptr;
-	gint screen_profile_len;
-
-	if (!gdk_property_get(gdk_screen_get_root_window(screen),
-	                      gdk_atom_intern("_ICC_PROFILE", FALSE),
-	                      GDK_NONE,
-	                      0, 64 * 1024 * 1024, FALSE,
-	                      &type, &format, &screen_profile_len, &screen_profile) ||
-	    screen_profile_len <= 0)
-		{
-		return false;
-		}
-
-	screen_data.ptr.reset(g_steal_pointer(&screen_profile));
-	screen_data.len = screen_profile_len;
-
-	return true;
-#endif
 }
 
 static gboolean image_post_process_color(ImageWindow *imd, gboolean run_in_bg)
@@ -495,7 +473,7 @@ static gboolean image_post_process_color(ImageWindow *imd, gboolean run_in_bg)
 
 	ColorManMemData screen_profile;
 	if (options->color_profile.use_x11_screen_profile &&
-	    image_get_x11_screen_profile(imd, screen_profile))
+	    image_get_x11_screen_profile(screen_profile))
 		{
 		screen_type = COLOR_PROFILE_MEM;
 		DEBUG_1("Using X11 screen profile, length: %u", screen_profile.len);
@@ -1131,8 +1109,7 @@ static void image_change_real(ImageWindow *imd, FileData *fd,
  * focus stuff
  *-------------------------------------------------------------------
  */
-
-static gboolean image_focus_in_cb(GtkWidget *, GdkEventFocus *, gpointer data)
+static void image_focus_in_cb(GtkEventControllerFocus *, gpointer data)
 {
 	auto imd = static_cast<ImageWindow *>(data);
 
@@ -1140,55 +1117,74 @@ static gboolean image_focus_in_cb(GtkWidget *, GdkEventFocus *, gpointer data)
 		{
 		imd->func_focus_in(imd, imd->data_focus_in);
 		}
-
-	return TRUE;
 }
 
-static gboolean image_scroll_cb(GtkWidget *, GdkEventScroll *event, gpointer data)
+static gboolean image_scroll_cb(GtkEventControllerScroll *controller, gdouble, gdouble, gpointer data)
 {
 	auto imd = static_cast<ImageWindow *>(data);
-	gboolean in_lw = FALSE;
-	gint i = 0;
+	GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller));
 
-	if (imd->func_scroll && event && event->type == GDK_SCROLL)
+	if (!imd->func_scroll || !event)
 		{
-		LayoutWindow *lw = get_current_layout();
+		return FALSE;
+		}
 
-		/* check if the image is in a layout window */
-		for (i = 0; i < MAX_SPLIT_IMAGES; i++)
+	gdouble x = 0;
+	gdouble y = 0;
+	gdouble dx = 0;
+	gdouble dy = 0;
+	gdk_event_get_position(event, &x, &y);
+	gdk_scroll_event_get_deltas(event, &dx, &dy);
+	const GqScrollEvent scroll_event{
+		x,
+		y,
+		dx,
+		dy,
+		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(controller)),
+		gdk_scroll_event_get_direction(event) != GDK_SCROLL_SMOOTH
+			? gdk_scroll_event_get_direction(event)
+			: scroll_direction_from_deltas(dx, dy),
+		gdk_event_get_time(event)
+	};
+
+	LayoutWindow *lw = get_current_layout();
+	gboolean in_lw = FALSE;
+
+	if (lw)
+		{
+		for (auto & split_image : lw->split_images)
 			{
-			if (imd == lw->split_images[i])
+			if (imd == split_image)
 				{
 				in_lw = TRUE;
 				break;
 				}
 			}
+		}
 
-		if (in_lw)
+	if (in_lw)
+		{
+		if (lw->options.split_pane_sync)
 			{
-			if (lw->options.split_pane_sync)
+			for (gint i = 0; i < MAX_SPLIT_IMAGES; i++)
 				{
-				for (i = 0; i < MAX_SPLIT_IMAGES; i++)
+				if (lw->split_images[i])
 					{
-					if (lw->split_images[i])
-						{
-						layout_image_activate(lw, i, FALSE);
-						imd->func_scroll(lw->split_images[i], event, lw->split_images[i]->data_scroll);
-						}
+					layout_image_activate(lw, i, FALSE);
+					imd->func_scroll(lw->split_images[i], &scroll_event, lw->split_images[i]->data_scroll);
 					}
 				}
-			else
-				{
-				imd->func_scroll(imd, event, imd->data_scroll);
-				}
-			return TRUE;
+			}
+		else
+			{
+			imd->func_scroll(imd, &scroll_event, imd->data_scroll);
 			}
 
-		imd->func_scroll(imd, event, imd->data_scroll);
 		return TRUE;
 		}
 
-	return FALSE;
+	imd->func_scroll(imd, &scroll_event, imd->data_scroll);
+	return TRUE;
 }
 
 /*
@@ -1242,32 +1238,25 @@ void image_set_state_func(ImageWindow *imd,
 	imd->data_state = data;
 }
 
-
-#if HAVE_GTK4
 void image_set_button_func(ImageWindow *imd,
 			   void (*func)(ImageWindow *, GqMouseButtonEvent *event, gpointer),
 			   gpointer data)
-#else
-void image_set_button_func(ImageWindow *imd,
-			   void (*func)(ImageWindow *, GdkEventButton *event, gpointer),
-			   gpointer data)
-#endif
 {
 	imd->func_button = func;
 	imd->data_button = data;
 }
 
 void image_set_drag_func(ImageWindow *imd,
-			   void (*func)(ImageWindow *, GdkEventMotion *event, gdouble dx, gdouble dy, gpointer),
-			   gpointer data)
+                         void (*func)(ImageWindow *, const GqPointerMotionEvent *event, gpointer),
+                         gpointer data)
 {
 	imd->func_drag = func;
 	imd->data_drag = data;
 }
 
 void image_set_scroll_func(ImageWindow *imd,
-			   void (*func)(ImageWindow *, GdkEventScroll *event, gpointer),
-			   gpointer data)
+                           void (*func)(ImageWindow *, const GqScrollEvent *event, gpointer),
+                           gpointer data)
 {
 	imd->func_scroll = func;
 	imd->data_scroll = data;
@@ -1832,8 +1821,6 @@ void image_background_set_color_from_options(ImageWindow *imd, gboolean fullscre
 {
 	GdkRGBA *color = nullptr;
 	GdkRGBA theme_color;
-	GdkRGBA bg_color;
-	GtkStyleContext *style_context;
 
 	if ((options->image.use_custom_border_color && !fullscreen) ||
 	    (options->image.use_custom_border_color_in_fullscreen && fullscreen))
@@ -1842,15 +1829,10 @@ void image_background_set_color_from_options(ImageWindow *imd, gboolean fullscre
 		}
 	else
 		{
-		LayoutWindow *lw = get_current_layout();
-		if (!lw) return;
-
-		style_context = gtk_widget_get_style_context(lw->window);
-		deprecated_gtk_style_context_get_background_color(style_context, GTK_STATE_FLAG_NORMAL, &bg_color);
-
-		theme_color.red = bg_color.red * 1;
-		theme_color.green = bg_color.green * 1;
-		theme_color.blue = bg_color.blue * 1;
+		theme_color.red = 0.0;
+		theme_color.green = 0.0;
+		theme_color.blue = 0.0;
+		theme_color.alpha = 1.0;
 
 		color = &theme_color;
 		}
@@ -1952,7 +1934,7 @@ void image_set_selectable(ImageWindow *imd, gboolean selectable)
 {
 	if (!imd->has_frame) return;
 
-	gq_gtk_frame_set_shadow_type(GTK_FRAME(imd->frame), GTK_SHADOW_NONE);
+	gtk_widget_remove_css_class(imd->frame, "frame");
 	gq_gtk_widget_set_border_width(imd->frame, selectable ? 4 : 0);
 }
 
@@ -2037,25 +2019,6 @@ static void image_destroy_cb(GtkWidget *, gpointer data)
 	image_free(imd);
 }
 
-static gboolean selectable_frame_draw_cb(GtkWidget *widget, cairo_t *cr, gpointer)
-{
-	GtkAllocation allocation;
-	gtk_widget_get_allocation(widget, &allocation);
-
-	gtk_render_frame(gtk_widget_get_style_context(widget), cr, allocation.x + 3, allocation.y + 3, allocation.width - 6, allocation.height - 6);
-	gtk_render_background(gtk_widget_get_style_context(widget), cr, allocation.x + 3, allocation.y + 3, allocation.width - 6, allocation.height - 6);
-
-	if (gtk_widget_has_focus(widget))
-		{
-		gtk_render_focus(gtk_widget_get_style_context(widget), cr, allocation.x, allocation.y, allocation.width - 1, allocation.height - 1);
-		}
-	else
-		{
-		gtk_render_frame(gtk_widget_get_style_context(widget), cr, allocation.x, allocation.y, allocation.width - 1, allocation.height - 1);
-		}
-	return FALSE;
-}
-
 void image_set_frame(ImageWindow *imd, gboolean frame)
 {
 	frame = !!frame;
@@ -2074,12 +2037,10 @@ void image_set_frame(ImageWindow *imd, gboolean frame)
 
 		g_object_unref(imd->pr);
 		gtk_widget_set_can_focus(imd->frame, TRUE);
-		gtk_widget_set_app_paintable(imd->frame, TRUE);
 
-		g_signal_connect(G_OBJECT(imd->frame), "draw",
-				 G_CALLBACK(selectable_frame_draw_cb), NULL);
-		g_signal_connect(G_OBJECT(imd->frame), "focus_in_event",
-				 G_CALLBACK(image_focus_in_cb), imd);
+		GtkEventController *controller = gtk_event_controller_focus_new();
+		g_signal_connect(controller, "enter", G_CALLBACK(image_focus_in_cb), imd);
+		gtk_widget_add_controller(imd->frame, controller);
 
 		gq_gtk_box_pack_start(GTK_BOX(imd->widget), imd->frame, TRUE, TRUE, 0);
 		gtk_widget_show(imd->frame);
@@ -2128,22 +2089,16 @@ ImageWindow *image_new(gboolean frame)
 
 	g_signal_connect(G_OBJECT(imd->pr), "clicked",
 			 G_CALLBACK(image_click_cb), imd);
-#if HAVE_GTK4
 	g_signal_connect(G_OBJECT(imd->pr), "button-press",
 			 G_CALLBACK(image_press_cb), imd);
 	g_signal_connect(G_OBJECT(imd->pr), "button-release",
 			 G_CALLBACK(image_release_cb), imd);
-#else
-	g_signal_connect(G_OBJECT(imd->pr), "button_press_event",
-			 G_CALLBACK(image_press_cb), imd);
-	g_signal_connect(G_OBJECT(imd->pr), "button_release_event",
-			 G_CALLBACK(image_release_cb), imd);
-#endif
 	g_signal_connect(G_OBJECT(imd->pr), "scroll_notify",
 			 G_CALLBACK(image_scroll_notify_cb), imd);
 
-	g_signal_connect(G_OBJECT(imd->pr), "scroll_event",
-			 G_CALLBACK(image_scroll_cb), imd);
+	GtkEventController *controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
+	g_signal_connect(controller, "scroll", G_CALLBACK(image_scroll_cb), imd);
+	gtk_widget_add_controller(GTK_WIDGET(imd->pr), controller);
 
 	g_signal_connect(G_OBJECT(imd->pr), "destroy",
 			 G_CALLBACK(image_destroy_cb), imd);

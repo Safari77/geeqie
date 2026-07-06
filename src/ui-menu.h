@@ -47,28 +47,36 @@ struct HardcodedWindowKey
 
 using HardcodedWindowKeyList = std::vector<HardcodedWindowKey>;
 
-GtkWidget *menu_item_add(GtkWidget *menu, const gchar *label,
+struct LayoutWindow;
+
+GtkWidget *popover_item_add(GtkWidget *menu, const gchar *label,
 			 GCallback func, gpointer data);
-GtkWidget *menu_item_add_stock(GtkWidget *menu, const gchar *label, const gchar *stock_id,
+GtkWidget *popover_item_add_stock(GtkWidget *menu, const gchar *label, const gchar *stock_id,
 			       GCallback func, gpointer data);
-GtkWidget *menu_item_add_icon(GtkWidget *menu, const gchar *label, const gchar *icon_name,
+GtkWidget *popover_item_add_icon(GtkWidget *menu, const gchar *label, const gchar *icon_name,
 			       GCallback func, gpointer data);
-GtkWidget *menu_item_add_sensitive(GtkWidget *menu, const gchar *label, gboolean sensitive,
+GtkWidget *popover_item_add_sensitive(GtkWidget *menu, const gchar *label, gboolean sensitive,
 				   GCallback func, gpointer data);
-GtkWidget *menu_item_add_icon_sensitive(GtkWidget *menu, const gchar *label, const gchar *icon_name, gboolean sensitive,
+GtkWidget *popover_item_add_icon_sensitive(GtkWidget *menu, const gchar *label, const gchar *icon_name, gboolean sensitive,
 					 GCallback func, gpointer data);
-GtkWidget *menu_item_add_check(GtkWidget *menu, const gchar *label, gboolean active,
+GtkWidget *popover_item_add_check(GtkWidget *menu, const gchar *label, gboolean active,
 			       GCallback func, gpointer data);
-GtkWidget *menu_item_add_radio(GtkWidget *menu, const gchar *label, gpointer item_data, gboolean active,
+GtkWidget *popover_item_add_radio(GtkWidget *menu, const gchar *label, gpointer item_data, gboolean active,
 			       GCallback func, gpointer data);
-gpointer menu_item_radio_get_data(GtkWidget *menu_item);
+gpointer popover_item_radio_get_data(GtkWidget *menu_item);
 
-void menu_item_add_divider(GtkWidget *menu);
+void popover_item_add_divider(GtkWidget *menu);
 
-GtkWidget *menu_item_add_simple(GtkWidget *menu, const gchar *label,
+GtkWidget *popover_item_add_simple(GtkWidget *menu, const gchar *label,
 				GCallback func, gpointer data);
 
-GtkWidget *popup_menu_short_lived();
+GtkWidget *popover_box_new(GtkWidget *parent = nullptr, gdouble x = -1, gdouble y = -1);
+
+bool menu_item_include_ellipsis(GMenuModel *model, const gchar *action);
+void plugins_menu_populate(GMenu *plugins_menu, const char *action, GList *fd_list);
+void color_profiles_menu_populate(LayoutWindow *lw, const char *action);
+GtkWidget *popup_menu(GMenu *menu_model, GtkWidget *window);
+GtkWidget *popup_menu_at(GMenu *menu_model, GtkWidget *parent, gdouble x, gdouble y);
 
 #endif
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */
