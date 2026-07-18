@@ -52,14 +52,16 @@
 #include "ui-menu.h"
 #include "ui-misc.h"
 #include "ui-tree-edit.h"
-#include "uri-utils.h"
 #include "utilops.h"
 #include "view-dir-list.h"
 #include "view-dir-tree.h"
 
 namespace
 {
-	
+
+constexpr auto VIEW_DIR_DATA_KEY = "view-dir";
+constexpr gint VIEW_DIR_DND_SCROLL_REGION = 20;
+
 GIcon *load_icon(const gchar *icon_name)
 {
 	return g_themed_icon_new(icon_name);
@@ -113,6 +115,7 @@ static void vd_destroy_cb(GtkWidget *widget, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 
+	g_object_set_data(G_OBJECT(vd->view), VIEW_DIR_DATA_KEY, nullptr);
 	file_data_unregister_notify_func(vd_notify_cb, vd);
 
 	if (vd->popup)
@@ -290,6 +293,7 @@ void vd_popup_destroy_cb(GtkWidget *, gpointer data)
 	file_data_list_free(vd->drop_list);
 	vd->drop_list = nullptr;
 	vd->drop_fd = nullptr;
+	vd->drop_fd_ref.reset(nullptr);
 }
 
 /*
@@ -298,7 +302,7 @@ void vd_popup_destroy_cb(GtkWidget *, gpointer data)
  *-----------------------------------------------------------------------------
  */
 
-static void vd_drop_menu_copy_cb(GtkWidget *, gpointer data)
+static void vd_drop_menu_copy_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 	const gchar *path;
@@ -313,7 +317,7 @@ static void vd_drop_menu_copy_cb(GtkWidget *, gpointer data)
 	file_util_copy_simple(list, path, vd->widget);
 }
 
-static void vd_drop_menu_move_cb(GtkWidget *, gpointer data)
+static void vd_drop_menu_move_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 	const gchar *path;
@@ -329,51 +333,84 @@ static void vd_drop_menu_move_cb(GtkWidget *, gpointer data)
 	file_util_move_simple(list, path, vd->widget);
 }
 
-static void vd_drop_menu_filter_cb(GtkWidget *widget, gpointer data)
+static void vd_drop_menu_filter_cb(GSimpleAction *, GVariant *parameter, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 	const gchar *path;
 	GList *list;
-	const gchar *key;
 
 	if (!vd->drop_fd) return;
-
-	key = static_cast<const gchar *>(g_object_get_data(G_OBJECT(widget), "filter_key"));
 
 	path = vd->drop_fd->path;
 	list = vd->drop_list;
 
 	vd->drop_list = nullptr;
 
-	file_util_start_filter_from_filelist(key, list, path, vd->widget);
+	file_util_start_filter_from_filelist(g_variant_get_string(parameter, nullptr), list, path, vd->widget);
+}
+
+static void vd_drop_menu_append_item(GMenu *menu, const gchar *label, const gchar *icon_name, const gchar *action_name)
+{
+	g_autoptr(GMenuItem) item = g_menu_item_new(label, action_name);
+
+	if (icon_name)
+		{
+		g_autoptr(GIcon) icon = g_themed_icon_new(icon_name);
+		g_menu_item_set_icon(item, icon);
+		}
+
+	g_menu_append_item(menu, item);
 }
 
 GtkWidget *vd_drop_menu(ViewDir *vd, gint active)
 {
-	GtkWidget *menu;
+	g_autoptr(GSimpleActionGroup) action_group = g_simple_action_group_new();
+	g_autoptr(GMenu) menu = g_menu_new();
+	g_autoptr(GMenu) transfer_section = g_menu_new();
+	g_autoptr(GMenu) filter_section = g_menu_new();
+	g_autoptr(GMenu) cancel_section = g_menu_new();
 
-	menu = popover_box_new(vd->widget);
-	g_signal_connect(G_OBJECT(menu), "destroy",
-			 G_CALLBACK(vd_popup_destroy_cb), vd);
+	g_autoptr(GSimpleAction) copy_action = g_simple_action_new("copy", nullptr);
+	g_autoptr(GSimpleAction) move_action = g_simple_action_new("move", nullptr);
+	g_autoptr(GSimpleAction) filter_action = g_simple_action_new("filter", G_VARIANT_TYPE_STRING);
 
-	popover_item_add_icon_sensitive(menu, _("_Copy"), GQ_ICON_COPY, active,
-				      G_CALLBACK(vd_drop_menu_copy_cb), vd);
-	popover_item_add_sensitive(menu, _("_Move"), active, G_CALLBACK(vd_drop_menu_move_cb), vd);
+	g_simple_action_set_enabled(copy_action, active);
+	g_simple_action_set_enabled(move_action, active);
+	g_simple_action_set_enabled(filter_action, active);
+
+	g_signal_connect(copy_action, "activate", G_CALLBACK(vd_drop_menu_copy_cb), vd);
+	g_signal_connect(move_action, "activate", G_CALLBACK(vd_drop_menu_move_cb), vd);
+	g_signal_connect(filter_action, "activate", G_CALLBACK(vd_drop_menu_filter_cb), vd);
+
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(copy_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(move_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(filter_action));
+
+	vd_drop_menu_append_item(transfer_section, _("_Copy"), GQ_ICON_COPY, "dir-drop.copy");
+	vd_drop_menu_append_item(transfer_section, _("_Move"), nullptr, "dir-drop.move");
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(transfer_section));
 
 	EditorsList editors_list = editor_list_get();
 	for (const EditorDescription *editor : editors_list)
 		{
 		if (!editor_is_filter(editor->key)) continue;
 
-		GtkWidget *item = popover_item_add_sensitive(menu, editor->name, active,
-		                                          G_CALLBACK(vd_drop_menu_filter_cb), vd);
-		g_object_set_data_full(G_OBJECT(item), "filter_key", g_strdup(editor->key), g_free);
+		g_autoptr(GMenuItem) item = g_menu_item_new(editor->name, "dir-drop.filter");
+		g_menu_item_set_attribute(item, G_MENU_ATTRIBUTE_TARGET, "s", editor->key);
+		g_menu_append_item(filter_section, item);
 		}
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(filter_section));
 
-	popover_item_add_divider(menu);
-	popover_item_add_icon(menu, _("Cancel"), GQ_ICON_CANCEL, nullptr, vd);
+	vd_drop_menu_append_item(cancel_section, _("Cancel"), GQ_ICON_CANCEL, nullptr);
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(cancel_section));
 
-	return menu;
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+	gtk_widget_insert_action_group(popover, "dir-drop", G_ACTION_GROUP(action_group));
+	popover_set_parent(popover, vd->widget);
+	g_signal_connect(G_OBJECT(popover), "destroy", G_CALLBACK(vd_popup_destroy_cb), vd);
+	popover_popup(popover);
+
+	return popover;
 }
 
 /*
@@ -587,7 +624,6 @@ static void vd_pop_menu_sort_cb(GSimpleAction *, GVariant *parameter, gpointer d
 
 void vd_pop_menu(ViewDir *vd, FileData *fd, GtkWidget *parent, gdouble x, gdouble y)
 {
-	GtkWidget *menu;
 	gboolean active;
 	gboolean rename_delete_active = FALSE;
 	gboolean new_folder_active = FALSE;
@@ -788,6 +824,7 @@ static void vd_dnd_drop_update(ViewDir *vd, gint x, gint y)
 		}
 
 	vd->drop_fd = fd;
+	vd->drop_fd_ref.reset(fd);
 
 	if (vd->drop_fd)
 		{
@@ -819,7 +856,10 @@ static GdkDragAction vd_dnd_drop_motion(GtkDropTargetAsync *, GdkDrop *drop, gdo
 
 	vd_dnd_drop_update(vd, x, y);
 
-	if (vd->drop_fd)
+	gint h = gtk_widget_get_height(vd->view);
+	gboolean near_edge = (y < VIEW_DIR_DND_SCROLL_REGION || y >= h - VIEW_DIR_DND_SCROLL_REGION);
+
+	if (vd->drop_fd && near_edge)
 		{
 		const auto vd_auto_scroll_notify_cb = [vd](GtkWidget *, GqPoint)
 		{
@@ -832,7 +872,7 @@ static GdkDragAction vd_dnd_drop_motion(GtkDropTargetAsync *, GdkDrop *drop, gdo
 
 			return true;
 		};
-		widget_auto_scroll_start(vd->view, -1, -1, vd_auto_scroll_notify_cb);
+		widget_auto_scroll_start(vd->view, -1, VIEW_DIR_DND_SCROLL_REGION, vd_auto_scroll_notify_cb);
 		}
 	else
 		{
@@ -849,6 +889,7 @@ static void vd_dnd_drop_leave(GtkDropTargetAsync *, GdkDrop *, gpointer data)
 	if (vd->drop_fd != vd->click_fd) vd_color_set(vd, vd->drop_fd, FALSE);
 
 	vd->drop_fd = nullptr;
+	vd->drop_fd_ref.reset(nullptr);
 	vd_dnd_drop_scroll_cancel(vd);
 	widget_auto_scroll_stop(vd->view);
 
@@ -858,85 +899,37 @@ static void vd_dnd_drop_leave(GtkDropTargetAsync *, GdkDrop *, gpointer data)
 struct VdDropReadData
 {
 	GtkWidget *view;
-	GdkDrop *drop;
+	FileData *drop_fd;
 };
 
-static GList *vd_dnd_file_list_from_uri_list(const gchar *data)
+static void vd_dnd_drop_data_free(VdDropReadData *drop_data)
 {
-	g_auto(GStrv) uris = g_uri_list_extract_uris(data);
-	GList *path_list = nullptr;
+	if (!drop_data) return;
 
-	for (gint i = 0; uris && uris[i]; i++)
-		{
-		g_autofree gchar *path = g_filename_from_uri(uris[i], nullptr, nullptr);
-		if (path)
-			{
-			path_list = g_list_prepend(path_list, g_steal_pointer(&path));
-			}
-		}
-
-	path_list = g_list_reverse(path_list);
-	GList *file_list = filelist_from_path_list(path_list);
-	g_list_free_full(path_list, g_free);
-
-	return file_list;
-}
-
-static GList *vd_dnd_file_list_from_stream(GInputStream *stream)
-{
-	GString *text = g_string_new(nullptr);
-	gchar buffer[4096];
-	gssize bytes_read;
-
-	while ((bytes_read = g_input_stream_read(stream, buffer, sizeof(buffer), nullptr, nullptr)) > 0)
-		{
-		g_string_append_len(text, buffer, bytes_read);
-		}
-
-	GList *file_list = (bytes_read < 0) ? nullptr : vd_dnd_file_list_from_uri_list(text->str);
-	g_string_free(text, TRUE);
-
-	return file_list;
-}
-
-static void vd_dnd_drop_read_cb(GObject *source_object, GAsyncResult *result, gpointer data)
-{
-	g_autofree auto *drop_data = static_cast<VdDropReadData *>(data);
-	GdkDrop *drop = GDK_DROP(source_object);
-	GError *error = nullptr;
-	const gchar *mime_type = nullptr;
-	g_autoptr(GInputStream) stream = gdk_drop_read_finish(drop, result, &mime_type, &error);
-	GdkDragAction action = GDK_ACTION_NONE;
-
-	if (stream && g_strcmp0(mime_type, "text/uri-list") == 0)
-		{
-		GList *list = vd_dnd_file_list_from_stream(stream);
-		auto *vd = static_cast<ViewDir *>(g_object_get_data(G_OBJECT(drop_data->view), "view-dir"));
-
-		if (vd && vd->drop_fd && list)
-			{
-			file_data_list_free(vd->drop_list);
-			vd->drop_list = list;
-
-			GtkWidget *menu = vd_drop_menu(vd, access_file(vd->drop_fd->path, W_OK | X_OK));
-			(void)menu;
-			action = vd_dnd_select_action(drop);
-			}
-		else
-			{
-			file_data_list_free(list);
-			}
-		}
-
-	if (error)
-		{
-		DEBUG_1("Directory drop read failed: %s", error->message);
-		g_error_free(error);
-		}
-
-	gdk_drop_finish(drop_data->drop, action);
-	g_object_unref(drop_data->drop);
 	g_object_unref(drop_data->view);
+	file_data_unref(drop_data->drop_fd);
+	g_free(drop_data);
+}
+
+static void vd_dnd_drop_file_received(GdkDrop *drop, GList *list, gpointer data)
+{
+	auto *drop_data = static_cast<VdDropReadData *>(data);
+	auto *vd = static_cast<ViewDir *>(g_object_get_data(G_OBJECT(drop_data->view), VIEW_DIR_DATA_KEY));
+	auto action = GDK_ACTION_NONE;
+
+	if (vd && drop_data->drop_fd && list)
+		{
+		file_data_list_free(vd->drop_list);
+		vd->drop_list = filelist_copy(list);
+		vd->drop_fd = drop_data->drop_fd;
+		vd->drop_fd_ref.reset(drop_data->drop_fd);
+
+		vd_drop_menu(vd, access_file(vd->drop_fd->path, W_OK | X_OK));
+		action = vd_dnd_select_action(drop);
+		}
+
+	gdk_drop_finish(drop, action);
+	vd_dnd_drop_data_free(drop_data);
 }
 
 static gboolean vd_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdouble y, gpointer data)
@@ -949,12 +942,11 @@ static gboolean vd_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdou
 
 	if (!vd->drop_fd) return FALSE;
 
-	static const gchar *mime_types[] = {"text/uri-list", nullptr};
 	auto *drop_data = g_new0(VdDropReadData, 1);
 	drop_data->view = GTK_WIDGET(g_object_ref(vd->view));
-	drop_data->drop = GDK_DROP(g_object_ref(drop));
+	drop_data->drop_fd = file_data_ref(vd->drop_fd);
 
-	gdk_drop_read_async(drop, mime_types, G_PRIORITY_DEFAULT, nullptr, vd_dnd_drop_read_cb, drop_data);
+	dnd_read_file_list_async(drop, vd_dnd_drop_file_received, drop_data);
 
 	return TRUE;
 }
@@ -963,7 +955,7 @@ void vd_dnd_init(ViewDir *vd)
 {
 	static const char *mime_types[] = {"text/uri-list"};
 
-	g_object_set_data(G_OBJECT(vd->view), "view-dir", vd);
+	g_object_set_data(G_OBJECT(vd->view), VIEW_DIR_DATA_KEY, vd);
 
 	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
 	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
@@ -981,34 +973,34 @@ void vd_dnd_init(ViewDir *vd)
  *----------------------------------------------------------------------------
  */
 
-void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *, gpointer data)
-{
-	auto vd = static_cast<ViewDir *>(data);
-	FileData *fd = vd_get_fd_from_tree_path(vd, tview, tpath);
-
-	vd_select_row(vd, fd);
-}
-
-static GdkRGBA *vd_color_shifted()
-{
-	static GdkRGBA color;
-	static GtkWidget *done = nullptr;
-
-/* @FIXME GTK4 no background color */
-
-	return &color;
-}
-
 void vd_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
 	gboolean set;
 
 	gtk_tree_model_get(tree_model, iter, DIR_COLUMN_COLOR, &set, -1);
+
+	GdkRGBA color_bg;
+	GtkStyleContext *style_context = gtk_widget_get_style_context(vd->view);
+	if (!gtk_style_context_lookup_color(style_context, "theme_base_color", &color_bg))
+		{
+		gtk_style_context_get_color(style_context, &color_bg);
+		color_bg.alpha = 0.35;
+		}
+	shift_color(color_bg);
+
 	g_object_set(cell,
-	             "cell-background-rgba", vd_color_shifted(),
+	             "cell-background-rgba", &color_bg,
 	             "cell-background-set", set,
-	             NULL);
+	             nullptr);
+}
+
+void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *, gpointer data)
+{
+	auto vd = static_cast<ViewDir *>(data);
+	FileData *fd = vd_get_fd_from_tree_path(vd, tview, tpath);
+
+	vd_select_row(vd, fd);
 }
 
 gboolean vd_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)

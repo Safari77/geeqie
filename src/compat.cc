@@ -38,6 +38,8 @@ struct GqWindowPosition
 	gint y;
 };
 
+} // namespace
+
 const gchar *stock_id_to_icon_name(const gchar *stock_id)
 {
 	if (!stock_id) return GQ_ICON_MISSING_IMAGE;
@@ -70,6 +72,9 @@ const gchar *stock_id_to_icon_name(const gchar *stock_id)
 
 	return stock_id;
 }
+
+namespace
+{
 
 void gtk4_box_apply_child_packing(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding)
 {
@@ -268,7 +273,8 @@ void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget)
 
 void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
 {
-	if (!widget || gtk_widget_get_parent(widget) != container) return;
+	if (!GTK_IS_WIDGET(container) || !GTK_IS_WIDGET(widget)) return;
+	if (gtk_widget_get_parent(widget) != container) return;
 
 	if (GTK_IS_BOX(container))
 		{
@@ -325,7 +331,7 @@ void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget)
 
 void gq_gtk_widget_destroy(GtkWidget *widget)
 {
-	if (!widget) return;
+	if (!GTK_IS_WIDGET(widget)) return;
 
 	if (GTK_IS_WINDOW(widget))
 		{

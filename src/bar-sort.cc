@@ -139,11 +139,11 @@ static void bar_sort_mode_sync(SortData *sd, BarSort::Mode mode)
 	bar_sort_undo_set(sd, nullptr, nullptr);
 }
 
-static void bar_sort_mode_cb(GtkWidget *combo, gpointer data)
+static void bar_sort_mode_cb(GObject *object, GParamSpec *, gpointer data)
 {
 	auto sd = static_cast<SortData *>(data);
 
-	if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == BarSort::MODE_FOLDER)
+	if (gtk_drop_down_get_selected(GTK_DROP_DOWN(object)) == BarSort::MODE_FOLDER)
 		{
 		gtk_widget_set_tooltip_text(sd->add_button, _("Add Bookmark"));
 		bar_sort_mode_sync(sd, BarSort::MODE_FOLDER);
@@ -328,6 +328,56 @@ static void bar_sort_bookmark_select_collection(SortData *sd, const gchar *path)
 	g_list_foreach(list, reinterpret_cast<GFunc>(collect_manager_add), const_cast<gchar *>(path));
 }
 
+static void bar_sort_bookmark_drop_folder(SortData *sd, const gchar *path, GList *list)
+{
+	if (!isdir(path) || !list) return;
+
+	bar_sort_undo_set(sd, list, path);
+
+	switch (sd->action)
+		{
+		case BarSort::COPY:
+			file_util_copy_simple(filelist_copy(list), path, sd->lw->window);
+			break;
+
+		case BarSort::MOVE:
+			file_util_move_simple(filelist_copy(list), path, sd->lw->window);
+			break;
+
+		case BarSort::FILTER:
+			file_util_start_filter_from_filelist(sd->filter_key, filelist_copy(list), path, sd->lw->window);
+			break;
+
+		default:
+			break;
+		}
+}
+
+static void bar_sort_bookmark_drop_collection(SortData *sd, const gchar *path, GList *list)
+{
+	if (!path || !list) return;
+
+	bar_sort_undo_set(sd, list, path);
+	g_free(sd->undo_collection);
+	sd->undo_collection = g_strdup(path);
+
+	g_list_foreach(list, reinterpret_cast<GFunc>(collect_manager_add), const_cast<gchar *>(path));
+}
+
+static void bar_sort_bookmark_drop(SortData *sd, const gchar *path, GList *list)
+{
+	if (!path || !list) return;
+
+	if (sd->mode == BarSort::MODE_FOLDER)
+		{
+		bar_sort_bookmark_drop_folder(sd, path, list);
+		}
+	else
+		{
+		bar_sort_bookmark_drop_collection(sd, path, list);
+		}
+}
+
 static void bar_sort_set_action(SortData *sd, BarSort::Action action, const gchar *filter_key)
 {
 	sd->action = action;
@@ -508,7 +558,6 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 	GtkWidget *buttongrp;
 	GtkWidget *label;
 	GtkWidget *tbar;
-	GtkWidget *combo;
 	gboolean have_filter;
 	GtkWidget *button;
 
@@ -539,15 +588,12 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), label, FALSE, FALSE, 0);
 	gtk_widget_show(label);
 
-	combo = gtk_combo_box_text_new();
-	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), combo, FALSE, FALSE, 0);
-	gtk_widget_show(combo);
+	static const char *sort_mode_items[] = { _("Folders"), _("Collections"), nullptr };
+	GtkWidget *drop_down = gtk_drop_down_new_from_strings(sort_mode_items);
+	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), drop_down, FALSE, FALSE, 0);
 
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Folders"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Collections"));
-
-	g_signal_connect(G_OBJECT(combo), "changed",
-			 G_CALLBACK(bar_sort_mode_cb), sd);
+	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
+	                 G_CALLBACK(bar_sort_mode_cb), sd);
 
 	sd->folder_group = pref_box_new(sd->vbox, FALSE, GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(sd->folder_group);
@@ -617,6 +663,10 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 			}
 	};
 	sd->bookmarks = bookmark_list_new(SORT_KEY_FOLDERS, bar_sort_bookmark_select);
+	bookmark_list_set_drop_func(sd->bookmarks, [sd](const gchar *path, GList *list)
+	{
+		bar_sort_bookmark_drop(sd, path, list);
+	});
 	DEBUG_NAME(sd->bookmarks);
 	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), sd->bookmarks, TRUE, TRUE, 0);
 	gtk_widget_show(sd->bookmarks);
@@ -636,7 +686,7 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 
 	sd->mode = static_cast<BarSort::Mode>(-1);
 	bar_sort_mode_sync(sd, bar_sort.mode);
-	gtk_combo_box_set_active(GTK_COMBO_BOX(combo), static_cast<gint>(sd->mode));
+	gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down), static_cast<guint>(sd->mode));
 
 	return sd->vbox;
 }

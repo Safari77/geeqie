@@ -227,10 +227,10 @@ LayoutOptions init_layout_options(const gchar **attribute_names, const gchar **a
 	lop.file_view_list_sort = { SORT_NAME, TRUE, TRUE };
 	lop.file_view_type = FILEVIEW_LIST;
 	lop.float_window.rect = {0, 0, 260, 450};
-	lop.float_window.vdivider_pos = -1;
+	lop.float_window.vdivider_pos = 200;
 	lop.home_path = nullptr;
 	lop.id = g_strdup("null");
-	lop.main_window.hdivider_pos = -1;
+	lop.main_window.hdivider_pos = 300;
 	lop.main_window.maximized = FALSE;
 	lop.main_window.rect = {0, 0, 720, 540};
 	lop.main_window.vdivider_pos = 200;
@@ -512,21 +512,39 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 	DEBUG_NAME(menu_tool_bar);
 	gtk_widget_show(menu_tool_bar);
 
-	GtkWidget *scroll_window = gtk_scrolled_window_new();
-	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
+	if (!lw->scrolled_window)
+		{
+		lw->scrolled_window = gtk_scrolled_window_new();
+		g_object_ref(lw->scrolled_window);
+		gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(lw->scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
+		}
 
-	gq_gtk_container_add(scroll_window, menu_tool_bar);
+	if (gtk_widget_get_parent(menu_tool_bar) != lw->scrolled_window)
+		{
+		widget_remove_from_parent(menu_tool_bar);
+		gq_gtk_container_add(lw->scrolled_window, menu_tool_bar);
+		}
 
 	if (!options->expand_menu_toolbar)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(box), scroll_window, FALSE, FALSE, 0);
+		if (!options->hamburger_menu)
+			{
+			GtkWidget *menu_bar = layout_actions_menu_bar(lw);
 
-		gq_gtk_widget_show_all(scroll_window);
+			widget_remove_from_parent(menu_bar);
+			gq_gtk_box_pack_start(GTK_BOX(box), menu_bar, FALSE, FALSE, 0);
+			}
+
+		widget_remove_from_parent(lw->scrolled_window);
+		gq_gtk_box_pack_start(GTK_BOX(box), lw->scrolled_window, FALSE, FALSE, 0);
+
+		gq_gtk_widget_show_all(lw->scrolled_window);
 		}
 	else
 		{
-		gq_gtk_box_pack_start(GTK_BOX(lw->main_box), scroll_window, FALSE, FALSE, 0);
-		gq_gtk_widget_show_all(scroll_window);
+		widget_remove_from_parent(lw->scrolled_window);
+		gq_gtk_box_pack_start(GTK_BOX(lw->main_box), lw->scrolled_window, FALSE, FALSE, 0);
+		gq_gtk_widget_show_all(lw->scrolled_window);
 		}
 
 	if (options->hamburger_menu)
@@ -544,9 +562,12 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 
 		gtk_header_bar_pack_end(GTK_HEADER_BAR(header), menu_button);
 		}
-	else
+	else if (options->expand_menu_toolbar)
 		{
-		gtk_box_prepend(GTK_BOX(lw->main_box), layout_actions_menu_bar(lw));
+		GtkWidget *menu_bar = layout_actions_menu_bar(lw);
+
+		widget_remove_from_parent(menu_bar);
+		gtk_box_prepend(GTK_BOX(lw->main_box), menu_bar);
 	}
 
 	lw->path_entry = tab_completion_new_with_history(nullptr, nullptr, "path_list", -1);
@@ -612,58 +633,85 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
  *-----------------------------------------------------------------------------
  */
 
-static void layout_sort_menu_cb(GtkWidget *widget, gpointer data)
+static void layout_sort_method_change_state_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
-
 	auto *lw = static_cast<LayoutWindow *>(data);
 	if (!lw) return;
 
 	auto sort = lw->options.file_view_list_sort;
-	sort.method = static_cast<SortType>(GPOINTER_TO_INT(popover_item_radio_get_data(widget)));
+	sort.method = static_cast<SortType>(g_variant_get_int32(state));
 
 	if (sort_type_requires_metadata(sort.method))
 		{
 		vf_read_metadata_in_idle(lw->vf);
 		}
+	g_simple_action_set_state(action, state);
 	layout_sort_set_files(lw, sort);
 }
 
-static void layout_sort_menu_ascend_cb(GtkWidget *, gpointer data)
+static void layout_sort_ascending_change_state_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
+	if (!lw) return;
 
 	auto sort = lw->options.file_view_list_sort;
-	sort.ascending = !sort.ascending;
+	sort.ascending = g_variant_get_boolean(state);
 
+	g_simple_action_set_state(action, state);
 	layout_sort_set_files(lw, sort);
 }
 
-static void layout_sort_menu_case_cb(GtkWidget *, gpointer data)
+static void layout_sort_case_change_state_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
+	if (!lw) return;
 
 	auto sort = lw->options.file_view_list_sort;
-	sort.case_sensitive = !sort.case_sensitive;
+	sort.case_sensitive = g_variant_get_boolean(state);
 
+	g_simple_action_set_state(action, state);
 	layout_sort_set_files(lw, sort);
 }
 
-static void layout_sort_button_press_cb(GtkWidget *button, gpointer data)
+static void layout_sort_popover_append_method_item(GMenu *menu, SortType sort_type)
 {
-	auto lw = static_cast<LayoutWindow *>(data);
+	g_autoptr(GMenuItem) item = g_menu_item_new(sort_type_get_text(sort_type), "sort.method");
+	g_menu_item_set_attribute(item, G_MENU_ATTRIBUTE_TARGET, "i", sort_type);
+	g_menu_append_item(menu, item);
+}
 
-	GtkWidget *menu = submenu_add_sort(nullptr, G_CALLBACK(layout_sort_menu_cb), lw, TRUE, lw->options.file_view_list_sort.method);
-	GtkWidget *popover = gtk_popover_new();
-	gtk_popover_set_child(GTK_POPOVER(popover), menu);
-	gtk_widget_set_parent(popover, button);
+static GtkWidget *layout_sort_popover_new(LayoutWindow *lw)
+{
+	g_autoptr(GSimpleActionGroup) action_group = g_simple_action_group_new();
+	g_autoptr(GSimpleAction) method_action = g_simple_action_new_stateful("method", G_VARIANT_TYPE_INT32, g_variant_new_int32(lw->options.file_view_list_sort.method));
+	g_autoptr(GSimpleAction) ascending_action = g_simple_action_new_stateful("ascending", nullptr, g_variant_new_boolean(lw->options.file_view_list_sort.ascending));
+	g_autoptr(GSimpleAction) case_action = g_simple_action_new_stateful("case", nullptr, g_variant_new_boolean(lw->options.file_view_list_sort.case_sensitive));
 
-	/* ascending option */
-	popover_item_add_divider(menu);
-	popover_item_add_check(menu, _("Ascending"), lw->options.file_view_list_sort.ascending, G_CALLBACK(layout_sort_menu_ascend_cb), lw);
-	popover_item_add_check(menu, _("Case"), lw->options.file_view_list_sort.case_sensitive, G_CALLBACK(layout_sort_menu_case_cb), lw);
+	g_signal_connect(method_action, "change-state", G_CALLBACK(layout_sort_method_change_state_cb), lw);
+	g_signal_connect(ascending_action, "change-state", G_CALLBACK(layout_sort_ascending_change_state_cb), lw);
+	g_signal_connect(case_action, "change-state", G_CALLBACK(layout_sort_case_change_state_cb), lw);
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(method_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(ascending_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(case_action));
 
-	gtk_popover_popup(GTK_POPOVER(popover));
+	g_autoptr(GMenu) menu = g_menu_new();
+	g_autoptr(GMenu) sort_section = g_menu_new();
+	g_autoptr(GMenu) options_section = g_menu_new();
+
+	for (const SortType sort_type : { SORT_NAME, SORT_NUMBER, SORT_TIME, SORT_CTIME, SORT_EXIFTIME,
+	                                  SORT_EXIFTIMEDIGITIZED, SORT_SIZE, SORT_RATING, SORT_CLASS })
+		{
+		layout_sort_popover_append_method_item(sort_section, sort_type);
+		}
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(sort_section));
+
+	g_menu_append(options_section, _("Ascending"), "sort.ascending");
+	g_menu_append(options_section, _("Case"), "sort.case");
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(options_section));
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+	gtk_widget_insert_action_group(popover, "sort", G_ACTION_GROUP(action_group));
+	return popover;
 }
 
 namespace
@@ -671,16 +719,16 @@ namespace
 
 constexpr auto INFO_BUTTON_LABEL_KEY = "gq-info-button-label";
 
-GtkWidget *layout_info_button_new(const gchar *label_text, const gchar *icon_name)
+GtkWidget *layout_info_menu_button_new(const gchar *label_text, const gchar *icon_name)
 {
-	GtkWidget *button = gtk_button_new();
+	GtkWidget *button = gtk_menu_button_new();
 	GtkWidget *content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
 	GtkWidget *label = gtk_label_new(label_text);
 	GtkWidget *image = gtk_image_new_from_icon_name(icon_name);
 
 	gtk_box_append(GTK_BOX(content), label);
 	gtk_box_append(GTK_BOX(content), image);
-	gtk_button_set_child(GTK_BUTTON(button), content);
+	gtk_menu_button_set_child(GTK_MENU_BUTTON(button), content);
 	g_object_set_data(G_OBJECT(button), INFO_BUTTON_LABEL_KEY, label);
 
 	return button;
@@ -704,10 +752,8 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 	gq_gtk_box_pack_start(GTK_BOX(box), frame, FALSE, FALSE, 0);
 	gtk_widget_show(frame);
 
-	button = layout_info_button_new(sort_type_get_text(lw->options.file_view_list_sort.method), GQ_ICON_PAN_DOWN);
-
-	g_signal_connect(G_OBJECT(button), "clicked",
-			 G_CALLBACK(layout_sort_button_press_cb), lw);
+	button = layout_info_menu_button_new(sort_type_get_text(lw->options.file_view_list_sort.method), GQ_ICON_PAN_DOWN);
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), layout_sort_popover_new(lw));
 	gtk_widget_add_css_class(button, "flat");
 
 	gq_gtk_container_add(frame, button);
@@ -717,53 +763,60 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 	return button;
 }
 
-template<ZoomMode mode>
-static void layout_zoom_menu_cb(GtkWidget *widget, gpointer)
+static void layout_zoom_mode_change_state_cb(GSimpleAction *action, GVariant *state, gpointer)
 {
-	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
-
-	options->image.zoom_mode = mode;
+	options->image.zoom_mode = static_cast<ZoomMode>(g_variant_get_int32(state));
+	g_simple_action_set_state(action, state);
 }
 
-template<ScrollReset scroll_reset_method>
-static void layout_scroll_menu_cb(GtkWidget *widget, gpointer)
+static void layout_scroll_reset_change_state_cb(GSimpleAction *action, GVariant *state, gpointer)
 {
-	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
-
-	options->image.scroll_reset_method = scroll_reset_method;
+	options->image.scroll_reset_method = static_cast<ScrollReset>(g_variant_get_int32(state));
+	g_simple_action_set_state(action, state);
 	image_options_sync();
 }
 
-static void layout_zoom_button_press_cb(GtkWidget *widget, gpointer)
+static void layout_zoom_popover_append_item(GMenu *menu, const gchar *label, const gchar *action_name, gint target)
 {
-	GtkWidget *menu = popover_box_new(widget);
-
-	popover_item_add_radio(menu, _("Zoom to original size"), nullptr,
-	                    options->image.zoom_mode == ZOOM_RESET_ORIGINAL,
-	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_ORIGINAL>), nullptr);
-	popover_item_add_radio(menu, _("Fit image to window"), nullptr,
-	                    options->image.zoom_mode == ZOOM_RESET_FIT_WINDOW,
-	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_FIT_WINDOW>), nullptr);
-	popover_item_add_radio(menu, _("Leave Zoom at previous setting"), nullptr,
-	                    options->image.zoom_mode == ZOOM_RESET_NONE,
-	                    G_CALLBACK(layout_zoom_menu_cb<ZOOM_RESET_NONE>), nullptr);
-
-	popover_item_add_divider(menu);
-
-	popover_item_add_radio(menu, _("Scroll to top left corner"), nullptr,
-	                    options->image.scroll_reset_method == ScrollReset::TOPLEFT,
-	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::TOPLEFT>), nullptr);
-	popover_item_add_radio(menu, _("Scroll to image center"), nullptr,
-	                    options->image.scroll_reset_method == ScrollReset::CENTER,
-	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::CENTER>), nullptr);
-	popover_item_add_radio(menu, _("Keep the region from previous image"), nullptr,
-	                    options->image.scroll_reset_method == ScrollReset::NOCHANGE,
-	                    G_CALLBACK(layout_scroll_menu_cb<ScrollReset::NOCHANGE>), nullptr);
-
-	(void)menu;
+	g_autoptr(GMenuItem) item = g_menu_item_new(label, action_name);
+	g_menu_item_set_attribute(item, G_MENU_ATTRIBUTE_TARGET, "i", target);
+	g_menu_append_item(menu, item);
 }
 
-static GtkWidget *layout_zoom_button(LayoutWindow *lw, GtkWidget *box, gint size, gboolean)
+static GtkWidget *layout_zoom_popover_new()
+{
+	g_autoptr(GSimpleActionGroup) action_group = g_simple_action_group_new();
+	g_autoptr(GSimpleAction) zoom_action = g_simple_action_new_stateful("mode", G_VARIANT_TYPE_INT32,
+	                                                                    g_variant_new_int32(options->image.zoom_mode));
+	g_autoptr(GSimpleAction) scroll_action = g_simple_action_new_stateful("scroll-reset", G_VARIANT_TYPE_INT32,
+	                                                                      g_variant_new_int32(options->image.scroll_reset_method));
+
+	g_signal_connect(zoom_action, "change-state", G_CALLBACK(layout_zoom_mode_change_state_cb), nullptr);
+	g_signal_connect(scroll_action, "change-state", G_CALLBACK(layout_scroll_reset_change_state_cb), nullptr);
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(zoom_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(scroll_action));
+
+	g_autoptr(GMenu) menu = g_menu_new();
+	g_autoptr(GMenu) zoom_section = g_menu_new();
+	g_autoptr(GMenu) scroll_section = g_menu_new();
+
+	layout_zoom_popover_append_item(zoom_section, _("Zoom to original size"), "zoom.mode", static_cast<gint>(ZOOM_RESET_ORIGINAL));
+	layout_zoom_popover_append_item(zoom_section, _("Fit image to window"), "zoom.mode", static_cast<gint>(ZOOM_RESET_FIT_WINDOW));
+	layout_zoom_popover_append_item(zoom_section, _("Leave Zoom at previous setting"), "zoom.mode", static_cast<gint>(ZOOM_RESET_NONE));
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(zoom_section));
+
+	layout_zoom_popover_append_item(scroll_section, _("Scroll to top left corner"), "zoom.scroll-reset", static_cast<gint>(ScrollReset::TOPLEFT));
+	layout_zoom_popover_append_item(scroll_section, _("Scroll to image center"), "zoom.scroll-reset", static_cast<gint>(ScrollReset::CENTER));
+	layout_zoom_popover_append_item(scroll_section, _("Keep the region from previous image"), "zoom.scroll-reset", static_cast<gint>(ScrollReset::NOCHANGE));
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(scroll_section));
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+	gtk_widget_insert_action_group(popover, "zoom", G_ACTION_GROUP(action_group));
+
+	return popover;
+}
+
+static GtkWidget *layout_zoom_button(LayoutWindow *, GtkWidget *box, gint size, gboolean)
 {
 	GtkWidget *button;
 
@@ -776,11 +829,10 @@ static GtkWidget *layout_zoom_button(LayoutWindow *lw, GtkWidget *box, gint size
 
 	gtk_widget_show(frame);
 
-	button = layout_info_button_new("1:1", GQ_ICON_PAN_DOWN);
+	button = layout_info_menu_button_new("1:1", GQ_ICON_PAN_DOWN);
 
-	g_signal_connect(G_OBJECT(button), "clicked",
-			 G_CALLBACK(layout_zoom_button_press_cb), lw);
 	gtk_widget_add_css_class(button, "flat");
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), layout_zoom_popover_new());
 
 	gq_gtk_container_add(frame, button);
 	gtk_widget_show(button);
@@ -1508,7 +1560,11 @@ void layout_sort_set_files(LayoutWindow *lw, FileData::FileList::SortSettings se
 
 	lw->options.file_view_list_sort = settings;
 
-	if (lw->info_sort) layout_info_button_set_label(lw->info_sort, sort_type_get_text(settings.method));
+	if (lw->info_sort)
+		{
+		layout_info_button_set_label(lw->info_sort, sort_type_get_text(settings.method));
+		gtk_menu_button_set_popover(GTK_MENU_BUTTON(lw->info_sort), layout_sort_popover_new(lw));
+		}
 	layout_list_sync_sort(lw);
 }
 
@@ -1769,7 +1825,11 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 		gtk_window_set_resizable(GTK_WINDOW(lw->tools), TRUE);
 		gq_gtk_widget_set_border_width(lw->tools, 0);
 
-		if (options->expand_menu_toolbar) gq_gtk_container_remove(lw->main_box, lw->menu_tool_bar);
+		if (options->expand_menu_toolbar)
+			{
+			widget_remove_from_parent(lw->menu_bar);
+			widget_remove_from_parent(lw->scrolled_window);
+			}
 
 		new_window = TRUE;
 		}
@@ -1787,7 +1847,14 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 	gq_gtk_container_add(lw->tools, vbox);
 	if (options->expand_menu_toolbar)
 		{
-			gq_gtk_box_pack_start(GTK_BOX(vbox), lw->menu_tool_bar, FALSE, FALSE, 0);
+		if (!options->hamburger_menu)
+			{
+			widget_remove_from_parent(lw->menu_bar);
+			gq_gtk_box_pack_start(GTK_BOX(vbox), lw->menu_bar, FALSE, FALSE, 0);
+			}
+
+		widget_remove_from_parent(lw->scrolled_window);
+		gq_gtk_box_pack_start(GTK_BOX(vbox), lw->scrolled_window, FALSE, FALSE, 0);
 		}
 	gtk_widget_show(vbox);
 
@@ -1977,7 +2044,14 @@ static void layout_grid_setup(LayoutWindow *lw)
 
 		layout_tools_setup(lw, tools, files);
 
-		image_grab_focus(lw->image);
+		if (lw->options.tools_hidden || !lw->vf)
+			{
+			image_grab_focus(lw->image);
+			}
+		else
+			{
+			gtk_widget_grab_focus(lw->vf->listview);
+			}
 
 		return;
 		}
@@ -2090,13 +2164,15 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 		{
 		if (lw->toolbar[TOOLBAR_STATUS]) widget_remove_from_parent(lw->toolbar[TOOLBAR_STATUS]);
 
-		if (lw->menu_tool_bar) widget_remove_from_parent(lw->menu_tool_bar);
+		if (lw->scrolled_window) widget_remove_from_parent(lw->scrolled_window);
+		if (lw->menu_bar) widget_remove_from_parent(lw->menu_bar);
 		}
 	else
 		{
 		if (lw->menu_bar) widget_remove_from_parent(lw->menu_bar);
+		if (lw->scrolled_window) widget_remove_from_parent(lw->scrolled_window);
 		for (i = 0; i < TOOLBAR_COUNT; i++)
-			if (lw->toolbar[i]) widget_remove_from_parent(lw->toolbar[i]);
+			if (i != TOOLBAR_MAIN && lw->toolbar[i]) widget_remove_from_parent(lw->toolbar[i]);
 		}
 
 	/* clear it all */
@@ -2524,6 +2600,7 @@ void layout_free(LayoutWindow *lw)
 	layout_bars_close(lw);
 
 	if (lw->menu_bar) g_object_unref(lw->menu_bar);
+	if (lw->scrolled_window) g_object_unref(lw->scrolled_window);
 	if (lw->utility_box) g_object_unref(lw->utility_box);
 
 	for (i = 0; i < TOOLBAR_COUNT; i++)
@@ -2531,6 +2608,7 @@ void layout_free(LayoutWindow *lw)
 		if (lw->toolbar[i]) g_object_unref(lw->toolbar[i]);
 		}
 
+	g_object_set_data(G_OBJECT(lw->window), "layout-window", nullptr);
 	gq_gtk_widget_destroy(lw->window);
 
 	if (lw->split_image_sizegroup) g_object_unref(lw->split_image_sizegroup);
@@ -2579,6 +2657,47 @@ static gboolean move_window_to_workspace_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+static void layout_file_view_click_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
+{
+	auto lw = static_cast<LayoutWindow *>(data);
+	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	const guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+	const GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture));
+
+	if (button != GDK_BUTTON_PRIMARY ||
+	    n_press != 1 ||
+	    (state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK)) ||
+	    !lw->vf)
+		{
+		return;
+		}
+
+	GtkWidget *picked = gtk_widget_pick(widget, x, y, GTK_PICK_DEFAULT);
+	for (GtkWidget *work = picked; work; work = gtk_widget_get_parent(work))
+		{
+		if (work == lw->vf->listview)
+			{
+			graphene_point_t window_point{static_cast<float>(x), static_cast<float>(y)};
+			graphene_point_t file_point{};
+
+			if (!gtk_widget_compute_point(widget, lw->vf->listview, &window_point, &file_point))
+				{
+				return;
+				}
+
+			FileData *fd = vf_find_data_by_coord(lw->vf, static_cast<gint>(file_point.x), static_cast<gint>(file_point.y), nullptr);
+			if (fd)
+				{
+				gtk_widget_grab_focus(lw->vf->listview);
+				vf_click_at_point(lw->vf, file_point.x, file_point.y, state);
+				layout_image_set_fd(lw, fd);
+				}
+
+			return;
+			}
+		}
+}
+
 static LayoutWindow *layout_new(const LayoutOptions &lop)
 {
 	LayoutWindow *lw;
@@ -2614,6 +2733,7 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 
 	lw->window = window_new(GQ_APPNAME_LC, nullptr, nullptr);
 	DEBUG_NAME(lw->window);
+	g_object_set_data(G_OBJECT(lw->window), "layout-window", lw);
 
 	GApplication *app = g_application_get_default();
 	register_main_window_actions(GTK_APPLICATION(app), (lw));
@@ -2642,6 +2762,12 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 	g_signal_connect(focus_controller, "enter",
 			 G_CALLBACK(layout_set_current_cb), lw);
 	gtk_widget_add_controller(lw->window, focus_controller);
+
+	GtkGesture *file_view_click = gtk_gesture_click_new();
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(file_view_click), 0);
+	gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(file_view_click), GTK_PHASE_CAPTURE);
+	g_signal_connect(file_view_click, "pressed", G_CALLBACK(layout_file_view_click_cb), lw);
+	gtk_widget_add_controller(lw->window, GTK_EVENT_CONTROLLER(file_view_click));
 
 	layout_keyboard_init(lw, lw->window);
 

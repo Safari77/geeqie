@@ -34,13 +34,13 @@
 
 #include <config.h>
 
+#include "actions.h"
 #include "compat.h"
 #include "geometry.h"
 #include "history-list.h"
 #include "layout-util.h"
 #include "layout.h"
 #include "main-defines.h"
-#include "misc.h"
 
 namespace
 {
@@ -668,8 +668,6 @@ static void date_selection_popup_hide(DateSelection *ds)
 	if (!ds->popover) return;
 
 	gtk_popover_popdown(GTK_POPOVER(ds->popover));
-
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), FALSE);
 }
 
 static void date_selection_popup_sync(DateSelection *ds)
@@ -689,13 +687,12 @@ static void date_selection_popup(DateSelection *ds)
 {
 	if (ds->popover)
 		{
-		gtk_popover_popup(GTK_POPOVER(ds->popover));
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
+		g_autoptr(GDateTime) date = date_selection_get(ds->box);
+		gtk_calendar_select_day(GTK_CALENDAR(ds->calendar), date);
 		return;
 		}
 
 	ds->popover = gtk_popover_new();
-	gtk_widget_set_parent(ds->popover, ds->button);
 
 	ds->calendar = gtk_calendar_new();
 
@@ -710,24 +707,17 @@ static void date_selection_popup(DateSelection *ds)
 	                         G_CALLBACK(date_selection_popup_sync),
 	                         ds);
 
-
-	gtk_popover_popup(GTK_POPOVER(ds->popover));
-
-	gtk_widget_grab_focus(ds->calendar);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ds->button), TRUE);
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(ds->button), ds->popover);
 }
 
-static void date_selection_button_cb(GtkWidget *, gpointer data)
+static void date_selection_button_active_cb(GtkMenuButton *button, GParamSpec *, gpointer data)
 {
 	auto ds = static_cast<DateSelection *>(data);
 
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ds->button)))
+	if (gtk_menu_button_get_active(button))
 		{
 		date_selection_popup(ds);
-		}
-	else
-		{
-		date_selection_popup_hide(ds);
+		gtk_widget_grab_focus(ds->calendar);
 		}
 }
 
@@ -783,21 +773,21 @@ GtkWidget *date_selection_new()
 		ds->spin_y = pref_spin_new(ds->box, nullptr, nullptr, 1900, 9999, 1, 0, 1900, nullptr, nullptr);
 		}
 
-	ds->button = gtk_toggle_button_new();
+	ds->button = gtk_menu_button_new();
 	/* Temporary GTK4 fallback: the old requisition/size_allocate hack used by
 	 * this button depended on GTK3 layout internals, so the button currently
 	 * uses its natural size until this widget is restyled for GTK4. */
 
 	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN);
-	gq_gtk_container_add(ds->button, icon);
+	gtk_menu_button_set_child(GTK_MENU_BUTTON(ds->button), icon);
 	gtk_widget_show(icon);
 
 	gq_gtk_box_pack_start(GTK_BOX(ds->box), ds->button, FALSE, FALSE, 0);
-	g_signal_connect(G_OBJECT(ds->button), "clicked",
-			 G_CALLBACK(date_selection_button_cb), ds);
-	gtk_widget_show(ds->button);
-
+	g_signal_connect(G_OBJECT(ds->button), "notify::active",
+			 G_CALLBACK(date_selection_button_active_cb), ds);
 	g_object_set_data(G_OBJECT(ds->box), DATE_SELECION_KEY, ds);
+	date_selection_popup(ds);
+	gtk_widget_show(ds->button);
 
 	return ds->box;
 }
@@ -930,44 +920,47 @@ gint pref_list_int_get(const gchar *group, const gchar *key, gint fallback)
 	return text ? static_cast<gint>(strtol(text, nullptr, 10)) : fallback;
 }
 
+static void color_button_rgba_cb(GtkColorDialogButton *button, GParamSpec *, gpointer user_data)
+{
+	auto *color = static_cast<GdkRGBA *>(user_data);
+
+	*color = *(gtk_color_dialog_button_get_rgba(button));
+}
+
 GtkWidget *pref_color_button_new(GtkWidget *parent_box, const gchar *title, const GdkRGBA *color, GdkRGBA *result)
 {
-	GtkWidget *button;
+	GtkColorDialog *dialog = gtk_color_dialog_new();
+
+	GtkWidget *button = gtk_color_dialog_button_new(dialog);
 
 	if (color)
 		{
- 		button = gtk_color_button_new_with_rgba(color);
-		}
-	else
-		{
-		button = gtk_color_button_new();
+		gtk_color_dialog_button_set_rgba(GTK_COLOR_DIALOG_BUTTON(button), color);
 		}
 
 	if (result)
 		{
-		g_signal_connect(G_OBJECT(button), "color-set", G_CALLBACK(gtk_color_chooser_get_rgba), result);
+		g_signal_connect(G_OBJECT(button), "notify::rgba", G_CALLBACK(color_button_rgba_cb), result);
 		*result = *color;
 		}
 
 	if (title)
 		{
-		GtkWidget *label;
-		GtkWidget *hbox;
+		gtk_color_dialog_set_title(dialog, title);
 
-		gtk_color_button_set_title(GTK_COLOR_BUTTON(button), title);
-		label = gtk_label_new(title);
+		GtkWidget *label = gtk_label_new(title);
 
-		hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+		GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		gq_gtk_box_pack_start(GTK_BOX(parent_box), hbox, TRUE, TRUE, 0);
 
 		gq_gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
 		gq_gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
 
-		gq_gtk_widget_show_all(hbox);
+		gtk_widget_set_visible(hbox, TRUE);
 		}
 	else
 		{
-		gtk_widget_show(button);
+		gtk_widget_set_visible(button, TRUE);
 		}
 
 	return button;
@@ -1095,15 +1088,34 @@ bool ActionItem::has_label(const gchar *label) const
 
 static gchar *get_action_label(gpointer, const gchar *action_name)
 {
-	/* Temporary GTK4 stub: GtkAction metadata lookup has been removed. */
+	const gchar *label = get_description_for_action_name(action_name);
+	if (label) return g_strdup(label);
+
+	if (!strchr(action_name, '.'))
+		{
+		g_autofree gchar *window_action_name = g_strdup_printf("win.%s", action_name);
+		label = get_description_for_action_name(window_action_name);
+		if (label) return g_strdup(label);
+
+		g_autofree gchar *app_action_name = g_strdup_printf("app.%s", action_name);
+		label = get_description_for_action_name(app_action_name);
+		if (label) return g_strdup(label);
+		}
+
 	return g_strdup(action_name);
 }
 
 static void action_to_list_duplicates(gpointer data, gpointer user_data)
 {
-	/* Temporary GTK4 stub: the old GtkAction enumeration path is disabled. */
-	(void)data;
-	(void)user_data;
+	if (!G_IS_ACTION(data) || !user_data) return;
+
+	auto *list_duplicates = static_cast<std::vector<ActionItem> *>(user_data);
+	const gchar *action_name = g_action_get_name(G_ACTION(data));
+	g_autofree gchar *label = get_action_label(nullptr, action_name);
+	g_autofree gchar *window_action_name = g_strdup_printf("win.%s", action_name);
+	auto icon_name = get_icon_for_action_name(window_action_name);
+
+	list_duplicates->emplace_back(action_name, label, icon_name);
 }
 
 /**
@@ -1301,6 +1313,8 @@ gboolean widget_received_event(GtkWidget *widget, GqPoint event)
 
 void widget_remove_from_parent(GtkWidget *widget)
 {
+	if (!GTK_IS_WIDGET(widget)) return;
+
 	gq_gtk_container_remove(gtk_widget_get_parent(widget), widget);
 }
 
@@ -1398,25 +1412,72 @@ gboolean get_alternative_button_order(GtkWidget *widget)
 	return FALSE;
 }
 
+namespace
+{
+
+bool widget_is_editable_text(GtkWidget *widget)
+{
+	return GTK_IS_EDITABLE(widget) || GTK_IS_TEXT_VIEW(widget);
+}
+
+bool widget_or_descendant_is_editable_text(GtkWidget *widget)
+{
+	if (!widget)
+		{
+		return false;
+		}
+
+	if (widget_is_editable_text(widget))
+		{
+		return true;
+		}
+
+	for (GtkWidget *child = gtk_widget_get_first_child(widget);
+	     child;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		if (widget_or_descendant_is_editable_text(child))
+			{
+			return true;
+			}
+		}
+
+	return false;
+}
+
+bool focus_widget_is_editable_text(GtkWidget *focus)
+{
+	for (GtkWidget *widget = focus; widget; widget = gtk_widget_get_parent(widget))
+		{
+		if (widget_is_editable_text(widget))
+			{
+			return true;
+			}
+		}
+
+	return widget_or_descendant_is_editable_text(focus);
+}
+
+} // namespace
+
 bool focus_is_text_editable(GtkWindow *window)
 {
-    GtkWidget *focus = gtk_window_get_focus(window);
+	if (!window)
+		{
+		return false;
+		}
 
-    return GTK_IS_ENTRY(focus) ||
-           GTK_IS_TEXT_VIEW(focus) ||
-           GTK_IS_SEARCH_ENTRY(focus) ||
-           GTK_IS_SPIN_BUTTON(focus);
+	if (focus_widget_is_editable_text(gtk_window_get_focus(window)))
+		{
+		return true;
+		}
+
+	return focus_widget_is_editable_text(gtk_root_get_focus(GTK_ROOT(window)));
 }
 
 bool focus_is_editable(GtkWindow *window)
 {
-    GtkWidget *focus = gtk_window_get_focus(window);
-
-    return focus &&
-           (GTK_IS_ENTRY(focus) ||
-            GTK_IS_TEXT_VIEW(focus) ||
-            GTK_IS_SEARCH_ENTRY(focus) ||
-            GTK_IS_SPIN_BUTTON(focus));
+	return focus_is_text_editable(window);
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

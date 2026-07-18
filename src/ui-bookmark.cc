@@ -33,6 +33,7 @@
 #include <pango/pango.h>
 
 #include "compat.h"
+#include "dnd.h"
 #include "history-list.h"
 #include "intl.h"
 #include "layout.h"
@@ -74,12 +75,19 @@ struct BookMarkData
 	std::string key;
 
 	BookmarkSelectFunc select_func;
+	BookmarkDropFunc drop_func;
 
 	gboolean no_defaults;
 	gboolean editable;
 	gboolean only_directories;
 
 	GtkWidget *active_button;
+};
+
+struct BookmarkDropData
+{
+	GtkWidget *list;
+	gchar *path;
 };
 
 struct BookPropData
@@ -192,6 +200,57 @@ static void bookmark_select_cb(GtkWidget *button, gpointer data)
 	if (bm->select_func) bm->select_func(b->path.c_str());
 }
 
+static void bookmark_drop_data_free(BookmarkDropData *drop_data)
+{
+	g_object_unref(drop_data->list);
+	g_free(drop_data->path);
+	g_free(drop_data);
+}
+
+static void bookmark_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
+{
+	auto *drop_data = static_cast<BookmarkDropData *>(data);
+	auto *bm = static_cast<BookMarkData *>(g_object_get_data(G_OBJECT(drop_data->list), BOOKMARK_DATA_KEY));
+	auto action = GDK_ACTION_NONE;
+
+	if (bm && bm->drop_func && list)
+		{
+		bm->drop_func(drop_data->path, list);
+		action = GDK_ACTION_COPY;
+		}
+
+	gdk_drop_finish(drop, action);
+	bookmark_drop_data_free(drop_data);
+}
+
+static gboolean bookmark_dnd_drop(GtkDropTargetAsync *target, GdkDrop *drop, gdouble, gdouble, gpointer data)
+{
+	auto *bm = static_cast<BookMarkData *>(data);
+	GtkWidget *button = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(target));
+	auto *b = static_cast<BookButtonData *>(g_object_get_data(G_OBJECT(button), "bookbuttondata"));
+
+	if (!bm || !bm->drop_func || !b) return FALSE;
+
+	auto *drop_data = g_new(BookmarkDropData, 1);
+	drop_data->list = GTK_WIDGET(g_object_ref(bm->widget));
+	drop_data->path = g_strdup(b->path.c_str());
+
+	dnd_read_file_list_async(drop, bookmark_dnd_file_received, drop_data);
+
+	return TRUE;
+}
+
+static void bookmark_dnd_init(BookMarkData *bm, GtkWidget *button)
+{
+	if (!bm->drop_func) return;
+
+	static const char *mime_types[] = {"text/uri-list"};
+	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
+	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
+	g_signal_connect(drop_target, "drop", G_CALLBACK(bookmark_dnd_drop), bm);
+	gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drop_target));
+}
+
 static void bookmark_edit_ok_cb(GenericDialog *, gpointer data)
 {
 	auto p = static_cast<BookPropData *>(data);
@@ -293,7 +352,7 @@ static void bookmark_move(BookMarkData *bm, GtkWidget *button, gint direction)
 	gq_gtk_box_reorder_child(GTK_BOX(bm->box), button, p + direction);
 }
 
-static void bookmark_menu_prop_cb(GtkWidget *widget, gpointer data)
+static void bookmark_menu_prop_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto bm = static_cast<BookMarkData *>(data);
 
@@ -302,11 +361,11 @@ static void bookmark_menu_prop_cb(GtkWidget *widget, gpointer data)
 	auto *b = static_cast<BookButtonData *>(g_object_get_data(G_OBJECT(bm->active_button), "bookbuttondata"));
 	if (!b) return;
 
-	bookmark_edit(bm->key, b, widget);
+	bookmark_edit(bm->key, b, bm->active_button);
 }
 
 template<gint direction>
-static void bookmark_menu_move_cb(GtkWidget *, gpointer data)
+static void bookmark_menu_move_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto *bm = static_cast<BookMarkData *>(data);
 
@@ -315,7 +374,7 @@ static void bookmark_menu_move_cb(GtkWidget *, gpointer data)
 	bookmark_move(bm, bm->active_button, direction);
 }
 
-static void bookmark_menu_remove_cb(GtkWidget *, gpointer data)
+static void bookmark_menu_remove_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto bm = static_cast<BookMarkData *>(data);
 
@@ -328,30 +387,51 @@ static void bookmark_menu_remove_cb(GtkWidget *, gpointer data)
 	bookmark_populate_all(bm->key);
 }
 
-static void bookmark_menu_popup(BookMarkData *bm, GtkWidget *button, bool local)
+static void bookmark_menu_append_item(GMenu *menu, const gchar *label, const gchar *icon_name, const gchar *action_name)
 {
-	GtkWidget *menu;
+	g_autoptr(GMenuItem) item = g_menu_item_new(label, action_name);
+	g_autoptr(GIcon) icon = g_themed_icon_new(icon_name);
+
+	g_menu_item_set_icon(item, icon);
+	g_menu_append_item(menu, item);
+}
+
+static void bookmark_menu_popup(BookMarkData *bm, GtkWidget *button)
+{
+	g_autoptr(GSimpleActionGroup) action_group = g_simple_action_group_new();
+	g_autoptr(GMenu) menu = g_menu_new();
 
 	bm->active_button = button;
 
-	menu = popover_box_new(button);
-	popover_item_add_icon_sensitive(menu, _("_Properties…"), PIXBUF_INLINE_ICON_PROPERTIES, bm->editable,
-		      G_CALLBACK(bookmark_menu_prop_cb), bm);
-	popover_item_add_icon_sensitive(menu, _("Move _up"), GQ_ICON_GO_UP, bm->editable,
-	                             G_CALLBACK(bookmark_menu_move_cb<-1>), bm);
-	popover_item_add_icon_sensitive(menu, _("Move _down"), GQ_ICON_GO_DOWN, bm->editable,
-	                             G_CALLBACK(bookmark_menu_move_cb<1>), bm);
-	popover_item_add_icon_sensitive(menu, _("_Remove"), GQ_ICON_REMOVE, bm->editable,
-		      G_CALLBACK(bookmark_menu_remove_cb), bm);
+	g_autoptr(GSimpleAction) properties_action = g_simple_action_new("properties", nullptr);
+	g_autoptr(GSimpleAction) move_up_action = g_simple_action_new("move-up", nullptr);
+	g_autoptr(GSimpleAction) move_down_action = g_simple_action_new("move-down", nullptr);
+	g_autoptr(GSimpleAction) remove_action = g_simple_action_new("remove", nullptr);
 
-	if (local)
+	for (GSimpleAction *action : {properties_action, move_up_action, move_down_action, remove_action})
 		{
-		(void)button;
+		g_simple_action_set_enabled(action, bm->editable);
 		}
-	else
-		{
-		(void)menu;
-		}
+
+	g_signal_connect(properties_action, "activate", G_CALLBACK(bookmark_menu_prop_cb), bm);
+	g_signal_connect(move_up_action, "activate", G_CALLBACK(bookmark_menu_move_cb<-1>), bm);
+	g_signal_connect(move_down_action, "activate", G_CALLBACK(bookmark_menu_move_cb<1>), bm);
+	g_signal_connect(remove_action, "activate", G_CALLBACK(bookmark_menu_remove_cb), bm);
+
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(properties_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(move_up_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(move_down_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(remove_action));
+
+	bookmark_menu_append_item(menu, _("_Properties…"), PIXBUF_INLINE_ICON_PROPERTIES, "bookmark.properties");
+	bookmark_menu_append_item(menu, _("Move _up"), GQ_ICON_GO_UP, "bookmark.move-up");
+	bookmark_menu_append_item(menu, _("Move _down"), GQ_ICON_GO_DOWN, "bookmark.move-down");
+	bookmark_menu_append_item(menu, _("_Remove"), GQ_ICON_REMOVE, "bookmark.remove");
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+	gtk_widget_insert_action_group(popover, "bookmark", G_ACTION_GROUP(action_group));
+	popover_set_parent(popover, button);
+	popover_popup(popover);
 }
 
 static gboolean bookmark_press_common(GtkWidget *button, guint button_id, gpointer data)
@@ -360,7 +440,7 @@ static gboolean bookmark_press_common(GtkWidget *button, guint button_id, gpoint
 
 	if (button_id != GDK_BUTTON_SECONDARY) return FALSE;
 
-	bookmark_menu_popup(bm, button, false);
+	bookmark_menu_popup(bm, button);
 
 	return TRUE;
 }
@@ -382,7 +462,7 @@ static gboolean bookmark_keypress_cb(GtkEventControllerKey *controller, guint ke
 			if (!(state & GDK_CONTROL_MASK)) return FALSE;
 			/* fall through */
 		case GDK_KEY_Menu:
-			bookmark_menu_popup(bm, button, true);
+			bookmark_menu_popup(bm, button);
 			return TRUE;
 			break;
 		case GDK_KEY_Up:
@@ -482,6 +562,8 @@ static void bookmark_add_button(BookMarkData *bm, const gchar *text)
 
 	g_signal_connect(G_OBJECT(button), "clicked",
 	                 G_CALLBACK(bookmark_select_cb), bm);
+	bookmark_dnd_init(bm, button);
+
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect(gesture, "pressed", G_CALLBACK(bookmark_gesture_press_cb), bm);
@@ -575,6 +657,7 @@ GtkWidget *bookmark_list_new(const gchar *key, const BookmarkSelectFunc &select_
 	auto *bm = new BookMarkData();
 	bm->key = key ? key : "bookmarks";
 	bm->select_func = select_func;
+	bm->drop_func = nullptr;
 	bm->no_defaults = FALSE;
 	bm->editable = TRUE;
 	bm->only_directories = FALSE;
@@ -645,6 +728,17 @@ void bookmark_list_set_only_directories(GtkWidget *list, gboolean only_directori
 	if (!bm) return;
 
 	bm->only_directories = only_directories;
+}
+
+void bookmark_list_set_drop_func(GtkWidget *list, const BookmarkDropFunc &drop_func)
+{
+	BookMarkData *bm;
+
+	bm = static_cast<BookMarkData *>(g_object_get_data(G_OBJECT(list), BOOKMARK_DATA_KEY));
+	if (!bm) return;
+
+	bm->drop_func = drop_func;
+	bookmark_populate(bm);
 }
 
 void bookmark_list_add(GtkWidget *list, const gchar *name, const gchar *path)

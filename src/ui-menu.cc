@@ -24,6 +24,8 @@
 #include <glib/gi18n.h>
 #include <pango/pango.h>
 
+#include "actions.h"
+#include "compat.h"
 #include "editors.h"
 #include "layout-util.h"
 #include "layout.h"
@@ -39,6 +41,69 @@
 static void menu_item_add_accelerator(GtkWidget *, GtkWidget *)
 {
 	/* Temporary GTK4 compatibility stub. */
+}
+
+static GtkWidget *menu_item_label_new(const gchar *text, gboolean use_mnemonic)
+{
+	GtkWidget *label = use_mnemonic ? gtk_label_new_with_mnemonic(text) : gtk_label_new(text);
+
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+	gtk_widget_set_hexpand(label, TRUE);
+	gtk_widget_set_halign(label, GTK_ALIGN_FILL);
+
+	return label;
+}
+
+static GtkWidget *menu_item_button_new(const gchar *text, gboolean use_mnemonic)
+{
+	GtkWidget *item = gtk_button_new();
+	GtkWidget *label = menu_item_label_new(text, use_mnemonic);
+
+	gtk_button_set_child(GTK_BUTTON(item), label);
+	gtk_button_set_has_frame(GTK_BUTTON(item), FALSE);
+	gtk_widget_add_css_class(item, "flat");
+	gtk_widget_set_hexpand(item, TRUE);
+	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	gtk_label_set_mnemonic_widget(GTK_LABEL(label), item);
+
+	return item;
+}
+
+static GtkWidget *menu_item_icon_button_new(const gchar *text, const gchar *icon_name, gboolean use_mnemonic)
+{
+	GtkWidget *item = gtk_button_new();
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	GtkWidget *image = gtk_image_new_from_icon_name(icon_name ? icon_name : GQ_ICON_MISSING_IMAGE);
+	GtkWidget *label = menu_item_label_new(text, use_mnemonic);
+
+	gtk_widget_set_size_request(image, 16, -1);
+	gtk_widget_set_halign(image, GTK_ALIGN_CENTER);
+	gtk_box_append(GTK_BOX(box), image);
+	gtk_box_append(GTK_BOX(box), label);
+
+	gtk_button_set_child(GTK_BUTTON(item), box);
+	gtk_button_set_has_frame(GTK_BUTTON(item), FALSE);
+	gtk_widget_add_css_class(item, "flat");
+	gtk_widget_set_hexpand(item, TRUE);
+	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	gtk_label_set_mnemonic_widget(GTK_LABEL(label), item);
+
+	return item;
+}
+
+static GtkWidget *menu_item_check_new(const gchar *text)
+{
+	GtkWidget *item = gtk_check_button_new();
+	GtkWidget *label = menu_item_label_new(text, TRUE);
+
+	gtk_check_button_set_child(GTK_CHECK_BUTTON(item), label);
+	gtk_widget_add_css_class(item, "flat");
+	gtk_widget_set_hexpand(item, TRUE);
+	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	gtk_label_set_mnemonic_widget(GTK_LABEL(label), item);
+
+	return item;
 }
 
 static void menu_item_finish(GtkWidget *menu, GtkWidget *item, GCallback func, gpointer data)
@@ -73,8 +138,7 @@ GtkWidget *popover_item_add(GtkWidget *menu, const gchar *label,
 {
 	GtkWidget *item;
 
-	item = gtk_button_new_with_label(label);
-	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	item = menu_item_button_new(label, TRUE);
 
 	menu_item_add_accelerator(menu, item);
 
@@ -87,11 +151,8 @@ GtkWidget *popover_item_add_stock(GtkWidget *menu, const gchar *label, const gch
 			       GCallback func, gpointer data)
 {
 	GtkWidget *item;
-	(void)stock_id;
 
-	/* Temporary GTK4 stub: stock images are dropped until this path is ported. */
-	item = gtk_button_new_with_label(label);
-	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	item = menu_item_icon_button_new(label, stock_id_to_icon_name(stock_id), TRUE);
 
 	menu_item_add_accelerator(menu, item);
 
@@ -104,11 +165,8 @@ GtkWidget *popover_item_add_icon(GtkWidget *menu, const gchar *label, const gcha
 			       GCallback func, gpointer data)
 {
 	GtkWidget *item;
-	(void)icon_name;
 
-	/* Temporary GTK4 stub: icons are dropped until this path is ported. */
-	item = gtk_button_new_with_label(label);
-	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	item = menu_item_icon_button_new(label, icon_name, TRUE);
 
 	menu_item_add_accelerator(menu, item);
 
@@ -144,9 +202,8 @@ GtkWidget *popover_item_add_check(GtkWidget *menu, const gchar *label, gboolean 
 {
 	GtkWidget *item;
 
-	item = gtk_check_button_new_with_label(label);
+	item = menu_item_check_new(label);
 	gtk_check_button_set_active(GTK_CHECK_BUTTON(item), active);
-	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
 
 	menu_item_add_accelerator(menu, item);
 
@@ -182,8 +239,7 @@ void popover_item_add_divider(GtkWidget *menu)
 GtkWidget *popover_item_add_simple(GtkWidget *menu, const gchar *label,
 				GCallback func, gpointer data)
 {
-	GtkWidget *item = gtk_button_new_with_label(label);
-	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+	GtkWidget *item = menu_item_button_new(label, FALSE);
 	menu_item_finish(menu, item, func, data);
 
 	return item;
@@ -204,7 +260,7 @@ GtkWidget *popover_box_new(GtkWidget *parent, gdouble x, gdouble y)
 		GtkWidget *popover = gtk_popover_new();
 		g_object_set_data(G_OBJECT(box), "gq-popover", popover);
 		gtk_popover_set_child(GTK_POPOVER(popover), box);
-		gtk_widget_set_parent(popover, parent);
+		popover_set_parent(popover, parent);
 		if (x >= 0 && y >= 0)
 			{
 			GdkRectangle pointing_to{
@@ -214,18 +270,58 @@ GtkWidget *popover_box_new(GtkWidget *parent, gdouble x, gdouble y)
 			};
 			gtk_popover_set_pointing_to(GTK_POPOVER(popover), &pointing_to);
 			}
-		gtk_popover_popup(GTK_POPOVER(popover));
+		popover_popup(popover);
 		}
 
 	return box;
 }
 
+GtkWidget *popover_parent_new(GtkWidget *child)
+{
+#if HAVE_GTK4_22
+	GtkWidget *popover_parent = gtk_popover_bin_new();
+	gtk_popover_bin_set_child(GTK_POPOVER_BIN(popover_parent), child);
+
+	return popover_parent;
+#else
+	return child;
+#endif
+}
+
+void popover_set_parent(GtkWidget *popover, GtkWidget *parent)
+{
+#if HAVE_GTK4_22
+	if (GTK_IS_POPOVER_BIN(parent))
+		{
+		gtk_popover_bin_set_popover(GTK_POPOVER_BIN(parent), popover);
+		return;
+		}
+#endif
+
+	gtk_widget_set_parent(popover, parent);
+}
+
+void popover_popup(GtkWidget *popover)
+{
+#if HAVE_GTK4_22
+	GtkWidget *parent = gtk_widget_get_parent(popover);
+	if (parent && GTK_IS_POPOVER_BIN(parent))
+		{
+		gtk_popover_bin_popup(GTK_POPOVER_BIN(parent));
+		return;
+		}
+#endif
+
+	gtk_popover_present(GTK_POPOVER(popover));
+	gtk_popover_popup(GTK_POPOVER(popover));
+}
+
 GtkWidget *popup_menu(GMenu *menu_model, GtkWidget *window)
 {
 	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu_model));
-	gtk_widget_set_parent(popover, window);
+	popover_set_parent(popover, window);
 	gtk_popover_set_position(GTK_POPOVER(popover), GTK_POS_BOTTOM);
-	gtk_popover_popup(GTK_POPOVER(popover));
+	popover_popup(popover);
 
 	return popover;
 }
@@ -239,10 +335,10 @@ GtkWidget *popup_menu_at(GMenu *menu_model, GtkWidget *parent, gdouble x, gdoubl
 		1, 1
 	};
 
-	gtk_widget_set_parent(popover, parent);
+	popover_set_parent(popover, parent);
 	gtk_popover_set_pointing_to(GTK_POPOVER(popover), &pointing_to);
 	gtk_popover_set_position(GTK_POPOVER(popover), GTK_POS_BOTTOM);
-	gtk_popover_popup(GTK_POPOVER(popover));
+	popover_popup(popover);
 
 	return popover;
 }
@@ -370,6 +466,15 @@ void plugins_menu_populate(GMenu *plugins_menu, const char *action, GList *fd_li
 
 		g_menu_item_set_action_and_target_value( item, action, g_variant_new_string(ed->key)
 		);
+
+		if (ed->hotkey && *ed->hotkey)
+			{
+			auto *app = GTK_APPLICATION(g_application_get_default());
+			g_autofree gchar *detailed_action = g_strdup_printf("%s::%s", action, ed->key);
+			g_auto(GStrv) accels = g_strsplit(ed->hotkey, ";", -1);
+
+			register_accels_for_action(app, detailed_action, accels);
+			}
 
 		g_autoptr(GIcon) icon = g_themed_icon_new(icon_name);
 		g_menu_item_set_icon(item, icon);

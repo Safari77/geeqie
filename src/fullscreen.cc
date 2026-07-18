@@ -223,6 +223,13 @@ struct ScreenData {
 	GdkRectangle geometry;
 };
 
+struct FullscreenTarget
+{
+	GdkRectangle geometry;
+	GdkMonitor *monitor;
+	gboolean same_region;
+};
+
 std::vector<ScreenData> fullscreen_prefs_list()
 {
 	std::vector<ScreenData> list;
@@ -301,97 +308,146 @@ std::vector<ScreenData> fullscreen_prefs_list()
  * 101  size of monitor 1 on screen 1
  * 203  size of monitor 3 on screen 2
  * returns:
- * In GTK4 this returns the target geometry that fullscreen should cover.
- * same_region: the returned region will overlap the current location of widget.
+ * In GTK4 this returns the target geometry and, for monitor-sized choices,
+ * the monitor to request fullscreen on.
  */
 
-GdkRectangle fullscreen_prefs_get_geometry( int screen_num, GtkWidget *widget, gboolean &same_region)
+GdkMonitor *fullscreen_current_monitor(GdkDisplay *display, GtkWidget *widget)
 {
-	GdkMonitor *dest_monitor = nullptr;
-	GdkDisplay *display = widget ? gtk_widget_get_display(widget)  : gdk_display_get_default();
+	GdkSurface *surface = nullptr;
+
+	if (widget && gtk_widget_get_native(widget))
+		{
+		surface = gtk_native_get_surface(gtk_widget_get_native(widget));
+		}
+
+	if (surface)
+		{
+		GdkMonitor *monitor = gdk_display_get_monitor_at_surface(display, surface);
+		if (monitor)
+			{
+			return static_cast<GdkMonitor *>(g_object_ref(monitor));
+			}
+		}
+
+	return get_first_monitor(display);
+}
+
+FullscreenTarget fullscreen_target_new()
+{
+	FullscreenTarget target{};
+	target.same_region = TRUE;
+
+	return target;
+}
+
+FullscreenTarget fullscreen_prefs_get_target(gint screen_num, GtkWidget *widget)
+{
+	FullscreenTarget target = fullscreen_target_new();
+	GdkDisplay *display = widget ? gtk_widget_get_display(widget) : gdk_display_get_default();
+	GListModel *monitors = gdk_display_get_monitors(display);
+	g_autoptr(GdkMonitor) current_monitor = fullscreen_current_monitor(display, widget);
+
+	if (!monitors)
+		{
+		return target;
+		}
 
 	if (screen_num >= 100)
 		{
 		std::vector<ScreenData> list = fullscreen_prefs_list();
-		auto it = std::find_if( list.cbegin(), list.cend(), [screen_num](const ScreenData &sd)
+		auto it = std::find_if(list.cbegin(), list.cend(), [screen_num](const ScreenData &sd)
 			{
 			return sd.number == screen_num;
 			});
 
-		if (it != list.cend())
+		if (it == list.cend())
 			{
-			g_autoptr(GdkMonitor) first_monitor = get_first_monitor(display);
+			return target;
+			}
 
-			GdkSurface *surface = nullptr;
-			if (widget && gtk_widget_get_native(widget))
+		target.geometry = it->geometry;
+
+		if (screen_num > 100)
+			{
+			const guint monitor_index = screen_num - 101;
+			if (monitor_index < g_list_model_get_n_items(monitors))
 				{
-				surface = gtk_native_get_surface( gtk_widget_get_native(widget));
+				target.monitor = GDK_MONITOR(g_list_model_get_item(monitors, monitor_index));
+				target.same_region = (target.monitor == current_monitor);
 				}
-
-			same_region = (!surface || (first_monitor == gdk_display_get_monitor_at_surface(display, surface)));
-
-			return it->geometry;
 			}
-		}
-	else if (screen_num < 0)
-		{
-		screen_num = 1;
+
+		return target;
 		}
 
-	GdkRectangle geometry{};
-
-	GdkSurface *surface = nullptr;
-	if (widget && gtk_widget_get_native(widget))
+	if (screen_num < 0)
 		{
-		surface = gtk_native_get_surface( gtk_widget_get_native(widget));
-		}
-
-	if (screen_num != 1 || !surface)
-		{
-		dest_monitor = get_first_monitor(display);
-		if (!dest_monitor)
+		if (current_monitor)
 			{
-			same_region = TRUE;
-			return geometry;
+			gdk_monitor_get_geometry(current_monitor, &target.geometry);
 			}
-		gdk_monitor_get_geometry(dest_monitor, &geometry);
-		g_object_unref(dest_monitor);
+
+		return target;
 		}
-	else
+
+	if (screen_num == 1)
 		{
-		dest_monitor = gdk_display_get_monitor_at_surface(display, surface);
-		if (!dest_monitor)
+		if (current_monitor)
 			{
-			dest_monitor = get_first_monitor(display);
-			}
-		if (!dest_monitor)
-			{
-			same_region = TRUE;
-			return geometry;
+			target.monitor = static_cast<GdkMonitor *>(g_object_ref(current_monitor));
+			gdk_monitor_get_geometry(target.monitor, &target.geometry);
 			}
 
-		gdk_monitor_get_geometry(dest_monitor, &geometry);
-		g_object_unref(dest_monitor);
+		return target;
 		}
 
-	same_region = TRUE;
-	return geometry;
+	gboolean first = TRUE;
+	for (guint i = 0; i < g_list_model_get_n_items(monitors); i++)
+		{
+		g_autoptr(GdkMonitor) monitor = GDK_MONITOR(g_list_model_get_item(monitors, i));
+		GdkRectangle mrect;
+
+		gdk_monitor_get_geometry(monitor, &mrect);
+
+		if (first)
+			{
+			target.geometry = mrect;
+			first = FALSE;
+			}
+		else
+			{
+			gint x1 = MIN(target.geometry.x, mrect.x);
+			gint y1 = MIN(target.geometry.y, mrect.y);
+			gint x2 = MAX(target.geometry.x + target.geometry.width,  mrect.x + mrect.width);
+			gint y2 = MAX(target.geometry.y + target.geometry.height, mrect.y + mrect.height);
+
+			target.geometry.x = x1;
+			target.geometry.y = y1;
+			target.geometry.width  = x2 - x1;
+			target.geometry.height = y2 - y1;
+			}
+		}
+
+	return target;
 }
 
-enum {
-	FS_MENU_COLUMN_NAME = 0,
-	FS_MENU_COLUMN_VALUE
-};
-
-void fullscreen_prefs_selection_cb(GtkWidget *combo, gpointer value)
+void fullscreen_prefs_selection_cb(GObject *object, GParamSpec *, gpointer value)
 {
 	if (!value) return;
 
-	GtkTreeModel *store = gtk_combo_box_get_model(GTK_COMBO_BOX(combo));
-	GtkTreeIter iter;
-	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(combo), &iter)) return;
+	GtkDropDown *drop_down = GTK_DROP_DOWN(object);
 
-	gtk_tree_model_get(store, &iter, FS_MENU_COLUMN_VALUE, value, -1);
+	guint selected_index = gtk_drop_down_get_selected(drop_down);
+	if (selected_index == GTK_INVALID_LIST_POSITION) return;
+
+	GListModel *model = gtk_drop_down_get_model(drop_down);
+
+	g_autoptr(GObject) item = G_OBJECT(g_list_model_get_item(model, selected_index));
+	if (!item) return;
+
+	auto *screen_value = static_cast<gint *>(value);
+	*screen_value = GPOINTER_TO_INT(g_object_get_data(item, "number"));
 }
 
 } // namespace
@@ -427,21 +483,26 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 
 	DEBUG_1("full screen requests screen %d", options->fullscreen.screen);
 
-	GdkRectangle rect{};
-	gboolean same_region = FALSE;
-
-	rect = fullscreen_prefs_get_geometry(options->fullscreen.screen, window, same_region);
-
-	fs->same_region = same_region;
+	FullscreenTarget target = fullscreen_prefs_get_target(options->fullscreen.screen, window);
 
 	fs->window = window_new("fullscreen", nullptr, _("Full screen"));
 	DEBUG_NAME(fs->window);
 
 	gtk_window_set_decorated(GTK_WINDOW(fs->window), FALSE);
-	gtk_window_set_default_size(GTK_WINDOW(fs->window), rect.width, rect.height);
+	gtk_window_set_default_size(GTK_WINDOW(fs->window), target.geometry.width, target.geometry.height);
 	g_signal_connect(G_OBJECT(fs->window), "close-request",
 			 G_CALLBACK(fullscreen_close_request_cb), fs);
-	gtk_window_fullscreen(GTK_WINDOW(fs->window));
+	if (target.monitor)
+		{
+		gtk_window_fullscreen_on_monitor(GTK_WINDOW(fs->window), target.monitor);
+		}
+	else
+		{
+		gtk_window_fullscreen(GTK_WINDOW(fs->window));
+		}
+
+	fs->same_region = target.same_region;
+	g_clear_object(&target.monitor);
 
 	fs->imd = image_new(FALSE);
 
@@ -583,14 +644,6 @@ GtkWidget *fullscreen_prefs_selection_new(const gchar *text, gint *screen_value)
 
 	if (text) pref_label_new(hbox, text);
 
-	g_autoptr(GtkListStore) store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_INT);
-	GtkWidget *combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(store));
-
-	GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(combo), renderer, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(combo), renderer,
-				       "text", FS_MENU_COLUMN_NAME, NULL);
-
 	const std::array<ScreenData, 3> default_list = {{
 	    {-1, _("Determined by Window Manager"), {}},
 	    { 0, _("Active screen"), {},},
@@ -599,27 +652,28 @@ GtkWidget *fullscreen_prefs_selection_new(const gchar *text, gint *screen_value)
 
 	std::vector<ScreenData> list = fullscreen_prefs_list();
 	list.insert(list.begin(), default_list.cbegin(), default_list.cend());
+
+	GtkStringList *string_list = gtk_string_list_new(nullptr);
+	guint index = 0;
 	for (const ScreenData &sd : list)
 		{
-		GtkTreeIter iter;
+		gtk_string_list_append(string_list, sd.description.c_str());
 
-		gtk_list_store_append(store, &iter);
-		gtk_list_store_set(store, &iter,
-		                   FS_MENU_COLUMN_NAME, sd.description.c_str(),
-		                   FS_MENU_COLUMN_VALUE, sd.number,
-		                   -1);
+		g_autoptr(GObject) item = G_OBJECT(g_list_model_get_item(G_LIST_MODEL(string_list), index++));
+		g_object_set_data(item, "number", GINT_TO_POINTER(sd.number));
 		}
+
+	GtkWidget *drop_down = gtk_drop_down_new(G_LIST_MODEL(string_list), nullptr);
 
 	const auto it = std::find_if(list.cbegin(), list.cend(),
 	                             [screen_num = *screen_value](const ScreenData &sd){ return sd.number == screen_num; });
 	const gint current = (it != list.cend()) ? std::distance(list.cbegin(), it) : 0;
-	gtk_combo_box_set_active(GTK_COMBO_BOX(combo), current);
+	gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down), current);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), combo, FALSE, FALSE, 0);
-	gtk_widget_show(combo);
+	gq_gtk_box_pack_start(GTK_BOX(hbox), drop_down, FALSE, FALSE, 0);
 
-	g_signal_connect(G_OBJECT(combo), "changed",
-			 G_CALLBACK(fullscreen_prefs_selection_cb), screen_value);
+	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
+	                 G_CALLBACK(fullscreen_prefs_selection_cb), screen_value);
 
 	return hbox;
 }

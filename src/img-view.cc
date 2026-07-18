@@ -77,6 +77,8 @@ struct ViewWindow
 
 std::vector<ViewWindow *> view_window_list;
 
+constexpr auto VIEW_WINDOW_DATA_KEY = "view-window";
+
 } // namespace
 
 static void image_pop_menu_collections_cb(GSimpleAction *, GVariant *parameter, gpointer data);
@@ -682,6 +684,8 @@ static void view_window_destroy_cb(GtkWidget *, gpointer data)
 {
 	auto vw = static_cast<ViewWindow *>(data);
 
+	g_object_set_data(G_OBJECT(vw->window), VIEW_WINDOW_DATA_KEY, nullptr);
+
 	view_window_list.erase(std::remove(view_window_list.begin(), view_window_list.end(), vw),
 	                       view_window_list.end());
 
@@ -916,7 +920,10 @@ static void view_get_monitor_size(GtkWidget *widget, gint *width, gint *height)
 		GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(native));
 		if (surface)
 			{
-			monitor = gdk_display_get_monitor_at_surface(display, surface);
+			if (GdkMonitor *surface_monitor = gdk_display_get_monitor_at_surface(display, surface))
+				{
+				monitor = static_cast<GdkMonitor *>(g_object_ref(surface_monitor));
+				}
 			}
 		}
 
@@ -927,6 +934,13 @@ static void view_get_monitor_size(GtkWidget *widget, gint *width, gint *height)
 			{
 			monitor = GDK_MONITOR(g_list_model_get_item(monitors, 0));
 			}
+		}
+
+	if (!monitor)
+		{
+		*width = 0;
+		*height = 0;
+		return;
 		}
 
 	GdkRectangle geometry;
@@ -952,6 +966,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 
 	vw->window = window_new("view", PIXBUF_INLINE_ICON_VIEW, nullptr);
 	DEBUG_NAME(vw->window);
+	g_object_set_data(G_OBJECT(vw->window), VIEW_WINDOW_DATA_KEY, vw);
 
 	gtk_widget_set_size_request(vw->window, DEFAULT_MINIMAL_WINDOW_SIZE, DEFAULT_MINIMAL_WINDOW_SIZE);
 
@@ -1212,7 +1227,7 @@ struct CViewConfirmD {
 	GList *list;
 };
 
-static void view_dir_list_cancel(GtkWidget *, gpointer)
+static void view_dir_list_cancel(GSimpleAction *, GVariant *, gpointer)
 {
 	/* do nothing */
 }
@@ -1277,13 +1292,13 @@ static void view_dir_list_do(ViewWindow *vw, GList *list, gboolean skip, gboolea
 }
 
 template<gboolean recurse>
-static void view_dir_list_add(GtkWidget *, gpointer data)
+static void view_dir_list_add(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto d = static_cast<CViewConfirmD *>(data);
 	view_dir_list_do(d->vw, d->list, FALSE, recurse);
 }
 
-static void view_dir_list_skip(GtkWidget *, gpointer data)
+static void view_dir_list_skip(GSimpleAction *, GVariant *, gpointer data)
 {
 	auto d = static_cast<CViewConfirmD *>(data);
 	view_dir_list_do(d->vw, d->list, TRUE, FALSE);
@@ -1296,30 +1311,69 @@ static void view_dir_list_destroy(GtkWidget *, gpointer data)
 	g_free(d);
 }
 
+static void view_confirm_dir_list_append_item(GMenu *menu, const gchar *label, const gchar *icon_name, const gchar *action_name)
+{
+	g_autoptr(GMenuItem) item = g_menu_item_new(label, action_name);
+
+	if (icon_name)
+		{
+		g_autoptr(GIcon) icon = g_themed_icon_new(icon_name);
+		g_menu_item_set_icon(item, icon);
+		}
+
+	g_menu_append_item(menu, item);
+}
+
 static GtkWidget *view_confirm_dir_list(ViewWindow *vw, GList *list)
 {
-	GtkWidget *menu;
 	CViewConfirmD *d;
+	g_autoptr(GSimpleActionGroup) action_group = g_simple_action_group_new();
+	g_autoptr(GMenu) menu = g_menu_new();
+	g_autoptr(GMenu) info_section = g_menu_new();
+	g_autoptr(GMenu) choice_section = g_menu_new();
+	g_autoptr(GMenu) cancel_section = g_menu_new();
 
 	d = g_new(CViewConfirmD, 1);
 	d->vw = vw;
 	d->list = list;
 
-	menu = popover_box_new();
-	g_signal_connect(G_OBJECT(menu), "destroy",
-			 G_CALLBACK(view_dir_list_destroy), d);
+	g_autoptr(GSimpleAction) info_action = g_simple_action_new("info", nullptr);
+	g_autoptr(GSimpleAction) add_action = g_simple_action_new("add", nullptr);
+	g_autoptr(GSimpleAction) add_recursive_action = g_simple_action_new("add-recursive", nullptr);
+	g_autoptr(GSimpleAction) skip_action = g_simple_action_new("skip", nullptr);
+	g_autoptr(GSimpleAction) cancel_action = g_simple_action_new("cancel", nullptr);
 
-	popover_item_add_icon(menu, _("Dropped list includes folders."), GQ_ICON_DIRECTORY, nullptr, nullptr);
-	popover_item_add_divider(menu);
-	popover_item_add_icon(menu, _("_Add contents"), GQ_ICON_OK,
-	                   G_CALLBACK(view_dir_list_add<FALSE>), d);
-	popover_item_add_icon(menu, _("Add contents _recursive"), GQ_ICON_ADD,
-	                   G_CALLBACK(view_dir_list_add<TRUE>), d);
-	popover_item_add_icon(menu, _("_Skip folders"), GQ_ICON_REMOVE, G_CALLBACK(view_dir_list_skip), d);
-	popover_item_add_divider(menu);
-	popover_item_add_icon(menu, _("Cancel"), GQ_ICON_CANCEL, G_CALLBACK(view_dir_list_cancel), d);
+	g_simple_action_set_enabled(info_action, FALSE);
 
-	return menu;
+	g_signal_connect(add_action, "activate", G_CALLBACK(view_dir_list_add<FALSE>), d);
+	g_signal_connect(add_recursive_action, "activate", G_CALLBACK(view_dir_list_add<TRUE>), d);
+	g_signal_connect(skip_action, "activate", G_CALLBACK(view_dir_list_skip), d);
+	g_signal_connect(cancel_action, "activate", G_CALLBACK(view_dir_list_cancel), d);
+
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(info_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(add_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(add_recursive_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(skip_action));
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(cancel_action));
+
+	view_confirm_dir_list_append_item(info_section, _("Dropped list includes folders."), GQ_ICON_DIRECTORY, "image-drop.info");
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(info_section));
+
+	view_confirm_dir_list_append_item(choice_section, _("_Add contents"), GQ_ICON_OK, "image-drop.add");
+	view_confirm_dir_list_append_item(choice_section, _("Add contents _recursive"), GQ_ICON_ADD, "image-drop.add-recursive");
+	view_confirm_dir_list_append_item(choice_section, _("_Skip folders"), GQ_ICON_REMOVE, "image-drop.skip");
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(choice_section));
+
+	view_confirm_dir_list_append_item(cancel_section, _("Cancel"), GQ_ICON_CANCEL, "image-drop.cancel");
+	g_menu_append_section(menu, nullptr, G_MENU_MODEL(cancel_section));
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+	gtk_widget_insert_action_group(popover, "image-drop", G_ACTION_GROUP(action_group));
+	popover_set_parent(popover, vw->window);
+	g_signal_connect(G_OBJECT(popover), "destroy", G_CALLBACK(view_dir_list_destroy), d);
+	popover_popup(popover);
+
+	return popover;
 }
 
 /*
@@ -1352,11 +1406,25 @@ static GdkContentProvider *view_window_dnd_prepare(GtkDragSource *, gdouble, gdo
 	return provider;
 }
 
+struct ViewWindowDndDropData
+{
+	GtkWidget *window;
+};
+
 static void view_window_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
 {
-	auto *vw = static_cast<ViewWindow *>(data);
+	auto *drop_data = static_cast<ViewWindowDndDropData *>(data);
+	auto *vw = static_cast<ViewWindow *>(g_object_get_data(G_OBJECT(drop_data->window), VIEW_WINDOW_DATA_KEY));
+	if (!vw)
+		{
+		gdk_drop_finish(drop, GDK_ACTION_NONE);
+		g_object_unref(drop_data->window);
+		g_free(drop_data);
+		return;
+		}
+
 	ImageWindow *imd = vw->imd;
-	GdkDragAction action = GDK_ACTION_NONE;
+	auto action = GDK_ACTION_NONE;
 
 	if (list)
 		{
@@ -1390,11 +1458,17 @@ static void view_window_dnd_file_received(GdkDrop *drop, GList *list, gpointer d
 		}
 
 	gdk_drop_finish(drop, action);
+	g_object_unref(drop_data->window);
+	g_free(drop_data);
 }
 
 static gboolean view_window_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble, gdouble, gpointer data)
 {
-	dnd_read_file_list_async(drop, view_window_dnd_file_received, data);
+	auto *vw = static_cast<ViewWindow *>(data);
+	auto *drop_data = g_new(ViewWindowDndDropData, 1);
+	drop_data->window = GTK_WIDGET(g_object_ref(vw->window));
+
+	dnd_read_file_list_async(drop, view_window_dnd_file_received, drop_data);
 
 	return TRUE;
 }

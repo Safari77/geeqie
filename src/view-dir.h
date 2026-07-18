@@ -71,6 +71,7 @@ struct ViewDir
 	FileData *click_fd = nullptr;
 
 	FileData *drop_fd = nullptr;
+	FileDataRef drop_fd_ref{nullptr};
 	GList *drop_list = nullptr;
 	guint drop_scroll_id; /**< event source id */
 
@@ -107,8 +108,8 @@ void vd_new_folder(ViewDir *vd, FileData *dir_fd);
 void vd_dnd_drop_scroll_cancel(ViewDir *vd);
 void vd_dnd_init(ViewDir *vd);
 
-void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *column, gpointer data);
 void vd_color_cb(GtkTreeViewColumn *tree_column, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data);
+void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *column, gpointer data);
 
 gboolean vd_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data);
 gboolean vd_press_key_cb(GtkWidget *widget, const GqKeyEvent *event, gpointer data);

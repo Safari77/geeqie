@@ -74,7 +74,6 @@
 #include "toolbar.h"
 #include "trash.h"
 #include "ui-fileops.h"
-#include "ui-menu.h"
 #include "ui-misc.h"
 #include "ui-tabcomp.h"
 #include "ui-utildlg.h"
@@ -1370,126 +1369,92 @@ static void image_overlay_help_cb(GtkWidget *, gpointer)
 	help_window_show("GuideOptionsOSD.html");
 }
 
-static void font_activated_cb(GtkFontChooser *widget, gchar *fontname, gpointer)
+static void font_dialog_done(GObject *source, GAsyncResult *result, gpointer user_data)
 {
-	g_free(c_options->image_overlay.font);
-	c_options->image_overlay.font = fontname;
-
-	gq_gtk_widget_destroy(GTK_WIDGET(widget));
-}
-
-static void font_response_cb(GtkDialog *dialog, gint response_id, gpointer data)
-{
-	gint i = GPOINTER_TO_INT(data);
-
+	const gint i = GPOINTER_TO_INT(user_data);
 	g_free(c_options->image_overlay_n[i].font);
 
-	if (response_id == GTK_RESPONSE_OK)
+	g_autoptr(PangoFontDescription) desc = gtk_font_dialog_choose_font_finish(GTK_FONT_DIALOG(source), result, nullptr);
+	if (desc)
 		{
-		c_options->image_overlay_n[i].font = gtk_font_chooser_get_font(GTK_FONT_CHOOSER(dialog));
+		c_options->image_overlay_n[i].font = pango_font_description_to_string(desc);
 		}
 	else
 		{
 		c_options->image_overlay_n[i].font = g_strdup(options->image_overlay_n[i].font);
 		}
-
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
 }
 
 static void image_overlay_set_font_cb(GtkWidget *widget, gpointer data)
 {
-	GtkWidget *dialog;
-	gint i = GPOINTER_TO_INT(data);
+	g_autoptr(GtkFontDialog) dialog = gtk_font_dialog_new();
+	gtk_font_dialog_set_title(dialog, _("Image Overlay Font"));
+	gtk_font_dialog_set_modal(dialog, TRUE);
 
-	dialog = gtk_font_chooser_dialog_new(_("Image Overlay Font"), GTK_WINDOW(widget_get_toplevel(widget)));
-	gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-	gtk_font_chooser_set_font(GTK_FONT_CHOOSER(dialog), options->image_overlay_n[i].font);
+	const gint i = GPOINTER_TO_INT(data);
+	g_autoptr(PangoFontDescription) desc = pango_font_description_from_string(options->image_overlay_n[i].font);
 
-	g_signal_connect(dialog, "font-activated", G_CALLBACK(font_activated_cb), data);
-	g_signal_connect(dialog, "response", G_CALLBACK(font_response_cb), data);
-
-	gtk_widget_show(dialog);
+	gtk_font_dialog_choose_font(dialog, GTK_WINDOW(widget_get_toplevel(widget)),
+	                            desc, nullptr, font_dialog_done, data);
 }
 
-static void text_color_activated_cb(GtkColorChooser *chooser, GdkRGBA *color, gpointer data)
+static void show_color_dialog(const char *title, GtkWidget *widget, GdkRGBA color,
+                              GAsyncReadyCallback callback, gpointer user_data)
 {
-	gint i = GPOINTER_TO_INT(data);
+	g_autoptr(GtkColorDialog) dialog = gtk_color_dialog_new();
+	gtk_color_dialog_set_title(dialog, title);
+	gtk_color_dialog_set_modal(dialog, TRUE);
+	gtk_color_dialog_set_with_alpha(dialog, TRUE);
 
-	c_options->image_overlay_n[i].text_color.from_gdk_rgba(*color);
-
-	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
+	gtk_color_dialog_choose_rgba(dialog, GTK_WINDOW(widget_get_toplevel(widget)),
+	                             &color, nullptr, callback, user_data);
 }
 
-static void text_color_response_cb(GtkDialog *dialog, gint response_id, gpointer data)
+static void color_dialog_done(GObject *source, GAsyncResult *result, GqColor init_color, GqColor &result_color)
 {
-	gint i = GPOINTER_TO_INT(data);
-
-	c_options->image_overlay_n[i].text_color = options->image_overlay_n[i].text_color;
-
-	if (response_id == GTK_RESPONSE_OK)
+	g_autoptr(GdkRGBA) color = gtk_color_dialog_choose_rgba_finish(GTK_COLOR_DIALOG(source), result, nullptr);
+	if (color)
 		{
-		GdkRGBA color;
-		gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog), &color);
-		c_options->image_overlay_n[i].text_color.from_gdk_rgba(color);
+		result_color.from_gdk_rgba(*color);
 		}
+	else
+		{
+		result_color = init_color;
+		}
+}
 
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
+static void text_color_dialog_done(GObject *source, GAsyncResult *result, gpointer user_data)
+{
+	const gint i = GPOINTER_TO_INT(user_data);
+
+	color_dialog_done(source, result, options->image_overlay_n[i].text_color,
+	                  c_options->image_overlay_n[i].text_color);
 }
 
 static void image_overlay_set_text_color_cb(GtkWidget *widget, gpointer data)
 {
-	GtkWidget *dialog = gtk_color_chooser_dialog_new(_("Image Overlay Text Color"), GTK_WINDOW(widget_get_toplevel(widget)));
-
 	const gint i = GPOINTER_TO_INT(data);
-	GdkRGBA color = options->image_overlay_n[i].text_color.to_gdk_rgba();
-	gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog), &color);
 
-	gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(dialog), TRUE);
-
-	g_signal_connect(dialog, "color-activated", G_CALLBACK(text_color_activated_cb), data);
-	g_signal_connect(dialog, "response", G_CALLBACK(text_color_response_cb), data);
-
-	gtk_widget_show(dialog);
+	show_color_dialog(_("Image Overlay Text Color"), widget,
+	                  options->image_overlay_n[i].text_color.to_gdk_rgba(),
+	                  text_color_dialog_done, data);
 }
 
-static void bg_color_activated_cb(GtkColorChooser *chooser, GdkRGBA *color, gpointer data)
+static void bg_color_dialog_done(GObject *source, GAsyncResult *result, gpointer user_data)
 {
-	gint i = GPOINTER_TO_INT(data);
+	const gint i = GPOINTER_TO_INT(user_data);
 
-	c_options->image_overlay_n[i].background.from_gdk_rgba(*color);
-
-	gq_gtk_widget_destroy(GTK_WIDGET(chooser));
-}
-
-static void bg_color_response_cb(GtkDialog *dialog, gint response_id, gpointer data)
-{
-	gint i = GPOINTER_TO_INT(data);
-
-	c_options->image_overlay_n[i].background = options->image_overlay_n[i].background;
-
-	if (response_id == GTK_RESPONSE_OK)
-		{
-		GdkRGBA color;
-		gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog), &color);
-		c_options->image_overlay_n[i].background.from_gdk_rgba(color);
-		}
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
+	color_dialog_done(source, result, options->image_overlay_n[i].background,
+	                  c_options->image_overlay_n[i].background);
 }
 
 static void image_overlay_set_background_color_cb(GtkWidget *widget, gpointer data)
 {
-	GtkWidget *dialog = gtk_color_chooser_dialog_new(_("Image Overlay Background Color"), GTK_WINDOW(widget_get_toplevel(widget)));
-
 	const gint i = GPOINTER_TO_INT(data);
-	GdkRGBA color = options->image_overlay_n[i].background.to_gdk_rgba();
-	gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog), &color);
 
-	gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(dialog), TRUE);
-
-	g_signal_connect(dialog, "color-activated", G_CALLBACK(bg_color_activated_cb), data);
-	g_signal_connect(dialog, "response", G_CALLBACK(bg_color_response_cb), data);
-
-	gtk_widget_show(dialog);
+	show_color_dialog(_("Image Overlay Background Color"), widget,
+	                  options->image_overlay_n[i].background.to_gdk_rgba(),
+	                  bg_color_dialog_done, data);
 }
 
 static void accel_store_populate()
@@ -2088,18 +2053,19 @@ static gboolean popover_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void default_layout_changed_cb(GtkWidget *, GtkPopover *popover)
+static void default_layout_changed_cb(GtkMenuButton *button, GParamSpec *, gpointer)
 {
-	gtk_popover_popup(popover);
+	if (!gtk_menu_button_get_active(button)) return;
 
+	save_default_window_layout_cb(GTK_WIDGET(button), nullptr);
+	GtkPopover *popover = gtk_menu_button_get_popover(button);
 	g_timeout_add(2000, popover_cb, popover);
 }
 
-static GtkWidget *create_popover(GtkWidget *parent, GtkWidget *child, GtkPositionType pos)
+static GtkWidget *create_popover(GtkWidget *child, GtkPositionType pos)
 {
 	GtkWidget *popover = gtk_popover_new();
 
-	gtk_widget_set_parent(popover, parent);
 	gtk_popover_set_position(GTK_POPOVER (popover), pos);
 	gtk_popover_set_autohide(GTK_POPOVER(popover), FALSE);
 	gq_gtk_container_add(popover, child);
@@ -2151,12 +2117,16 @@ static void config_tab_windows(GtkWidget *notebook)
 
 	subgroup = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(subgroup, _("Use current layout for default: "));
-	button = pref_button_new(subgroup, nullptr, _("Set"), G_CALLBACK(save_default_window_layout_cb), nullptr);
+	button = gtk_menu_button_new();
+	gtk_menu_button_set_child(GTK_MENU_BUTTON(button), gtk_label_new_with_mnemonic(_("Set")));
+	gq_gtk_container_add(subgroup, button);
+	gtk_widget_show(button);
 
 	GtkWidget *popover;
 
-	popover = create_popover(button, gtk_label_new(_("Current window layout\nhas been set as default")), GTK_POS_TOP);
-	g_signal_connect(button, "clicked", G_CALLBACK(default_layout_changed_cb), popover);
+	popover = create_popover(gtk_label_new(_("Current window layout\nhas been set as default")), GTK_POS_TOP);
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
+	g_signal_connect(button, "notify::active", G_CALLBACK(default_layout_changed_cb), nullptr);
 
 	group = pref_group_new(vbox, FALSE, _("Size"), GTK_ORIENTATION_VERTICAL);
 
@@ -2590,6 +2560,19 @@ static void config_tab_files(GtkWidget *notebook)
 	gtk_widget_show(button);
 }
 
+static void pref_checkbox_add_markup(GtkWidget *checkbox, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	g_autofree gchar *markup = g_markup_vprintf_escaped(format, ap);
+	va_end(ap);
+
+	GtkWidget *text_label = gtk_label_new(nullptr);
+	gtk_label_set_markup(GTK_LABEL(text_label), markup);
+
+	gtk_check_button_set_child(GTK_CHECK_BUTTON(checkbox), text_label);
+}
+
 /* metadata tab */
 static void config_tab_metadata(GtkWidget *notebook)
 {
@@ -2599,7 +2582,6 @@ static void config_tab_metadata(GtkWidget *notebook)
 	GtkWidget *ct_button;
 	GtkWidget *label;
 	GtkWidget *tmp_widget;
-	GtkWidget *text_label;
 
 	vbox = scrolled_notebook_page(notebook, _("Metadata"));
 
@@ -2614,10 +2596,8 @@ static void config_tab_metadata(GtkWidget *notebook)
 	gtk_widget_set_tooltip_text(label, _("A flowchart of the sequence is shown in the Help file"));
 
 	ct_button = pref_checkbox_new_int(group, "", options->metadata.save_in_image_file, &c_options->metadata.save_in_image_file);
-	text_label = gtk_widget_get_first_child(ct_button);
-	g_autofree gchar *step1_markup = g_markup_printf_escaped("<span weight=\"bold\">%s</span>%s",
-	                                                         _("Step 1"), _(") Save metadata in either the image file or the sidecar file, according to the XMP standard"));
-	gtk_label_set_markup(GTK_LABEL(text_label), step1_markup);
+	pref_checkbox_add_markup(ct_button, "<span weight=\"bold\">%s</span>) %s",
+	                         _("Step 1"), _("Save metadata in either the image file or the sidecar file, according to the XMP standard"));
 
 	g_autofree gchar *tooltip_markup = g_markup_printf_escaped("%s<span style=\"italic\">%s</span>%s<span style=\"italic\">%s</span>%s",
 	                                                           _("The destination is dependent on the settings in the "),
@@ -2629,10 +2609,8 @@ static void config_tab_metadata(GtkWidget *notebook)
 #endif
 
 	tmp_widget = pref_checkbox_new_int(group, "", options->metadata.enable_metadata_dirs, &c_options->metadata.enable_metadata_dirs);
-	text_label = gtk_widget_get_first_child(tmp_widget);
-	g_autofree gchar *step2_markup = g_markup_printf_escaped("<span weight=\"bold\">%s</span>%s<span style=\"italic\">%s</span>%s",
-	                                                         _("Step 2"), _(") Save metadata in the folder "),".metadata,", _(" local to the image folder (non-standard)"));
-	gtk_label_set_markup(GTK_LABEL(text_label), step2_markup);
+	pref_checkbox_add_markup(tmp_widget, "<span weight=\"bold\">%s</span>) %s <span style=\"italic\">%s</span> %s",
+	                         _("Step 2"), _("Save metadata in the folder"), ".metadata,", _("local to the image folder (non-standard)"));
 
 	label = pref_label_new(group, "");
 	g_autofree gchar *step3_markup = g_markup_printf_escaped("<span weight=\"bold\">%s</span>%s<span style=\"italic\">%s</span>%s",
@@ -2659,13 +2637,11 @@ static void config_tab_metadata(GtkWidget *notebook)
 
 	pref_checkbox_new_int(hbox, _("Ask before writing to image files"), options->metadata.confirm_write, &c_options->metadata.confirm_write);
 
-	tmp_widget=	pref_checkbox_new_int(hbox, "", options->metadata.sidecar_extended_name, &c_options->metadata.sidecar_extended_name);
+	tmp_widget = pref_checkbox_new_int(hbox, "", options->metadata.sidecar_extended_name, &c_options->metadata.sidecar_extended_name);
 	gtk_widget_set_tooltip_text(tmp_widget, _("This file naming convention is used by Darktable"));
-	text_label = gtk_widget_get_first_child(tmp_widget);
 
-	g_autofree gchar *markup = g_markup_printf_escaped("%s<span style=\"italic\">%s</span>%s<span style=\"italic\">%s</span>%s",
-	                                                   _("Create sidecar files named "), "image.ext.xmp", _(" (as opposed to the normal "), "image.xmp", ")");
-	gtk_label_set_markup(GTK_LABEL(text_label), markup);
+	pref_checkbox_add_markup(tmp_widget, "%s <span style=\"italic\">%s</span> (%s <span style=\"italic\">%s</span>)",
+	                         _("Create sidecar files named"), "image.ext.xmp", _("as opposed to the normal"), "image.xmp");
 
 	pref_spacer(group, PREF_PAD_GROUP);
 
@@ -3184,7 +3160,6 @@ static void config_tab_behavior(GtkWidget *notebook)
 	GtkWidget *collections_on_top;
 	GtkWidget *hide_window_in_fullscreen;
 	GtkWidget *hide_osd_in_fullscreen;
-	GtkWidget *checkbox;
 	GtkWidget *tmp;
 
 	vbox = scrolled_notebook_page(notebook, _("Behavior"));
@@ -3813,6 +3788,7 @@ void show_about_window(LayoutWindow *lw)
 		ZDCloseDatabase(cd);
 		}
 
+	copyright = g_string_append(copyright, _("\n\nMap Data Open Database License OpenStreetMap Contributors Map Imagery CC-BY-SA 2.0"));
 	copyright = g_string_append(copyright, _("\n\nSome icons by https://www.flaticon.com"));
 
 	in_stream_authors = g_resources_open_stream(GQ_RESOURCE_PATH_CREDITS "/authors", G_RESOURCE_LOOKUP_FLAGS_NONE, nullptr);

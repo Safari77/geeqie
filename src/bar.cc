@@ -36,7 +36,6 @@
 #include "menu.h"
 #include "metadata.h"
 #include "rcfile.h"
-#include "ui-menu.h"
 #include "ui-misc.h"
 
 
@@ -290,7 +289,7 @@ static void bar_expander_height_cb(GtkWidget *, gpointer data)
 
 	gtk_widget_show(window);
 
-	GtkWidget *data_box = gtk_widget_get_first_child(expander);
+	GtkWidget *data_box = gtk_expander_get_child(GTK_EXPANDER(expander));
 	gtk_widget_get_size_request(data_box, &w, &h);
 
 	GtkWidget *spin = gtk_spin_button_new_with_range(1, 1000, 1);
@@ -310,9 +309,12 @@ void menu_expander_height_cb(GSimpleAction *, GVariant *, gpointer data)
 	bar_expander_height_cb(nullptr, data);
 }
 
-static void bar_expander_add_cb(GtkWidget *, gpointer data)
+static void bar_expander_add_action_cb(GSimpleAction *, GVariant *parameter, gpointer)
 {
-	const auto *config = static_cast<const gchar *>(data);
+	if (!parameter) return;
+
+	const gchar *id = g_variant_get_string(parameter, nullptr);
+	const gchar *config = bar_pane_get_default_config(id);
 
 	if (config) load_config_from_buf(config, strlen(config), FALSE);
 }
@@ -372,7 +374,7 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 	GtkExpander *expander;
 
 	expander = GTK_EXPANDER(object);
-	GtkWidget *child = gtk_widget_get_first_child(GTK_WIDGET(expander));
+	GtkWidget *child = gtk_expander_get_child(expander);
 
 	if (gtk_expander_get_expanded(expander))
 		{
@@ -382,20 +384,61 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 		{
 		gtk_widget_hide(child);
 		}
+
+	auto *image = static_cast<GtkImage *>(g_object_get_data(G_OBJECT(expander), "bar_expander_button_image"));
+	if (image)
+		{
+		gtk_image_set_from_icon_name(image, gtk_expander_get_expanded(expander) ? GQ_ICON_PAN_UP : GQ_ICON_PAN_DOWN);
+		}
 }
 
-static void bar_menu_add_cb(GtkWidget *, gpointer)
+static GtkWidget *bar_expander_label_widget_new(GtkWidget *expander, GtkWidget *title)
 {
-	GtkWidget *menu = popover_box_new();
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-/** @FIXME GTK$ This is a placeholder for the moment.
- * The style should be, for example:
- * 	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-collection.ui");
-	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-collection"));
-	popup_menu(menu_model, cw->window);
+	gtk_widget_set_tooltip_text(expander, _("Expand or collapse pane"));
+	gtk_box_append(GTK_BOX(box), title);
+	gtk_widget_set_hexpand(title, TRUE);
+	gtk_widget_set_halign(title, GTK_ALIGN_FILL);
 
-	See the original code.
-*/
+	return box;
+}
+
+static GtkWidget *bar_menu_add_button_new(GtkWidget *toolbar)
+{
+	GtkWidget *button = gtk_menu_button_new();
+	GtkWidget *content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	GtkWidget *image = gtk_image_new_from_icon_name(GQ_ICON_ADD);
+	GtkWidget *label = gtk_label_new(_("Add"));
+	g_autoptr(GMenu) menu_model = g_menu_new();
+
+	for (const KnownPanes *pane = known_panes; pane->id; pane++)
+		{
+		g_autoptr(GMenuItem) item = g_menu_item_new(_(pane->title), nullptr);
+		g_menu_item_set_action_and_target_value(item, "bar.add-pane", g_variant_new_string(pane->id));
+		g_menu_append_item(menu_model, item);
+		}
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu_model));
+
+	GSimpleActionGroup *action_group = g_simple_action_group_new();
+	GSimpleAction *action = g_simple_action_new("add-pane", G_VARIANT_TYPE_STRING);
+	g_signal_connect(action, "activate", G_CALLBACK(bar_expander_add_action_cb), nullptr);
+	g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(action));
+	g_object_unref(action);
+
+	gtk_box_append(GTK_BOX(content), image);
+	gtk_box_append(GTK_BOX(content), label);
+	gtk_menu_button_set_child(GTK_MENU_BUTTON(button), content);
+	gtk_widget_set_tooltip_text(button, _("Add Pane"));
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
+	gtk_widget_insert_action_group(button, "bar", G_ACTION_GROUP(action_group));
+	g_object_set_data_full(G_OBJECT(button), "bar-action-group", action_group, g_object_unref);
+
+	gq_gtk_container_add(toolbar, button);
+	gtk_widget_show(button);
+
+	return button;
 }
 
 
@@ -411,7 +454,7 @@ void bar_set_fd(GtkWidget *bar, FileData *fd)
 	     expander;
 	     expander = gtk_widget_get_next_sibling(expander))
 		{
-		GtkWidget *widget = gtk_widget_get_first_child(expander);
+		GtkWidget *widget = gtk_expander_get_child(GTK_EXPANDER(expander));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && pd->pane_set_fd)
@@ -432,7 +475,7 @@ void bar_notify_selection(GtkWidget *bar, gint count)
 	     expander;
 	     expander = gtk_widget_get_next_sibling(expander))
 		{
-		GtkWidget *widget = gtk_widget_get_first_child(expander);
+		GtkWidget *widget = gtk_expander_get_child(GTK_EXPANDER(expander));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && pd->pane_notify_selection)
@@ -451,7 +494,7 @@ gboolean bar_event(GtkWidget *bar, GdkEvent *event)
 	    child;
 	    child = gtk_widget_get_next_sibling(child))
 		{
-		GtkWidget *widget = gtk_widget_get_first_child(child);
+		GtkWidget *widget = gtk_expander_get_child(GTK_EXPANDER(child));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && pd->pane_event && pd->pane_event(widget, event))
@@ -479,7 +522,7 @@ GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id)
 	    child;
 	    child = gtk_widget_get_next_sibling(child))
 		{
-		GtkWidget *widget = gtk_widget_get_first_child(child);
+		GtkWidget *widget = gtk_expander_get_child(GTK_EXPANDER(child));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (pd && type == pd->type && strcmp(id, pd->id) == 0)
@@ -523,7 +566,7 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	    expander;
 	    expander = gtk_widget_get_next_sibling(expander))
 		{
-		GtkWidget *widget = gtk_widget_get_first_child(expander);
+		GtkWidget *widget = gtk_expander_get_child(GTK_EXPANDER(expander));
 
 		auto *pd = static_cast<PaneData *>(g_object_get_data(G_OBJECT(widget), "pane_data"));
 		if (!pd) continue;
@@ -565,7 +608,7 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 	DEBUG_NAME(expander);
 	if (pd && pd->title)
 		{
-		gtk_expander_set_label_widget(GTK_EXPANDER(expander), pd->title);
+		gtk_expander_set_label_widget(GTK_EXPANDER(expander), bar_expander_label_widget_new(expander, pd->title));
 		gtk_widget_show(pd->title);
 		}
 
@@ -597,11 +640,13 @@ void bar_populate_default(GtkWidget *)
 		}
 }
 
-static void bar_size_allocate(GtkWidget *, GtkAllocation *, gpointer data)
+static void bar_paned_position_changed_cb(GObject *paned, GParamSpec *, gpointer data)
 {
-	auto bd = static_cast<BarData *>(data);
+	auto *bar = static_cast<GtkWidget *>(data);
+	auto *bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
+	if (!bd) return;
 
-	bd->width = gtk_paned_get_position(GTK_PANED(bd->lw->utility_paned));
+	bd->width = gtk_paned_get_position(GTK_PANED(paned));
 }
 
 void bar_close(GtkWidget *bar)
@@ -638,8 +683,8 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	DEBUG_NAME(bd->widget);
 	g_object_set_data_full(G_OBJECT(bd->widget), "bar_data", bd, bar_destroy);
 
-	g_signal_connect(G_OBJECT(bd->widget), "size-allocate",
-			 G_CALLBACK(bar_size_allocate), bd);
+	g_signal_connect_object(G_OBJECT(lw->utility_paned), "notify::position",
+	                        G_CALLBACK(bar_paned_position_changed_cb), bd->widget, GConnectFlags(0));
 
 	bd->width = SIDEBAR_DEFAULT_WIDTH;
 
@@ -674,8 +719,7 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	DEBUG_NAME(add_box);
 	gq_gtk_box_pack_end(GTK_BOX(bd->widget), add_box, FALSE, FALSE, 0);
 	tbar = pref_toolbar_new(add_box);
-	pref_toolbar_button(tbar, GQ_ICON_ADD, _("Add"), FALSE,
-	                    _("Add Pane"), G_CALLBACK(bar_menu_add_cb), nullptr);
+	bar_menu_add_button_new(tbar);
 	gtk_widget_show(add_box);
 
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);

@@ -601,17 +601,9 @@ static gboolean vflist_select_cb(GtkTreeSelection *, GtkTreeModel *store, GtkTre
 	auto vf = static_cast<ViewFile *>(data);
 	GtkTreeIter iter;
 
-	VFLIST(vf)->select_fd = nullptr;
-
 	if (!path_currently_selected && gtk_tree_model_get_iter(store, &iter, tpath))
 		{
-		g_autoptr(GtkTreePath) cursor_path = nullptr;
-		gtk_tree_view_get_cursor(GTK_TREE_VIEW(vf->listview), &cursor_path, nullptr);
-		if (cursor_path)
-			{
-			gtk_tree_model_get_iter(store, &iter, cursor_path);
-			gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &VFLIST(vf)->select_fd, -1);
-			}
+		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &VFLIST(vf)->select_fd, -1);
 		}
 
 	if (vf->layout &&
@@ -1608,25 +1600,6 @@ gboolean vflist_refresh(ViewFile *vf)
 }
 
 
-static GdkRGBA *vflist_listview_color_shifted(GtkWidget *widget)
-{
-/** @FIXME GTK4 stub */
-	return nullptr;
-}
-
-static void vflist_listview_color_cb(GtkTreeViewColumn *, GtkCellRenderer *cell,
-				     GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data)
-{
-	auto vf = static_cast<ViewFile *>(data);
-	gboolean set;
-
-	gtk_tree_model_get(tree_model, iter, FILE_COLUMN_COLOR, &set, -1);
-	g_object_set(cell,
-	             "cell-background-rgba", vflist_listview_color_shifted(vf->listview),
-	             "cell-background-set", set,
-	             NULL);
-}
-
 static void vflist_listview_add_column(ViewFile *vf, gint n, const gchar *title, gboolean image, gboolean right_justify, gboolean expand)
 {
 	GtkTreeViewColumn *column;
@@ -1658,7 +1631,6 @@ static void vflist_listview_add_column(ViewFile *vf, gint n, const gchar *title,
 		gtk_tree_view_column_add_attribute(column, renderer, "pixbuf", n);
 		}
 
-	gtk_tree_view_column_set_cell_data_func(column, renderer, vflist_listview_color_cb, vf, nullptr);
 	g_object_set_data(G_OBJECT(column), "column_store_idx", GUINT_TO_POINTER(n));
 	g_object_set_data(G_OBJECT(renderer), "column_store_idx", GUINT_TO_POINTER(n));
 
@@ -1738,6 +1710,11 @@ gboolean vflist_set_fd(ViewFile *vf, FileData *dir_fd)
 
 	file_data_unref(vf->dir_fd);
 	vf->dir_fd = file_data_ref(dir_fd);
+
+	g_clear_handle_id(&(VFLIST(vf)->select_idle_id), g_source_remove);
+	VFLIST(vf)->select_fd = nullptr;
+	vf->click_fd = nullptr;
+	gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(vf->listview)));
 
 	/* force complete reload */
 	vflist_store_clear(vf, TRUE);

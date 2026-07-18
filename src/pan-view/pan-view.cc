@@ -22,7 +22,6 @@
 #include "pan-view.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -73,7 +72,6 @@
 #include "ui-misc.h"
 #include "ui-tabcomp.h"
 #include "ui-utildlg.h"
-#include "uri-utils.h"
 #include "utilops.h"
 #include "window.h"
 
@@ -109,6 +107,8 @@ constexpr gint PAN_POPUP_BORDER = 1;
 constexpr guint8 PAN_POPUP_ALPHA = 255;
 constexpr GqColor PAN_POPUP_COLOR{255, 255, 225, PAN_POPUP_ALPHA};
 constexpr GqColor PAN_POPUP_BORDER_COLOR{0, 0, 0, PAN_POPUP_ALPHA};
+
+constexpr auto PAN_WINDOW_DATA_KEY = "pan-window";
 
 } // namespace
 
@@ -1058,23 +1058,16 @@ static gboolean pan_window_key_press_cb(GtkEventControllerKey *, guint keyval, g
 	const GqKeyEvent *event = &event_data;
 	auto pw = static_cast<PanWindow *>(data);
 	PixbufRenderer *pr;
-	FileData *fd;
 	gboolean stop_signal = FALSE;
-	GtkWidget *menu;
 	GtkWidget *imd_widget;
 	gint x = 0;
 	gint y = 0;
 	gint focused;
-	gint on_entry;
 
 	pr = PIXBUF_RENDERER(pw->imd->pr);
-	fd = pan_menu_click_fd(pw);
 
 	imd_widget = gq_gtk_widget_get_focus_child(pw->imd->widget);
 	focused = (pw->fs || (imd_widget && gtk_widget_has_focus(imd_widget)));
-	on_entry = (gtk_widget_has_focus(pw->path_entry) ||
-		    gtk_widget_has_focus(pw->search_ui->search_entry) ||
-		    gtk_widget_has_focus(pw->filter_ui->filter_entry));
 
 	if (focused)
 		{
@@ -1479,19 +1472,19 @@ static void pan_window_scrollbar_v_value_cb(GtkRange *range, gpointer data)
 	pixbuf_renderer_scroll_to_point(pr, static_cast<gint>(static_cast<gdouble>(pr->x_scroll) / pr->scale), y, 0.0, 0.0);
 }
 
-static void pan_window_layout_change_cb(GtkWidget *combo, gpointer data)
+static void pan_window_layout_change_cb(GtkDropDown *drop_down, GParamSpec *, gpointer data)
 {
-	auto pw = static_cast<PanWindow *>(data);
+	auto *pw = static_cast<PanWindow *>(data);
 
-	pw->layout = static_cast<PanLayoutType>(gtk_combo_box_get_active(GTK_COMBO_BOX(combo)));
+	pw->layout = static_cast<PanLayoutType>(gtk_drop_down_get_selected(drop_down));
 	pan_layout_update(pw);
 }
 
-static void pan_window_layout_size_cb(GtkWidget *combo, gpointer data)
+static void pan_window_layout_size_cb(GtkDropDown *drop_down, GParamSpec *, gpointer data)
 {
-	auto pw = static_cast<PanWindow *>(data);
+	auto *pw = static_cast<PanWindow *>(data);
 
-	pw->size = static_cast<PanImageSize>(gtk_combo_box_get_active(GTK_COMBO_BOX(combo)));
+	pw->size = static_cast<PanImageSize>(gtk_drop_down_get_selected(drop_down));
 	pan_layout_update(pw);
 }
 
@@ -1526,6 +1519,7 @@ static void pan_window_close(PanWindow *pw)
 	pan_fullscreen_toggle(pw, TRUE);
 	pan_search_ui_destroy(g_steal_pointer(&pw->search_ui));
 	pan_filter_ui_destroy(g_steal_pointer(&pw->filter_ui));
+	g_object_set_data(G_OBJECT(pw->window), PAN_WINDOW_DATA_KEY, nullptr);
 	gq_gtk_widget_destroy(pw->window);
 
 	pan_window_items_free(pw);
@@ -1915,7 +1909,6 @@ static void pan_pop_menu_collections_cb(GSimpleAction *, GVariant *parameter, gp
 static void pan_window_new_real(FileData *dir_fd)
 {
 	GtkWidget *box;
-	GtkWidget *combo;
 	GtkWidget *frame;
 	GtkWidget *hbox;
 	GtkWidget *hbox_imd_widget;
@@ -1940,6 +1933,7 @@ static void pan_window_new_real(FileData *dir_fd)
 
 	pw->window = window_new("panview", nullptr, _("Pan View"));
 	DEBUG_NAME(pw->window);
+	g_object_set_data(G_OBJECT(pw->window), PAN_WINDOW_DATA_KEY, pw);
 
 	gtk_widget_set_size_request(pw->window, DEFAULT_MINIMAL_WINDOW_SIZE, DEFAULT_MINIMAL_WINDOW_SIZE);
 
@@ -1960,34 +1954,40 @@ static void pan_window_new_real(FileData *dir_fd)
 	tab_completion_set_enter_func(pw->path_entry,
 	                              [pw](const gchar *text){ pan_window_entry_activate_cb(pw, text); });
 
-	combo = gtk_combo_box_text_new();
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Timeline"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Calendar"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Folders"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Folders (flower)"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Grid"));
+	static const char *layout_strings[] =
+		{
+		_("Timeline"),
+		_("Calendar"),
+		_("Folders"),
+		_("Folders (flower)"),
+		_("Grid"),
+		nullptr
+		};
+	GtkWidget *layout_drop_down = gtk_drop_down_new_from_strings(layout_strings);
+	gtk_drop_down_set_selected(GTK_DROP_DOWN(layout_drop_down), pw->layout);
+	g_signal_connect(G_OBJECT(layout_drop_down), "notify::selected",
+	                 G_CALLBACK(pan_window_layout_change_cb), pw);
+	gq_gtk_box_pack_start(GTK_BOX(box), layout_drop_down, FALSE, FALSE, 0);
 
-	gtk_combo_box_set_active(GTK_COMBO_BOX(combo), pw->layout);
-	g_signal_connect(G_OBJECT(combo), "changed", G_CALLBACK(pan_window_layout_change_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(box), combo, FALSE, FALSE, 0);
-	gtk_widget_show(combo);
-
-	combo = gtk_combo_box_text_new();
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Dots"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("No Images"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Small Thumbnails"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Normal Thumbnails"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Large Thumbnails"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("1:10 (10%)"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("1:4 (25%)"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("1:3 (33%)"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("1:2 (50%)"));
-	gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("1:1 (100%)"));
-
-	gtk_combo_box_set_active(GTK_COMBO_BOX(combo), pw->size);
-	g_signal_connect(G_OBJECT(combo), "changed", G_CALLBACK(pan_window_layout_size_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(box), combo, FALSE, FALSE, 0);
-	gtk_widget_show(combo);
+	static const char *size_strings[] =
+		{
+		_("Dots"),
+		_("No Images"),
+		_("Small Thumbnails"),
+		_("Normal Thumbnails"),
+		_("Large Thumbnails"),
+		_("1:10 (10%)"),
+		_("1:4 (25%)"),
+		_("1:3 (33%)"),
+		_("1:2 (50%)"),
+		_("1:1 (100%)"),
+		nullptr
+		};
+	GtkWidget *size_drop_down = gtk_drop_down_new_from_strings(size_strings);
+	gtk_drop_down_set_selected(GTK_DROP_DOWN(size_drop_down), pw->size);
+	g_signal_connect(G_OBJECT(size_drop_down), "notify::selected",
+	                 G_CALLBACK(pan_window_layout_size_cb), pw);
+	gq_gtk_box_pack_start(GTK_BOX(box), size_drop_down, FALSE, FALSE, 0);
 
 	pw->imd = image_new(TRUE);
 	pw->imd_normal = pw->imd;
@@ -2178,10 +2178,24 @@ static GdkContentProvider *pan_window_dnd_prepare(GtkDragSource *, gdouble, gdou
 	return provider;
 }
 
+struct PanWindowDndDropData
+{
+	GtkWidget *window;
+};
+
 static void pan_window_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
 {
-	auto *pw = static_cast<PanWindow *>(data);
-	GdkDragAction action = GDK_ACTION_NONE;
+	auto *drop_data = static_cast<PanWindowDndDropData *>(data);
+	auto *pw = static_cast<PanWindow *>(g_object_get_data(G_OBJECT(drop_data->window), PAN_WINDOW_DATA_KEY));
+	if (!pw)
+		{
+		gdk_drop_finish(drop, GDK_ACTION_NONE);
+		g_object_unref(drop_data->window);
+		g_free(drop_data);
+		return;
+		}
+
+	auto action = GDK_ACTION_NONE;
 
 	if (list && isdir((static_cast<FileData *>(list->data))->path))
 		{
@@ -2192,11 +2206,17 @@ static void pan_window_dnd_file_received(GdkDrop *drop, GList *list, gpointer da
 		}
 
 	gdk_drop_finish(drop, action);
+	g_object_unref(drop_data->window);
+	g_free(drop_data);
 }
 
 static gboolean pan_window_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble, gdouble, gpointer data)
 {
-	dnd_read_file_list_async(drop, pan_window_dnd_file_received, data);
+	auto *pw = static_cast<PanWindow *>(data);
+	auto *drop_data = g_new(PanWindowDndDropData, 1);
+	drop_data->window = GTK_WIDGET(g_object_ref(pw->window));
+
+	dnd_read_file_list_async(drop, pan_window_dnd_file_received, drop_data);
 
 	return TRUE;
 }

@@ -33,6 +33,10 @@
 #define	MAP_ANON	MAP_ANONYMOUS
 #endif
 
+#ifndef GDK_ACTION_NONE
+#define GDK_ACTION_NONE static_cast<GdkDragAction>(0)
+#endif
+
 struct GqMouseButtonEvent
 {
 	guint button;
@@ -84,6 +88,7 @@ void gq_gtk_widget_show_all(GtkWidget *widget);
 void gq_gtk_window_set_keep_above(GtkWindow *window, gboolean setting);
 void gq_gtk_widget_destroy(GtkWidget *widget);
 void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
+const gchar *stock_id_to_icon_name(const gchar *stock_id);
 GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, gint size);
 GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget);
 

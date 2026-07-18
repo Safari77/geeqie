@@ -52,6 +52,7 @@ LUA_
 MonoSpace
 N_(
 NikonTag
+OpenStreetMap
 Pause
 PixbufRenderer
 PluginsMenu
@@ -127,6 +128,7 @@ write_char_option
 \"Background color\",
 \"Background set\",
 \"Draw focus indicator\",
+\"Draw selected state\",
 \"Fixed height\",
 \"Fixed width\",
 \"Focus\",
@@ -139,6 +141,7 @@ write_char_option
 \"Marks\",
 \"Number of marks\",
 \"Pixbuf Object\",
+\"Selected\",
 \"Show marks\",
 \"Show text\",
 \"Text to render\",

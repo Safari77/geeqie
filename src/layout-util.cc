@@ -142,20 +142,6 @@ static void layout_search_and_run_window_new(LayoutWindow *lw);
  *-----------------------------------------------------------------------------
  */
 
-static guint tree_key_overrides[] = {
-	GDK_KEY_Page_Up,	GDK_KEY_KP_Page_Up,
-	GDK_KEY_Page_Down,	GDK_KEY_KP_Page_Down,
-	GDK_KEY_Home,	GDK_KEY_KP_Home,
-	GDK_KEY_End,	GDK_KEY_KP_End
-};
-
-static gboolean layout_key_match(guint keyval)
-{
-	const auto it = std::find(std::cbegin(tree_key_overrides), std::cend(tree_key_overrides), keyval);
-
-	return it != std::cend(tree_key_overrides);
-}
-
 void keyboard_scroll_calc(gint &x, gint &y, GdkModifierType state, guint keyval, guint32 time)
 {
 	static gint delta = 0;
@@ -545,15 +531,6 @@ void layout_menu_close_cb(GSimpleAction *, GVariant *, gpointer)
 	layout_close(lw);
 }
 
-static void layout_return_cb(GSimpleAction *, GVariant *, gpointer)
-{
-	auto lw = get_current_layout();
-
-	layout_exit_fullscreen(lw);
-
-		layout_close(lw);
-}
-
 static void layout_menu_exit_cb(GSimpleAction *, GVariant *, gpointer)
 {
 	exit_program();
@@ -607,7 +584,7 @@ static void layout_menu_select_rectangle_cb(GSimpleAction *action, GVariant *val
 	gboolean active = g_variant_get_boolean(value);
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), value);
 
-	options->draw_rectangle = !active;
+	options->draw_rectangle = active;
 }
 
 static void layout_menu_split_pane_sync_cb(GSimpleAction *action, GVariant *, gpointer       data)
@@ -1332,16 +1309,87 @@ static void layout_menu_histogram_toggle_mode_cb(GSimpleAction *, GVariant *, gp
 	layout_util_sync_views(lw);
 }
 
-static void layout_menu_histogram_channel_cb(GSimpleAction *, GVariant *, gpointer  )
+static gint histogram_mode_from_string(const gchar *value)
 {
-/** @FIXME GTK4
- */
+	if (g_str_equal(value, "linear")) return HMODE_LINEAR;
+	if (g_str_equal(value, "log")) return HMODE_LOG;
+
+	return -1;
 }
 
-static void layout_menu_histogram_mode_cb(GSimpleAction *, GVariant *, gpointer  )
+static gint histogram_channel_from_string(const gchar *value)
 {
-/** @FIXME GTK4
- */
+	if (g_str_equal(value, "red")) return HCHAN_R;
+	if (g_str_equal(value, "green")) return HCHAN_G;
+	if (g_str_equal(value, "blue")) return HCHAN_B;
+	if (g_str_equal(value, "rgb")) return HCHAN_RGB;
+	if (g_str_equal(value, "value")) return HCHAN_MAX;
+
+	return -1;
+}
+
+static const gchar *histogram_channel_to_string(gint channel)
+{
+	switch (channel)
+		{
+		case HCHAN_R:
+			return "red";
+		case HCHAN_G:
+			return "green";
+		case HCHAN_B:
+			return "blue";
+		case HCHAN_RGB:
+			return "rgb";
+		case HCHAN_MAX:
+			return "value";
+		default:
+			return "rgb";
+		}
+}
+
+static const gchar *histogram_mode_to_string(gint mode)
+{
+	switch (mode)
+		{
+		case HMODE_LINEAR:
+			return "linear";
+		case HMODE_LOG:
+			return "log";
+		default:
+			return "linear";
+		}
+}
+
+static void layout_menu_histogram_channel_cb(GSimpleAction *action, GVariant *state, gpointer)
+{
+	const gchar *value = g_variant_get_string(state, nullptr);
+	gint channel = histogram_channel_from_string(value);
+	if (channel < 0 || channel >= HCHAN_COUNT) return;
+
+	auto lw = get_current_layout();
+
+	g_simple_action_set_state(action, g_variant_new_string(value));
+
+	OsdShowFlags flags = image_osd_get(lw->image);
+	if (!(flags & OSD_SHOW_HISTOGRAM))
+		{
+		image_osd_set(lw->image, static_cast<OsdShowFlags>(flags | OSD_SHOW_INFO | OSD_SHOW_STATUS | OSD_SHOW_HISTOGRAM));
+		}
+
+	image_osd_histogram_set_channel(lw->image, channel);
+}
+
+static void layout_menu_histogram_mode_cb(GSimpleAction *action, GVariant *state, gpointer)
+{
+	const gchar *value = g_variant_get_string(state, nullptr);
+	gint mode = histogram_mode_from_string(value);
+	if (mode < 0 || mode >= HMODE_COUNT) return;
+
+	auto lw = get_current_layout();
+
+	g_simple_action_set_state(action, g_variant_new_string(value));
+
+	image_osd_histogram_set_mode(lw->image, mode);
 }
 
 static void layout_menu_refresh_cb(GSimpleAction *, GVariant *, gpointer)
@@ -2525,7 +2573,7 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 	GMenu *plugins_menu = G_MENU(gtk_builder_get_object(lw->builder, "plugins-submenu"));
 	g_menu_remove_all(plugins_menu);
 
-	plugins_menu_populate(plugins_menu, "win.plugin-run", nullptr);
+	plugins_menu_populate(plugins_menu, "win.main-win-plugin-run", nullptr);
 }
 
 void create_toolbars(LayoutWindow *lw)
@@ -2539,58 +2587,6 @@ void create_toolbars(LayoutWindow *lw)
 		layout_toolbar_add_default(lw, static_cast<ToolbarType>(i));
 		}
 }
-
-static int find_section_by_label (GMenuModel *model, const gchar )
-{
-    int n = g_menu_model_get_n_items (model);
-
-    for (int i = 0; i < n; i++) {
-
-        /* Check label `
-            continue;
-
-        if (g_strcmp0 (item_label, label) != 0)
-            continue;
-*/
-        /* Check that this item is a section */
-        GMenuModel *section =
-            g_menu_model_get_item_link (model, i, "section");
-
-        if (section) {
-            g_object_unref (section);
-            return i;  /* FOUND */
-        }
-    }
-
-    return -1;
-}
-
-static int find_item_by_label (GMenuModel *model, const char *label)
-{
-	int n = g_menu_model_get_n_items (model);
-
-	for (int i = 0; i < n; i++)
-		{
-		const char *item_action = nullptr;
-		const char *item_label = nullptr;
-
-g_menu_model_get_item_attribute (
-		            model, i, "action", "s", &item_action);
-g_menu_model_get_item_attribute (
-		            model, i, "target", "s", &item_action);
-	            
-		if (g_menu_model_get_item_attribute (
-		            model, i, "label", "s", &item_label))
-			{
-			if (g_strcmp0 (item_label, label) == 0)
-				{
-				return i;
-				}
-			}
-		}
-	return -1;
-}
-
 
 static void layout_menu_window_delete_cb(GSimpleAction *, GVariant *, gpointer  )
 {
@@ -2614,98 +2610,6 @@ static void layout_menu_window_delete_cb(GSimpleAction *, GVariant *, gpointer  
 	pref_label_new(hbox, lw->options.id);
 
 	gtk_widget_show(dw->gd->dialog);
-}
-
-/*
- *-----------------------------------------------------------------------------
- * menu
- *-----------------------------------------------------------------------------
- */
-
-static gchar *menu_translate(const gchar *path, gpointer)
-{
-	return const_cast<gchar *>(_(path));
-}
-
-static GList *layout_actions_editor_menu_path(const EditorDescription *editor)
-{
-	g_auto(GStrv) split = g_strsplit(editor->menu_path, "/", 0);
-
-	const guint split_count = g_strv_length(split);
-	if (split_count == 0) return nullptr;
-
-	GList *ret = nullptr;
-	for (guint i = 0; i < split_count; i++)
-		{
-		ret = g_list_prepend(ret, g_strdup(split[i]));
-		}
-
-	ret = g_list_prepend(ret, g_strdup(editor->key));
-
-	return g_list_reverse(ret);
-}
-
-static void layout_actions_editor_add(GString *desc, GList *path, GList *old_path)
-{
-	gint to_open;
-	gint to_close;
-	gint i;
-	while (path && old_path && strcmp(static_cast<gchar *>(path->data), static_cast<gchar *>(old_path->data)) == 0)
-		{
-		path = path->next;
-		old_path = old_path->next;
-		}
-	to_open = g_list_length(path) - 1;
-	to_close = g_list_length(old_path) - 1;
-
-	if (to_close > 0)
-		{
-		old_path = g_list_last(old_path);
-		old_path = old_path->prev;
-		}
-
-	for (i =  0; i < to_close; i++)
-		{
-		auto name = static_cast<gchar *>(old_path->data);
-		if (g_str_has_suffix(name, "Section"))
-			{
-			g_string_append(desc,	"      </placeholder>");
-			}
-		else if (g_str_has_suffix(name, "Menu"))
-			{
-			g_string_append(desc,	"    </menu>");
-			}
-		else
-			{
-			g_warning("invalid menu path item %s", name);
-			}
-		old_path = old_path->prev;
-		}
-
-	for (i =  0; i < to_open; i++)
-		{
-		auto name = static_cast<gchar *>(path->data);
-		if (g_str_has_suffix(name, "Section"))
-			{
-			g_string_append_printf(desc,	"      <placeholder name='%s'>", name);
-			}
-		else if (g_str_has_suffix(name, "Menu"))
-			{
-			g_string_append_printf(desc,	"    <menu action='%s'>", name);
-			}
-		else
-			{
-			g_warning("invalid menu path item %s", name);
-			}
-		path = path->next;
-		}
-
-	if (path)
-		g_string_append_printf(desc, "      <menuitem action='%s'/>", static_cast<gchar *>(path->data));
-}
-
-void layout_actions_setup(LayoutWindow *lw)
-{
 }
 
 static gboolean layout_editors_reload_idle_cb(gpointer user_data)
@@ -2792,16 +2696,11 @@ void layout_editors_reload_finish()
 		}
 }
 
-void layout_actions_add_window(LayoutWindow *, GtkWidget *)
+void layout_actions_add_window(LayoutWindow *lw, GtkWidget *window)
 {
-/** @FIXME GTK4
-	GtkAccelGroup *group;
+	GApplication *app = g_application_get_default();
 
-	if (!lw->ui_manager) return;
-
-	group = deprecated_gtk_ui_manager_get_accel_group(lw->ui_manager);
-	gtk_window_add_accel_group(GTK_WINDOW(window), group);
-*/
+	register_actions_from_table(GTK_APPLICATION(app), window, get_main_actions(), get_keyfile_merged(), lw);
 }
 
 GtkWidget *layout_actions_menu_bar(LayoutWindow *lw)
@@ -2827,10 +2726,20 @@ GtkWidget *layout_actions_menu_tool_bar(LayoutWindow *lw)
 {
 	GtkWidget *toolbar;
 
-	if (lw->menu_tool_bar) return lw->menu_tool_bar;
-
 	toolbar = layout_actions_toolbar(lw, TOOLBAR_MAIN);
 	DEBUG_NAME(toolbar);
+
+	if (lw->menu_tool_bar)
+		{
+		if (gtk_widget_get_parent(toolbar) != lw->menu_tool_bar)
+			{
+			widget_remove_from_parent(toolbar);
+			gq_gtk_box_pack_start(GTK_BOX(lw->menu_tool_bar), toolbar, FALSE, FALSE, 0);
+			}
+
+		return lw->menu_tool_bar;
+		}
+
 	lw->menu_tool_bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
 	gq_gtk_box_pack_start(GTK_BOX(lw->menu_tool_bar), toolbar, FALSE, FALSE, 0);
@@ -2840,14 +2749,16 @@ GtkWidget *layout_actions_menu_tool_bar(LayoutWindow *lw)
 
 void layout_actions_foreach(LayoutWindow *lw, GFunc func, gpointer data)
 {
-/** @FIXME GTK4
-	for (GList *groups = deprecated_gtk_ui_manager_get_action_groups(lw->ui_manager); groups; groups = groups->next)
-		{
-		g_autoptr(GList) actions = deprecated_gtk_action_group_list_actions(deprecated_GTK_ACTION_GROUP(groups->data));
+	if (!lw || !lw->window || !func) return;
 
-		g_list_foreach(actions, func, data);
+	g_auto(GStrv) action_names = g_action_group_list_actions(G_ACTION_GROUP(lw->window));
+	for (guint i = 0; action_names && action_names[i]; i++)
+		{
+		GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), action_names[i]);
+		if (!action) continue;
+
+		func(action, data);
 		}
-*/
 }
 
 static void toolbar_clear_cb(GtkWidget *widget, gpointer)
@@ -2879,29 +2790,6 @@ void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 			toolbar_clear_cb(child, nullptr);
 			}
 		}
-}
-
-static void action_radio_changed_cb(gpointer action, gpointer current, gpointer data)
-{
-	/* Temporary GTK4 stub: old GtkRadioAction state sync is gone. */
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data), action == current);
-}
-
-static void action_toggle_activate_cb(gpointer, gpointer data)
-{
-	/* Temporary GTK4 stub: legacy GtkToggleAction callback path is disabled until ported. */
-	(void)data;
-}
-
-static gboolean toolbar_button_press_event_cb(GtkWidget *, GdkEvent *, gpointer data)
-{
-	/* Temporary GTK4 bridge: activate modern GAction objects only. */
-	if (G_IS_ACTION(data))
-		{
-		g_action_activate(G_ACTION(data), nullptr);
-		}
-
-	return TRUE;
 }
 
 void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_name)
@@ -3345,7 +3233,7 @@ static void layout_util_sync_views(LayoutWindow *lw)
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-info-sidebar");
 		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(layout_bar_enabled(lw)));
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-sort-manager");
-		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(layout_bar_enabled(lw)));
+	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(layout_bar_sort_enabled(lw)));
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-hide-selectable-toolbars");
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(lw->options.selectable_toolbars_hidden));
@@ -3387,10 +3275,10 @@ static void layout_util_sync_views(LayoutWindow *lw)
 	if (osd_flags & OSD_SHOW_HISTOGRAM)
 		{
 		action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-histogram-channel");
-		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_int64(image_osd_histogram_get_channel(lw->image)));
+		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string(histogram_channel_to_string(image_osd_histogram_get_channel(lw->image))));
 
 		action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-histogram-mode");
-		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_int64(image_osd_histogram_get_mode(lw->image)));
+		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string(histogram_mode_to_string(image_osd_histogram_get_mode(lw->image))));
 		}
 
 //	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-connect-zoom-menu");
@@ -3419,17 +3307,15 @@ static void layout_util_sync_views(LayoutWindow *lw)
 	overlay_screen_display_profile_set(options->overlay_screen_display_selected_profile);
 }
 
-void layout_util_sync_thumb(LayoutWindow *)
+void layout_util_sync_thumb(LayoutWindow *lw)
 {
-/** FIXME GTK4
-	GtkAction *action;
+	if (!lw || !lw->window) return;
 
-	if (!lw->action_group) return;
+	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-thumbnails");
+	if (!action) return;
 
-	action = deprecated_gtk_action_group_get_action(lw->action_group, "Thumbnails");
-	deprecated_gtk_toggle_action_set_active(deprecated_GTK_TOGGLE_ACTION(action), lw->options.show_thumbnails);
-	deprecated_gtk_action_set_sensitive(action, lw->options.file_view_type == FILEVIEW_LIST);
-*/
+	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(lw->options.show_thumbnails));
+	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), lw->options.file_view_type == FILEVIEW_LIST);
 }
 
 void layout_util_sync(LayoutWindow *lw)
@@ -3437,9 +3323,6 @@ void layout_util_sync(LayoutWindow *lw)
 	layout_util_sync_views(lw);
 	layout_util_sync_thumb(lw);
 }
-
-/** @FIXME GTK4 menus
-*/
 
 /*
  *-----------------------------------------------------------------------------
