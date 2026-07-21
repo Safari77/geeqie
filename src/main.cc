@@ -55,7 +55,6 @@
 #include "collect-io.h"
 #include "collect.h"
 #include "command-line-handling.h"
-#include "compat-deprecated.h"
 #include "compat.h"
 #include "convert-configuration.h"
 #include "exif.h"
@@ -802,7 +801,7 @@ void activate_cb(GtkApplication *, gpointer)
 	 */
 	if (lw->window)
 		{
-		gtk_widget_show(lw->window);
+		gtk_window_present(GTK_WINDOW(lw->window));
 
 		/** @FIXME This is not a fix - it is a workaround
 		 * https://github.com/BestImageViewer/geeqie/issues/1765
