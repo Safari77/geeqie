@@ -655,7 +655,7 @@ void vd_pop_menu(ViewDir *vd, FileData *fd, GtkWidget *parent, gdouble x, gdoubl
 			break;
 		}
 
-	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-dir-popup.ui");
+	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-dir-popup.ui");
 	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-dir-popup"));
 
 	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(vd->layout->window), "dir-win-up");
@@ -783,6 +783,39 @@ void vd_new_folder(ViewDir *vd, FileData *dir_fd)
 
 static void vd_dnd_drop_update(ViewDir *vd, gint x, gint y);
 
+constexpr gchar VIEW_DIR_DRAG_DATA_KEY[] = "view-dir-drag-data";
+
+static GdkContentProvider *vd_dnd_prepare(GtkDragSource *, gdouble, gdouble, gpointer data)
+{
+	auto *vd = static_cast<ViewDir *>(data);
+	if (!vd->click_fd) return nullptr;
+
+	GList *list = g_list_prepend(nullptr, vd->click_fd);
+	GdkContentProvider *provider = dnd_file_list_content_provider(list);
+	g_list_free(list);
+
+	return provider;
+}
+
+static void vd_dnd_begin(GtkDragSource *, GdkDrag *drag, gpointer data)
+{
+	auto *vd = static_cast<ViewDir *>(data);
+
+	g_object_set_data(G_OBJECT(drag), VIEW_DIR_DRAG_DATA_KEY, vd);
+	vd_color_set(vd, vd->click_fd, TRUE);
+}
+
+static void vd_dnd_end(GtkDragSource *, GdkDrag *drag, gboolean, gpointer data)
+{
+	auto *vd = static_cast<ViewDir *>(data);
+
+	vd_color_set(vd, vd->click_fd, FALSE);
+	if (vd->type == DIRVIEW_LIST && gdk_drag_get_selected_action(drag) == GDK_ACTION_MOVE)
+		{
+		vd_refresh(vd);
+		}
+}
+
 static gboolean vd_auto_scroll_idle_cb(gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
@@ -847,9 +880,23 @@ static GdkDragAction vd_dnd_select_action(GdkDrop *drop)
 	return GDK_ACTION_NONE;
 }
 
-static GdkDragAction vd_dnd_drop_motion(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdouble y, gpointer data)
+static DnDAction vd_dnd_requested_action(GtkDropTargetAsync *target)
+{
+	const GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(target));
+	if (state & GDK_CONTROL_MASK) return DND_ACTION_COPY;
+	if (state & GDK_SHIFT_MASK) return DND_ACTION_MOVE;
+
+	return options->dnd_default_action;
+}
+
+static GdkDragAction vd_dnd_drop_motion(GtkDropTargetAsync *target, GdkDrop *drop, gdouble x, gdouble y, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
+	GdkDrag *drag = gdk_drop_get_drag(drop);
+	if (drag && g_object_get_data(G_OBJECT(drag), VIEW_DIR_DRAG_DATA_KEY) == vd)
+		{
+		return GDK_ACTION_NONE;
+		}
 
 	vd->click_fd = nullptr;
 
@@ -878,7 +925,19 @@ static GdkDragAction vd_dnd_drop_motion(GtkDropTargetAsync *, GdkDrop *drop, gdo
 		widget_auto_scroll_stop(vd->view);
 		}
 
-	return vd->drop_fd ? vd_dnd_select_action(drop) : GDK_ACTION_NONE;
+	if (!vd->drop_fd) return GDK_ACTION_NONE;
+
+	const GdkDragAction actions = gdk_drop_get_actions(drop);
+	switch (vd_dnd_requested_action(target))
+		{
+		case DND_ACTION_COPY:
+			return (actions & GDK_ACTION_COPY) ? GDK_ACTION_COPY : vd_dnd_select_action(drop);
+		case DND_ACTION_MOVE:
+			return (actions & GDK_ACTION_MOVE) ? GDK_ACTION_MOVE : vd_dnd_select_action(drop);
+		case DND_ACTION_ASK:
+		default:
+			return vd_dnd_select_action(drop);
+		}
 }
 
 static void vd_dnd_drop_leave(GtkDropTargetAsync *, GdkDrop *, gpointer data)
@@ -899,6 +958,7 @@ struct VdDropReadData
 {
 	GtkWidget *view;
 	FileData *drop_fd;
+	DnDAction action;
 };
 
 static void vd_dnd_drop_data_free(VdDropReadData *drop_data)
@@ -923,17 +983,43 @@ static void vd_dnd_drop_file_received(GdkDrop *drop, GList *list, gpointer data)
 		vd->drop_fd = drop_data->drop_fd;
 		vd->drop_fd_ref.reset(drop_data->drop_fd);
 
-		vd_drop_menu(vd, access_file(vd->drop_fd->path, W_OK | X_OK));
-		action = vd_dnd_select_action(drop);
+		const gboolean writable = access_file(vd->drop_fd->path, W_OK | X_OK);
+		if (writable && drop_data->action == DND_ACTION_COPY)
+			{
+			GList *copy_list = vd->drop_list;
+			vd->drop_list = nullptr;
+			file_util_copy_simple(copy_list, vd->drop_fd->path, vd->widget);
+			action = GDK_ACTION_COPY;
+			}
+		else if (writable && drop_data->action == DND_ACTION_MOVE &&
+		         (gdk_drop_get_actions(drop) & GDK_ACTION_MOVE))
+			{
+			GList *move_list = vd->drop_list;
+			vd->drop_list = nullptr;
+			file_util_move_simple(move_list, vd->drop_fd->path, vd->widget);
+			action = GDK_ACTION_MOVE;
+			}
+		else
+			{
+			vd_drop_menu(vd, writable);
+			/* The menu owns the eventual operation, so the source must not
+			 * remove its data before the user chooses an action. */
+			action = (gdk_drop_get_actions(drop) & GDK_ACTION_COPY) ? GDK_ACTION_COPY : GDK_ACTION_NONE;
+			}
 		}
 
 	gdk_drop_finish(drop, action);
 	vd_dnd_drop_data_free(drop_data);
 }
 
-static gboolean vd_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdouble y, gpointer data)
+static gboolean vd_dnd_drop(GtkDropTargetAsync *target, GdkDrop *drop, gdouble x, gdouble y, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
+	GdkDrag *drag = gdk_drop_get_drag(drop);
+	if (drag && g_object_get_data(G_OBJECT(drag), VIEW_DIR_DRAG_DATA_KEY) == vd)
+		{
+		return FALSE;
+		}
 
 	vd_dnd_drop_update(vd, x, y);
 	vd_dnd_drop_scroll_cancel(vd);
@@ -944,6 +1030,7 @@ static gboolean vd_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdou
 	auto *drop_data = g_new0(VdDropReadData, 1);
 	drop_data->view = GTK_WIDGET(g_object_ref(vd->view));
 	drop_data->drop_fd = file_data_ref(vd->drop_fd);
+	drop_data->action = vd_dnd_requested_action(target);
 
 	dnd_read_file_list_async(drop, vd_dnd_drop_file_received, drop_data);
 
@@ -952,11 +1039,16 @@ static gboolean vd_dnd_drop(GtkDropTargetAsync *, GdkDrop *drop, gdouble x, gdou
 
 void vd_dnd_init(ViewDir *vd)
 {
-	static const char *mime_types[] = {"text/uri-list"};
-
 	g_object_set_data(G_OBJECT(vd->view), VIEW_DIR_DATA_KEY, vd);
+	GtkDragSource *drag_source = gtk_drag_source_new();
+	gtk_drag_source_set_actions(drag_source, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_source), 0);
+	g_signal_connect(drag_source, "prepare", G_CALLBACK(vd_dnd_prepare), vd);
+	g_signal_connect(drag_source, "drag-begin", G_CALLBACK(vd_dnd_begin), vd);
+	g_signal_connect(drag_source, "drag-end", G_CALLBACK(vd_dnd_end), vd);
+	gtk_widget_add_controller(vd->view, GTK_EVENT_CONTROLLER(drag_source));
 
-	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
+	GdkContentFormats *formats = dnd_file_drop_formats();
 	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
 
 	g_signal_connect(drop_target, "drag-motion", G_CALLBACK(vd_dnd_drop_motion), vd);

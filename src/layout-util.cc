@@ -130,6 +130,18 @@ struct LayoutEditors
 
 } // namespace
 
+gboolean is_help_key(guint keyval, GdkModifierType state)
+{
+	auto *app = GTK_APPLICATION(g_application_get_default());
+	if (!app) return FALSE;
+
+	const auto modifiers = static_cast<GdkModifierType>(state & gtk_accelerator_get_default_mod_mask());
+	g_autofree gchar *accelerator = gtk_accelerator_name(keyval, modifiers);
+	g_auto(GStrv) actions = gtk_application_get_actions_for_accel(app, accelerator);
+
+	return g_strv_contains(const_cast<const gchar * const *>(actions), "app.help-contents");
+}
+
 static gboolean layout_bar_enabled(LayoutWindow *lw);
 static gboolean layout_bar_sort_enabled(LayoutWindow *lw);
 static void layout_bars_hide_toggle(LayoutWindow *lw);
@@ -310,13 +322,12 @@ bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, guint button)
 			}
 		else
 			{
-/** @FIXME GTK4
-			GtkAction *action = deprecated_gtk_action_group_get_action(lw->action_group, action_name);
+			const gchar *window_action_name = g_str_has_prefix(action_name, "win.") ? action_name + 4 : action_name;
+			GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), window_action_name);
 			if (action)
 				{
 				g_action_activate(action, nullptr);
 				}
-*/
 			}
 
 		return true;
@@ -1448,11 +1459,13 @@ static void layout_menu_selectable_toolbars_cb(GSimpleAction *action, GVariant *
 static void layout_menu_info_pixel_cb(GSimpleAction *action, GVariant *state, gpointer)
 {
 	auto lw = get_current_layout();
+	const gboolean enabled = g_variant_get_boolean(state);
 
-	if (lw->options.show_info_pixel == g_variant_get_boolean(g_action_get_state(G_ACTION(action)))) return;
-
-	layout_exit_fullscreen(lw);
-	layout_info_pixel_set(lw, !lw->options.show_info_pixel);
+	if (lw->options.show_info_pixel != enabled)
+		{
+		layout_exit_fullscreen(lw);
+		layout_info_pixel_set(lw, enabled);
+		}
 
 	g_simple_action_set_state(action, state);
 }
@@ -2761,23 +2774,6 @@ void layout_actions_foreach(LayoutWindow *lw, GFunc func, gpointer data)
 		}
 }
 
-static void toolbar_clear_cb(GtkWidget *widget, gpointer)
-{
-	if (GTK_IS_BUTTON(widget))
-		{
-		/* Temporary GTK4 stub: legacy GtkAction signal bookkeeping has been removed. */
-		auto *action = static_cast<GObject *>(g_object_get_data(G_OBJECT(widget), "action"));
-		if (g_object_get_data(G_OBJECT(widget), "id") )
-			{
-			if (action)
-				{
-				g_signal_handler_disconnect(action, GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget), "id")));
-				}
-			}
-		}
-	gq_gtk_widget_destroy(widget);
-}
-
 void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 {
 	g_list_free_full(lw->toolbar_actions[type], g_free);
@@ -2787,7 +2783,7 @@ void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 		{
 		while (GtkWidget *child = gtk_widget_get_first_child(lw->toolbar[type]))
 			{
-			toolbar_clear_cb(child, nullptr);
+			gq_gtk_widget_destroy(child);
 			}
 		}
 }
@@ -2795,6 +2791,9 @@ void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_name)
 {
 	const gchar *tooltip_text = nullptr;
+	const gchar *icon_name = nullptr;
+	const gchar *button_action_name = action_name;
+	g_autofree gchar *plugin_action_name = nullptr;
 	GtkWidget *button = nullptr;
 
 	if (!action_name)
@@ -2809,32 +2808,6 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 		return;
 		}
 
-	if (g_str_has_suffix(action_name, ".desktop"))
-		{
-/** @FIXME GTK4
-		/ this may be called before the external editors are read
-		   create a dummy action for now /
-		if (!lw->action_group_editors)
-		{
-		lw->action_group_editors = deprecated_gtk_action_group_new("MenuActionsExternal");
-		deprecated_gtk_ui_manager_insert_action_group(lw->ui_manager, lw->action_group_editors, 1);
-		}
-		if (!deprecated_gtk_action_group_get_action(lw->action_group_editors, action_name))
-		{
-		GtkActionEntry entry = { action_name,
-		GQ_ICON_MISSING_IMAGE,
-		action_name,
-		nullptr,
-		nullptr,
-		nullptr
-		};
-		DEBUG_1("Creating temporary action %s", action_name);
-		deprecated_gtk_action_group_add_actions(lw->action_group_editors, &entry, 1, lw);
-		}
-*/
-		}
-
-
 	if (g_strcmp0(action_name, "Separator") == 0)
 		{
 		button = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
@@ -2843,15 +2816,12 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 		{
 		if (g_str_has_suffix(action_name, ".desktop"))
 			{
-/** FIXME GTK4
-			action = deprecated_gtk_action_group_get_action(lw->action_group_editors, action_name);
-			const gchar *kk = get_description_for_action_name("org.gnome.Evince.desktop");
-
-			 @FIXME Using tootip as a flag to layout_actions_setup_editors()
-			 is not a good way.
-			
-			tooltip_text = deprecated_gtk_action_get_label(action);
-*/
+			const EditorDescription *editor = get_editor_by_command(action_name);
+			tooltip_text = (editor && editor->name && *editor->name) ? editor->name : action_name;
+			icon_name = (editor && editor->icon && *editor->icon) ? editor->icon : GQ_ICON_MISSING_IMAGE;
+			plugin_action_name = g_strdup_printf("win.main-win-plugin-run::%s", action_name);
+			button_action_name = plugin_action_name;
+			button = gtk_button_new();
 			}
 		else
 			{
@@ -2915,12 +2885,12 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 
 		if (GTK_IS_ACTIONABLE(button))
 			{
-			gtk_actionable_set_detailed_action_name(GTK_ACTIONABLE(button), action_name);
+			gtk_actionable_set_detailed_action_name(GTK_ACTIONABLE(button), button_action_name);
 			}
 
 		if (GTK_IS_BUTTON(button))
 			{
-			GtkWidget *image = gtk_image_new_from_icon_name(get_icon_for_action_name(action_name));
+			GtkWidget *image = gtk_image_new_from_icon_name(icon_name ? icon_name : get_icon_for_action_name(action_name));
 			gtk_button_set_child(GTK_BUTTON(button), image);
 			}
 
@@ -3011,6 +2981,7 @@ void layout_toolbar_add_from_config(LayoutWindow *lw, ToolbarType type, const ch
 
 void layout_util_status_update_write(LayoutWindow *lw)
 {
+	constexpr auto action_name = "win.main-win-save-metadata";
 	gint n = metadata_queue_length();
 
 	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-save-metadata");
@@ -3027,10 +2998,8 @@ void layout_util_status_update_write(LayoutWindow *lw)
 		     widget;
 		     widget = gtk_widget_get_next_sibling(widget))
 			{
-			if (!GTK_IS_BUTTON(widget)) continue;
-
-			auto *waction = static_cast<GAction *>(g_object_get_data(G_OBJECT(widget), "action"));
-			if (waction != action) continue;
+			if (!GTK_IS_BUTTON(widget) || !GTK_IS_ACTIONABLE(widget)) continue;
+			if (g_strcmp0(gtk_actionable_get_action_name(GTK_ACTIONABLE(widget)), action_name) != 0) continue;
 
 			GtkWidget *image = gtk_button_get_child(GTK_BUTTON(widget));
 			if (GTK_IS_IMAGE(image))
@@ -3046,6 +3015,24 @@ void layout_util_status_update_write(LayoutWindow *lw)
 void layout_util_status_update_write_all()
 {
 	layout_window_foreach(layout_util_status_update_write);
+}
+
+static void layout_toolbar_set_action_tooltip(LayoutWindow *lw, const gchar *action_name, const gchar *tooltip)
+{
+	for (GtkWidget *toolbar : lw->toolbar)
+		{
+		if (!toolbar) continue;
+
+		for (GtkWidget *widget = gtk_widget_get_first_child(toolbar);
+		     widget;
+		     widget = gtk_widget_get_next_sibling(widget))
+			{
+			if (!GTK_IS_ACTIONABLE(widget)) continue;
+			if (g_strcmp0(gtk_actionable_get_action_name(GTK_ACTIONABLE(widget)), action_name) != 0) continue;
+
+			gtk_widget_set_tooltip_text(widget, tooltip);
+			}
+		}
 }
 
 void layout_util_sync_color(LayoutWindow *lw)
@@ -3065,25 +3052,21 @@ void layout_util_sync_color(LayoutWindow *lw)
 #if HAVE_LCMS
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(use_color));
 
-/** @FIXME GTK4
 	if (const auto status = layout_image_color_profile_get_status(lw); status.has_value())
 		{
 		g_autofree gchar *buf = g_strdup_printf(_("Image profile: %s\nScreen profile: %s"),
 		                                        status->image_profile.c_str(), status->screen_profile.c_str());
 
-		deprecated_gtk_action_set_tooltip(action, buf);
+		layout_toolbar_set_action_tooltip(lw, "win.main-win-use-color-profiles", buf);
 		}
 	else
 		{
-		deprecated_gtk_action_set_tooltip(action, _("Click to enable color management"));
+		layout_toolbar_set_action_tooltip(lw, "win.main-win-use-color-profiles", _("Click to enable color management"));
 		}
-*/
 #else
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(FALSE));
 	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), FALSE);
-/** @FIXME GTK4
-	deprecated_gtk_action_set_tooltip(action, _("Color profiles not supported"));
-*/
+	layout_toolbar_set_action_tooltip(lw, "win.main-win-use-color-profiles", _("Color profiles not supported"));
 #endif
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-use-image-profile");

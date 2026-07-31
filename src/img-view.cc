@@ -1192,7 +1192,7 @@ static void image_pop_menu_collections_cb(GSimpleAction *, GVariant *parameter, 
 
 static void view_popup_menu(ViewWindow *vw, GtkWidget *parent, gdouble x, gdouble y)
 {
-	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-img-view.ui");
+	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-img-view.ui");
 	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-image"));
 	GList *editmenu_fd_list;
 
@@ -1393,12 +1393,14 @@ static GdkDragAction view_window_dnd_select_action(GdkDrop *drop)
 	return GDK_ACTION_NONE;
 }
 
-static GdkContentProvider *view_window_dnd_prepare(GtkDragSource *, gdouble, gdouble, gpointer data)
+static GdkContentProvider *view_window_dnd_prepare(GtkDragSource *source, gdouble, gdouble, gpointer data)
 {
 	auto *vw = static_cast<ViewWindow *>(data);
 	FileData *fd = image_get_fd(vw->imd);
 	if (!fd) return nullptr;
 
+	GdkPixbuf *icon = fd->thumb_pixbuf ? fd->thumb_pixbuf : image_get_pixbuf(vw->imd);
+	dnd_set_drag_icon(source, icon, 1, fd);
 	GList *list = g_list_append(nullptr, fd);
 	GdkContentProvider *provider = dnd_file_list_content_provider(list);
 	g_list_free(list);
@@ -1483,8 +1485,7 @@ static void view_window_dnd_init(ViewWindow *vw)
 	g_signal_connect(drag_source, "prepare", G_CALLBACK(view_window_dnd_prepare), vw);
 	gtk_widget_add_controller(imd->pr, GTK_EVENT_CONTROLLER(drag_source));
 
-	static const char *mime_types[] = {"text/uri-list"};
-	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
+	GdkContentFormats *formats = dnd_file_drop_formats();
 	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 	g_signal_connect(drop_target, "drop", G_CALLBACK(view_window_dnd_drop), vw);
 	gtk_widget_add_controller(imd->pr, GTK_EVENT_CONTROLLER(drop_target));

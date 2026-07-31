@@ -774,9 +774,7 @@ GtkWidget *date_selection_new()
 		}
 
 	ds->button = gtk_menu_button_new();
-	/* Temporary GTK4 fallback: the old requisition/size_allocate hack used by
-	 * this button depended on GTK3 layout internals, so the button currently
-	 * uses its natural size until this widget is restyled for GTK4. */
+	gtk_widget_set_valign(ds->button, GTK_ALIGN_CENTER);
 
 	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN);
 	gtk_menu_button_set_child(GTK_MENU_BUTTON(ds->button), icon);
@@ -972,17 +970,22 @@ GtkWidget *pref_color_button_new(GtkWidget *parent_box, const gchar *title, cons
  *-----------------------------------------------------------------------------
  */
 
+char *text_buffer_get_text(GtkTextBuffer *buffer, gboolean include_hidden_chars)
+{
+	GtkTextIter start;
+	GtkTextIter end;
+	gtk_text_buffer_get_bounds(buffer, &start, &end);
+
+	return gtk_text_buffer_get_text(buffer, &start, &end, include_hidden_chars);
+}
+
 gchar *text_widget_text_pull(GtkWidget *text_widget, gboolean include_hidden_chars)
 {
 	if (GTK_IS_TEXT_VIEW(text_widget))
 		{
 		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_widget));
 
-		GtkTextIter start;
-		GtkTextIter end;
-		gtk_text_buffer_get_bounds(buffer, &start, &end);
-
-		return gtk_text_buffer_get_text(buffer, &start, &end, include_hidden_chars);
+		return text_buffer_get_text(buffer, include_hidden_chars);
 		}
 
 	if (GTK_IS_ENTRY(text_widget))

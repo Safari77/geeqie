@@ -367,7 +367,7 @@ void vf_click_at_point(ViewFile *vf, gdouble x, gdouble y, GdkModifierType state
 	vf_release_cb(vf->listview, &event, vf);
 }
 
-static GdkContentProvider *vf_dnd_prepare(GtkDragSource *, gdouble x, gdouble y, gpointer data)
+static GdkContentProvider *vf_dnd_prepare(GtkDragSource *source, gdouble x, gdouble y, gpointer data)
 {
 	auto *vf = static_cast<ViewFile *>(data);
 
@@ -392,6 +392,7 @@ static GdkContentProvider *vf_dnd_prepare(GtkDragSource *, gdouble x, gdouble y,
 
 	if (!list) return nullptr;
 
+	dnd_set_drag_icon(source, vf->click_fd->thumb_pixbuf, g_list_length(list), vf->click_fd);
 	return dnd_file_list_content_provider(list);
 }
 
@@ -1745,7 +1746,7 @@ static gboolean vf_thumb_next(ViewFile *vf)
 
 	thumb_loader_free(vf->thumbs_loader);
 
-	vf->thumbs_loader = thumb_loader_new(options->thumbnails.max_width, options->thumbnails.max_height);
+	vf->thumbs_loader = thumb_loader_new(options->thumbnails.size.width, options->thumbnails.size.height);
 	thumb_loader_set_callbacks(vf->thumbs_loader,
 				   vf_thumb_done_cb,
 				   vf_thumb_error_cb,

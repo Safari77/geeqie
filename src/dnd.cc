@@ -21,11 +21,14 @@
 
 #include "dnd.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include <gio/gio.h>
 
 #include "filedata.h"
+#include "options.h"
+#include "pixbuf-util.h"
 #include "ui-fileops.h"
 #include "uri-utils.h"
 
@@ -121,9 +124,83 @@ GdkContentProvider *dnd_file_list_content_provider(GList *list)
 	g_autofree gchar *uri_text = uri_text_from_filelist(list);
 	if (!uri_text || uri_text[0] == '\0') return nullptr;
 
-	g_autoptr(GBytes) bytes = g_bytes_new(uri_text, strlen(uri_text));
+	g_autoptr(GPtrArray) files = g_ptr_array_new_with_free_func(g_object_unref);
+	for (GList *work = list; work; work = work->next)
+		{
+		auto *fd = static_cast<FileData *>(work->data);
+		g_ptr_array_add(files, g_file_new_for_path(fd->path));
+		}
 
-	return gdk_content_provider_new_for_bytes("text/uri-list", bytes);
+	GdkFileList *file_list = gdk_file_list_new_from_array(reinterpret_cast<GFile **>(files->pdata), files->len);
+	g_autoptr(GBytes) bytes = g_bytes_new(uri_text, strlen(uri_text));
+	GdkContentProvider *providers[] = {
+		gdk_content_provider_new_typed(GDK_TYPE_FILE_LIST, file_list),
+		gdk_content_provider_new_for_bytes("text/uri-list", bytes),
+		gdk_content_provider_new_typed(G_TYPE_STRING, uri_text)
+	};
+	g_boxed_free(GDK_TYPE_FILE_LIST, file_list);
+
+	return gdk_content_provider_new_union(providers, G_N_ELEMENTS(providers));
+}
+
+GdkContentFormats *dnd_file_drop_formats(gboolean include_text)
+{
+	GdkContentFormatsBuilder *builder = gdk_content_formats_builder_new();
+	gdk_content_formats_builder_add_gtype(builder, GDK_TYPE_FILE_LIST);
+	gdk_content_formats_builder_add_mime_type(builder, "text/uri-list");
+	if (include_text) gdk_content_formats_builder_add_mime_type(builder, "text/plain");
+
+	return gdk_content_formats_builder_free_to_formats(builder);
+}
+
+void dnd_set_drag_icon(GtkDragSource *source, GdkPixbuf *pixbuf, guint items, FileData *fd)
+{
+	g_autoptr(GdkPixbuf) fallback = nullptr;
+	if (!pixbuf && fd)
+		{
+		fallback = pixbuf_fallback(fd, options->dnd_icon_size, options->dnd_icon_size);
+		pixbuf = fallback;
+		}
+	if (!pixbuf) return;
+
+	const gint source_width = gdk_pixbuf_get_width(pixbuf);
+	const gint source_height = gdk_pixbuf_get_height(pixbuf);
+	const gint max_size = options->dnd_icon_size;
+	const gdouble scale = std::min(1.0, static_cast<gdouble>(max_size) / std::max(source_width, source_height));
+	const gint width = std::max(1, static_cast<gint>(source_width * scale));
+	const gint height = std::max(1, static_cast<gint>(source_height * scale));
+
+	g_autoptr(GdkPixbuf) icon = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
+	if (!icon) return;
+
+	const GqColor border_color{0, 0, 0, 255};
+	pixbuf_draw_rect_fill(icon, {0, 0, width, 1}, border_color);
+	pixbuf_draw_rect_fill(icon, {0, height - 1, width, 1}, border_color);
+	pixbuf_draw_rect_fill(icon, {0, 0, 1, height}, border_color);
+	pixbuf_draw_rect_fill(icon, {width - 1, 0, 1, height}, border_color);
+
+	if (items > 1)
+		{
+		GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(source));
+		g_autoptr(PangoLayout) layout = gtk_widget_create_pango_layout(widget, nullptr);
+		g_autofree gchar *text = g_strdup_printf("<small> %u </small>", items);
+		pango_layout_set_markup(layout, text, -1);
+
+		gint label_width;
+		gint label_height;
+		pango_layout_get_pixel_size(layout, &label_width, &label_height);
+		const gint x = std::max(0, width - label_width);
+		const gint y = std::max(0, height - label_height);
+		label_width = std::clamp(label_width, 0, width - x);
+		label_height = std::clamp(label_height, 0, height - y);
+
+		pixbuf_draw_rect_fill(icon, {x, y, label_width, label_height}, {128, 128, 128, 255});
+		pixbuf_draw_layout(icon, layout, x + 1, y + 1, {0, 0, 0, 255});
+		pixbuf_draw_layout(icon, layout, x, y, {255, 255, 255, 255});
+		}
+
+	g_autoptr(GdkTexture) texture = gdk_texture_new_for_pixbuf(icon);
+	gtk_drag_source_set_icon(source, GDK_PAINTABLE(texture), -8, -6);
 }
 
 static void dnd_read_file_list_stream_cb(GObject *source_object, GAsyncResult *result, gpointer data)
@@ -189,14 +266,46 @@ static void dnd_read_file_list_cb(GObject *source_object, GAsyncResult *result, 
 					dnd_read_file_list_stream_cb, read_data);
 }
 
+static void dnd_read_file_list_value_cb(GObject *source_object, GAsyncResult *result, gpointer data)
+{
+	auto *read_data = static_cast<DndFileListReadData *>(data);
+	GdkDrop *drop = GDK_DROP(source_object);
+	g_autoptr(GError) error = nullptr;
+	const GValue *value = gdk_drop_read_value_finish(drop, result, &error);
+	GList *list = nullptr;
+
+	if (value && G_VALUE_HOLDS(value, GDK_TYPE_FILE_LIST))
+		{
+		auto *file_list = static_cast<GdkFileList *>(g_value_get_boxed(value));
+		for (GSList *work = gdk_file_list_get_files(file_list); work; work = work->next)
+			{
+			g_autofree gchar *path = g_file_get_path(G_FILE(work->data));
+			if (path) list = g_list_prepend(list, file_data_new_no_grouping(path));
+			}
+		list = g_list_reverse(list);
+		}
+
+	read_data->callback(drop, list, read_data->data);
+	file_data_list_free(list);
+	g_free(read_data);
+}
+
 void dnd_read_file_list_async(GdkDrop *drop, DndFileListCallback callback, gpointer data)
 {
-	static const gchar *mime_types[] = {"text/uri-list", nullptr};
 	auto *read_data = g_new0(DndFileListReadData, 1);
 	read_data->callback = callback;
 	read_data->data = data;
 
-	gdk_drop_read_async(drop, mime_types, G_PRIORITY_DEFAULT, nullptr, dnd_read_file_list_cb, read_data);
+	if (gdk_content_formats_contain_gtype(gdk_drop_get_formats(drop), GDK_TYPE_FILE_LIST))
+		{
+		gdk_drop_read_value_async(drop, GDK_TYPE_FILE_LIST, G_PRIORITY_DEFAULT, nullptr,
+		                          dnd_read_file_list_value_cb, read_data);
+		}
+	else
+		{
+		static const gchar *mime_types[] = {"text/uri-list", nullptr};
+		gdk_drop_read_async(drop, mime_types, G_PRIORITY_DEFAULT, nullptr, dnd_read_file_list_cb, read_data);
+		}
 }
 
 static void dnd_read_text_cb(GObject *source_object, GAsyncResult *result, gpointer data)

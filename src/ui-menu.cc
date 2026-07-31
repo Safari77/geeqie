@@ -38,11 +38,6 @@
  *-----------------------------------------------------------------------------
  */
 
-static void menu_item_add_accelerator(GtkWidget *, GtkWidget *)
-{
-	/* Temporary GTK4 compatibility stub. */
-}
-
 static GtkWidget *menu_item_label_new(const gchar *text, gboolean use_mnemonic)
 {
 	GtkWidget *label = use_mnemonic ? gtk_label_new_with_mnemonic(text) : gtk_label_new(text);
@@ -140,8 +135,6 @@ GtkWidget *popover_item_add(GtkWidget *menu, const gchar *label,
 
 	item = menu_item_button_new(label, TRUE);
 
-	menu_item_add_accelerator(menu, item);
-
 	menu_item_finish(menu, item, func, data);
 
 	return item;
@@ -154,8 +147,6 @@ GtkWidget *popover_item_add_stock(GtkWidget *menu, const gchar *label, const gch
 
 	item = menu_item_icon_button_new(label, stock_id_to_icon_name(stock_id), TRUE);
 
-	menu_item_add_accelerator(menu, item);
-
 	menu_item_finish(menu, item, func, data);
 
 	return item;
@@ -167,8 +158,6 @@ GtkWidget *popover_item_add_icon(GtkWidget *menu, const gchar *label, const gcha
 	GtkWidget *item;
 
 	item = menu_item_icon_button_new(label, icon_name, TRUE);
-
-	menu_item_add_accelerator(menu, item);
 
 	menu_item_finish(menu, item, func, data);
 
@@ -205,8 +194,6 @@ GtkWidget *popover_item_add_check(GtkWidget *menu, const gchar *label, gboolean 
 	item = menu_item_check_new(label);
 	gtk_check_button_set_active(GTK_CHECK_BUTTON(item), active);
 
-	menu_item_add_accelerator(menu, item);
-
 	menu_item_finish(menu, item, func, data);
 
 	return item;
@@ -220,6 +207,30 @@ GtkWidget *popover_item_add_radio(GtkWidget *menu, const gchar *label, gpointer 
 	if (item_data) g_object_set_data(G_OBJECT(item), "menu_item_radio_data", item_data);
 
 	return item;
+}
+
+GtkWidget *popover_item_add_submenu(GtkWidget *menu, const gchar *label)
+{
+	GtkWidget *item = gtk_menu_button_new();
+	GtkWidget *submenu = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	GtkWidget *popover = gtk_popover_new();
+
+	gtk_menu_button_set_label(GTK_MENU_BUTTON(item), label);
+	gtk_menu_button_set_use_underline(GTK_MENU_BUTTON(item), TRUE);
+	gtk_menu_button_set_popover(GTK_MENU_BUTTON(item), popover);
+	gtk_menu_button_set_has_frame(GTK_MENU_BUTTON(item), FALSE);
+	gtk_widget_add_css_class(item, "flat");
+	gtk_widget_set_hexpand(item, TRUE);
+	gtk_widget_set_halign(item, GTK_ALIGN_FILL);
+
+	gtk_popover_set_child(GTK_POPOVER(popover), submenu);
+	/* Selecting a submenu item should dismiss the complete context menu. */
+	g_object_set_data(G_OBJECT(submenu), "gq-popover",
+	                  g_object_get_data(G_OBJECT(menu), "gq-popover"));
+
+	menu_item_finish(menu, item, nullptr, nullptr);
+
+	return submenu;
 }
 
 gpointer popover_item_radio_get_data(GtkWidget *menu_item)
@@ -270,10 +281,15 @@ GtkWidget *popover_box_new(GtkWidget *parent, gdouble x, gdouble y)
 			};
 			gtk_popover_set_pointing_to(GTK_POPOVER(popover), &pointing_to);
 			}
-		popover_popup(popover);
 		}
 
 	return box;
+}
+
+void popover_box_popup(GtkWidget *menu)
+{
+	auto *popover = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(menu), "gq-popover"));
+	if (GTK_IS_POPOVER(popover)) popover_popup(popover);
 }
 
 GtkWidget *popover_parent_new(GtkWidget *child)

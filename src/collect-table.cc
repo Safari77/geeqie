@@ -308,13 +308,11 @@ static void collection_table_toggle_info(CollectTable *ct)
 
 static gint collection_table_get_icon_width(CollectTable *ct)
 {
-	gint width;
+	if (!ct->show_text && !ct->show_infotext) return options->thumbnails.size.width;
 
-	if (!ct->show_text && !ct->show_infotext) return options->thumbnails.max_width;
-
-	width = options->thumbnails.max_width + (options->thumbnails.max_width / 2);
+	gint width = options->thumbnails.size.width + (options->thumbnails.size.width / 2);
 	width = std::max(width, THUMB_MIN_ICON_WIDTH);
-	if (width > THUMB_MAX_ICON_WIDTH) width = options->thumbnails.max_width;
+	if (width > THUMB_MAX_ICON_WIDTH) width = options->thumbnails.size.width;
 
 	return width;
 }
@@ -874,14 +872,14 @@ static void collection_table_popup_destroy_cb(GtkWidget *, gpointer data)
 static void collection_table_popup_menu(CollectTable *ct, bool over_icon, GtkWidget *parent, gdouble x, gdouble y)
 {
 	GAction *action;
-	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-collection.ui");
+	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-collection.ui");
 	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-collection"));
 
 	CollectWindow *cw = collection_window_find(ct->cd);
 
 	ct->editmenu_fd_list = collection_table_selection_get_list(ct);
 
-	GMenu *plugins_menu = G_MENU(g_object_ref(gtk_builder_get_object(builder, "plugins-submenu")));
+	GMenu *plugins_menu = G_MENU(gtk_builder_get_object(builder, "plugins-submenu"));
 	plugins_menu_populate(plugins_menu, "win.collection-win-plugin-run", ct->editmenu_fd_list);
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(cw->window), "collection-win-view");
@@ -897,13 +895,10 @@ static void collection_table_popup_menu(CollectTable *ct, bool over_icon, GtkWid
 	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), over_icon);
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(cw->window), "collection-win-append-from-file-selection");
-	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), over_icon);
+	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), TRUE);
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(cw->window), "collection-win-append-from-collection");
-	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), over_icon);
-
-	action = g_action_map_lookup_action(G_ACTION_MAP(cw->window), "collection-win-append-from-collection");
-	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), over_icon);
+	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), TRUE);
 
 	if (parent)
 		{
@@ -1075,15 +1070,14 @@ static gint page_height(CollectTable *ct)
 {
 	GtkAdjustment *adj;
 	gint page_size;
-	gint row_height;
 	gint ret;
 
 	adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(ct->listview));
 	page_size = static_cast<gint>(gtk_adjustment_get_page_increment(adj));
 
-	row_height = options->thumbnails.max_height + (THUMB_BORDER_PADDING * 2);
-	if (ct->show_text) row_height += options->thumbnails.max_height / 3;
-	if (ct->show_infotext) row_height += options->thumbnails.max_height / 3;
+	gint row_height = options->thumbnails.size.height + (THUMB_BORDER_PADDING * 2);
+	if (ct->show_text) row_height += options->thumbnails.size.height / 3;
+	if (ct->show_infotext) row_height += options->thumbnails.size.height / 3;
 
 	ret = page_size / row_height;
 	ret = std::max(ret, 1);
@@ -1514,7 +1508,7 @@ static void collection_table_populate(CollectTable *ct, gboolean resize)
 				{
 				g_object_set(cell,
 				             "fixed_width", thumb_width,
-				             "fixed_height", options->thumbnails.max_height,
+				             "fixed_height", options->thumbnails.size.height,
 				             "show_text", ct->show_text || ct->show_stars || ct->show_infotext,
 				             NULL);
 				}
@@ -1916,7 +1910,7 @@ static gboolean collection_table_dnd_get_listview_coords(GtkDropTargetAsync *tar
  *-------------------------------------------------------------------
  */
 
-static GdkContentProvider *collection_table_dnd_prepare(GtkDragSource *, gdouble, gdouble, gpointer data)
+static GdkContentProvider *collection_table_dnd_prepare(GtkDragSource *source, gdouble, gdouble, gpointer data)
 {
 	auto *ct = static_cast<CollectTable *>(data);
 
@@ -1934,6 +1928,7 @@ static GdkContentProvider *collection_table_dnd_prepare(GtkDragSource *, gdouble
 
 	if (!list) return nullptr;
 
+	dnd_set_drag_icon(source, ct->click_info->pixbuf, g_list_length(list), ct->click_info->fd);
 	return dnd_file_list_content_provider(list);
 }
 
@@ -2048,8 +2043,7 @@ static gboolean collection_table_dnd_drop(GtkDropTargetAsync *target, GdkDrop *d
 
 static void collection_table_dnd_init_drop_target(CollectTable *ct, GtkWidget *widget)
 {
-	static const char *mime_types[] = {"text/uri-list"};
-	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
+	GdkContentFormats *formats = dnd_file_drop_formats();
 	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
 	g_signal_connect(drop_target, "drag-motion", G_CALLBACK(collection_table_dnd_motion), ct);
 	g_signal_connect(drop_target, "drag-leave", G_CALLBACK(collection_table_dnd_leave), ct);

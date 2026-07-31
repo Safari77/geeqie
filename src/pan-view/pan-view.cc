@@ -2092,7 +2092,7 @@ static void pan_popup_menu(PanWindow *pw, GtkWidget *parent, gdouble x, gdouble 
 	GAction *action;
 	GList *editmenu_fd_list;
 
-	GtkBuilder *builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-pan-view.ui");
+	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-pan-view.ui");
 	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-pan-view"));
 
 	active = (pw->click_pi != nullptr);
@@ -2165,12 +2165,14 @@ static void pan_popup_menu_cb(GSimpleAction *, GVariant *, gpointer data)
  *-----------------------------------------------------------------------------
  */
 
-static GdkContentProvider *pan_window_dnd_prepare(GtkDragSource *, gdouble, gdouble, gpointer data)
+static GdkContentProvider *pan_window_dnd_prepare(GtkDragSource *source, gdouble, gdouble, gpointer data)
 {
 	auto *pw = static_cast<PanWindow *>(data);
 	FileData *fd = pan_menu_click_fd(pw);
 	if (!fd) return nullptr;
 
+	GdkPixbuf *icon = pw->click_pi->pixbuf ? pw->click_pi->pixbuf : fd->thumb_pixbuf;
+	dnd_set_drag_icon(source, icon, 1, fd);
 	GList *list = g_list_append(nullptr, fd);
 	GdkContentProvider *provider = dnd_file_list_content_provider(list);
 	g_list_free(list);
@@ -2231,8 +2233,7 @@ static void pan_window_dnd_init(PanWindow *pw)
 	g_signal_connect(drag_source, "prepare", G_CALLBACK(pan_window_dnd_prepare), pw);
 	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drag_source));
 
-	static const char *mime_types[] = {"text/uri-list"};
-	GdkContentFormats *formats = gdk_content_formats_new(mime_types, G_N_ELEMENTS(mime_types));
+	GdkContentFormats *formats = dnd_file_drop_formats();
 	GtkDropTargetAsync *drop_target = gtk_drop_target_async_new(formats, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 	g_signal_connect(drop_target, "drop", G_CALLBACK(pan_window_dnd_drop), pw);
 	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(drop_target));

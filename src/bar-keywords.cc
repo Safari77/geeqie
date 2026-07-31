@@ -495,6 +495,104 @@ void bar_pane_keywords_set_extra_menu(PaneKeywordsData *pkd)
  *-------------------------------------------------------------------
  */
 
+GdkContentProvider *bar_pane_keywords_dnd_prepare(GtkDragSource *, gdouble x, gdouble y, gpointer data)
+{
+	auto *pkd = static_cast<PaneKeywordsData *>(data);
+	auto *tree_view = GTK_TREE_VIEW(pkd->keyword_treeview);
+	g_autoptr(GtkTreePath) path = nullptr;
+
+	if (!gtk_tree_view_get_path_at_pos(tree_view, static_cast<gint>(x), static_cast<gint>(y),
+	                                   &path, nullptr, nullptr, nullptr))
+		{
+		return nullptr;
+		}
+
+	gtk_tree_view_set_cursor(tree_view, path, nullptr, FALSE);
+
+	GtkTreeIter iter;
+	GtkTreeModel *model = gtk_tree_view_get_model(tree_view);
+	if (!gtk_tree_model_get_iter(model, &iter, path)) return nullptr;
+
+	g_autofree gchar *name = nullptr;
+	gtk_tree_model_get(model, &iter, FILTER_KEYWORD_COLUMN_NAME, &name, -1);
+
+	return name ? gdk_content_provider_new_typed(G_TYPE_STRING, name) : nullptr;
+}
+
+gboolean bar_pane_keywords_dnd_drop(GtkDropTarget *, const GValue *value, gdouble x, gdouble y, gpointer data)
+{
+	auto *pkd = static_cast<PaneKeywordsData *>(data);
+	const gchar *text = g_value_get_string(value);
+	if (!text) return FALSE;
+
+	GList *keywords = string_to_keywords_list(text);
+	if (!keywords) return FALSE;
+
+	auto *tree_view = GTK_TREE_VIEW(pkd->keyword_treeview);
+	GtkTreeModel *model = gtk_tree_view_get_model(tree_view);
+	GtkTreeModel *keyword_tree = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
+	auto *tree_store = GTK_TREE_STORE(keyword_tree);
+
+	g_autoptr(GtkTreePath) path = nullptr;
+	GtkTreeViewDropPosition position = GTK_TREE_VIEW_DROP_AFTER;
+	gtk_tree_view_get_dest_row_at_pos(tree_view, static_cast<gint>(x), static_cast<gint>(y), &path, &position);
+
+	GtkTreeIter destination;
+	GtkTreeIter child_destination;
+	const gboolean have_destination = path && gtk_tree_model_get_iter(model, &destination, path);
+	if (have_destination)
+		{
+		gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model), &child_destination, &destination);
+		}
+
+	GtkTreeIter previous;
+	gboolean have_previous = FALSE;
+	gboolean added = FALSE;
+
+	for (GList *work = keywords; work; work = work->next)
+		{
+		const auto *keyword = static_cast<const gchar *>(work->data);
+		GtkTreeIter inserted;
+
+		if (!have_destination)
+			{
+			if (keyword_exists(keyword_tree, nullptr, have_previous ? &previous : nullptr, keyword, FALSE, nullptr)) continue;
+			if (have_previous)
+				gtk_tree_store_insert_after(tree_store, &inserted, nullptr, &previous);
+			else
+				gtk_tree_store_append(tree_store, &inserted, nullptr);
+			}
+		else if ((position == GTK_TREE_VIEW_DROP_INTO_OR_BEFORE || position == GTK_TREE_VIEW_DROP_INTO_OR_AFTER) &&
+		         !gtk_tree_model_iter_has_child(keyword_tree, &child_destination))
+			{
+			if (keyword_exists(keyword_tree, &child_destination, have_previous ? &previous : nullptr, keyword, FALSE, nullptr)) continue;
+			if (have_previous)
+				gtk_tree_store_insert_after(tree_store, &inserted, &child_destination, &previous);
+			else
+				gtk_tree_store_append(tree_store, &inserted, &child_destination);
+			}
+		else
+			{
+			GtkTreeIter *sibling = have_previous ? &previous : &child_destination;
+			if (keyword_exists(keyword_tree, nullptr, &child_destination, keyword, FALSE, nullptr)) continue;
+			if (position == GTK_TREE_VIEW_DROP_BEFORE || position == GTK_TREE_VIEW_DROP_INTO_OR_BEFORE)
+				gtk_tree_store_insert_before(tree_store, &inserted, nullptr, &child_destination);
+			else
+				gtk_tree_store_insert_after(tree_store, &inserted, nullptr, sibling);
+			}
+
+		keyword_set(tree_store, &inserted, keyword, TRUE);
+		previous = inserted;
+		have_previous = TRUE;
+		added = TRUE;
+		}
+
+	g_list_free_full(keywords, g_free);
+	if (added) bar_keyword_tree_sync(pkd);
+
+	return added;
+}
+
 /*
  *-------------------------------------------------------------------
  * edit dialog
@@ -946,7 +1044,14 @@ void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint
 	pkd->click_tpath = nullptr;
 	gtk_tree_view_get_dest_row_at_pos(GTK_TREE_VIEW(pkd->keyword_treeview), x, y, &pkd->click_tpath, &pos);
 
-	menu = popover_box_new(widget, x, y);
+	GtkWidget *popover_parent = widget;
+#if HAVE_GTK4_22
+	if (GtkWidget *ancestor = gtk_widget_get_ancestor(widget, GTK_TYPE_POPOVER_BIN))
+		{
+		popover_parent = ancestor;
+		}
+#endif
+	menu = popover_box_new(popover_parent, x, y);
 
 	popover_item_add_icon(menu, _("New keyword"), GQ_ICON_NEW,
 	                   G_CALLBACK(bar_pane_keywords_edit_dialog_cb<FALSE>), pkd);
@@ -980,22 +1085,16 @@ void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint
 		g_autofree gchar *hide_text = g_strdup_printf(_("Hide \"%s\""), name);
 		popover_item_add(menu, hide_text, G_CALLBACK(bar_pane_keywords_hide_cb), pkd);
 
-		/* Temporary GTK4 stub: disabled nested mark submenu until this menu is ported. */
-		submenu = nullptr;
-		for (gint i = 0; i < FILEDATA_MARKS_SIZE; i++)
+		if (is_keyword)
 			{
-			if (submenu)
+			g_autofree gchar *connect_text = g_strdup_printf(_("Connect \"%s\" to mark"), name);
+			submenu = popover_item_add_submenu(menu, connect_text);
+			for (gint i = 0; i < FILEDATA_MARKS_SIZE; i++)
 				{
-				g_autofree gchar *text = g_strdup_printf(_("Mark %d"), 1 + (i < 9 ? i : -1));
+				g_autofree gchar *text = g_strdup_printf(_("Mark %d"), i + 1);
 				item = popover_item_add(submenu, text, G_CALLBACK(bar_pane_keywords_connect_mark_cb), pkd);
 				g_object_set_data(G_OBJECT(item), "mark", GINT_TO_POINTER(i + 1));
 				}
-			}
-
-		if (is_keyword)
-			{
-			g_autofree gchar *text = g_strdup_printf(_("Connect \"%s\" to mark"), name);
-			popover_item_add(menu, text, G_CALLBACK(bar_pane_keywords_disconnect_marks_cb), pkd);
 			}
 		popover_item_add_divider(menu);
 
@@ -1032,14 +1131,12 @@ void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint
 	popover_item_add(menu, _("Revert"), G_CALLBACK(bar_pane_keywords_revert_cb), pkd);
 	popover_item_add_divider(menu);
 
-	/* Temporary GTK4 stub: flatten "On any change" submenu until popup menus are ported. */
-	popover_item_add_check(menu, _("On any change: Expand checked"), pkd->expand_checked, G_CALLBACK(bar_pane_keywords_expand_checked_toggle_cb), pkd);
-	popover_item_add_check(menu, _("On any change: Collapse unchecked"), pkd->collapse_unchecked, G_CALLBACK(bar_pane_keywords_collapse_unchecked_toggle_cb), pkd);
-	popover_item_add_check(menu, _("On any change: Hide unchecked"), pkd->hide_unchecked, G_CALLBACK(bar_pane_keywords_hide_unchecked_toggle_cb), pkd);
+	submenu = popover_item_add_submenu(menu, _("On any change"));
+	popover_item_add_check(submenu, _("Expand checked"), pkd->expand_checked, G_CALLBACK(bar_pane_keywords_expand_checked_toggle_cb), pkd);
+	popover_item_add_check(submenu, _("Collapse unchecked"), pkd->collapse_unchecked, G_CALLBACK(bar_pane_keywords_collapse_unchecked_toggle_cb), pkd);
+	popover_item_add_check(submenu, _("Hide unchecked"), pkd->hide_unchecked, G_CALLBACK(bar_pane_keywords_hide_unchecked_toggle_cb), pkd);
 
-	(void)submenu;
-	(void)item;
-	(void)menu;
+	popover_box_popup(menu);
 }
 
 gboolean bar_pane_keywords_menu_common(GtkWidget *widget, gdouble x, gdouble y, guint button, gpointer data)
@@ -1081,6 +1178,15 @@ void bar_pane_keywords_destroy(gpointer data)
 	g_free(pkd->key);
 
 	g_free(pkd);
+}
+
+void autocomplete_changed_cb(GtkEditable *editable, gpointer)
+{
+	GtkEntryCompletion *completion = gtk_entry_get_completion(GTK_ENTRY(editable));
+	const gboolean have_text = gtk_editable_get_text(editable)[0] != '\0';
+
+	gtk_entry_completion_set_popup_completion(completion, have_text);
+	if (have_text) gtk_entry_completion_complete(completion);
 }
 
 
@@ -1158,16 +1264,18 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	autocomplete_keywords_list_load(path);
 
 	completion = gtk_entry_completion_new();
-	gtk_entry_set_completion(GTK_ENTRY(pkd->autocomplete), completion);
 	gtk_entry_completion_set_inline_completion(completion, TRUE);
 	gtk_entry_completion_set_inline_selection(completion, TRUE);
-	g_object_unref(completion);
-
+	gtk_entry_completion_set_popup_completion(completion, FALSE);
 	gtk_entry_completion_set_model(completion, GTK_TREE_MODEL(keyword_store));
 	gtk_entry_completion_set_text_column(completion, 0);
+	gtk_entry_set_completion(GTK_ENTRY(pkd->autocomplete), completion);
+	g_object_unref(completion);
 
 	g_signal_connect(G_OBJECT(pkd->autocomplete), "activate",
 			 G_CALLBACK(autocomplete_activate_cb), pkd);
+	g_signal_connect(G_OBJECT(pkd->autocomplete), "changed",
+			 G_CALLBACK(autocomplete_changed_cb), nullptr);
 
 	GtkTreeStore *keyword_tree = keyword_tree_get_or_new();
 	if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(keyword_tree), &iter))
@@ -1227,10 +1335,22 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	g_signal_connect(gesture, "released", G_CALLBACK(bar_pane_keywords_gesture_menu_cb), pkd);
 	gtk_widget_add_controller(pkd->keyword_treeview, GTK_EVENT_CONTROLLER(gesture));
 
+	GtkDragSource *drag_source = gtk_drag_source_new();
+	gtk_drag_source_set_actions(drag_source, GDK_ACTION_COPY);
+	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_source), GDK_BUTTON_PRIMARY);
+	g_signal_connect(drag_source, "prepare", G_CALLBACK(bar_pane_keywords_dnd_prepare), pkd);
+	gtk_widget_add_controller(pkd->keyword_treeview, GTK_EVENT_CONTROLLER(drag_source));
+
+	GtkDropTarget *drop_target = gtk_drop_target_new(G_TYPE_STRING, GDK_ACTION_COPY);
+	g_signal_connect(drop_target, "drop", G_CALLBACK(bar_pane_keywords_dnd_drop), pkd);
+	gtk_widget_add_controller(pkd->keyword_treeview, GTK_EVENT_CONTROLLER(drop_target));
+
 	if (options->show_predefined_keyword_tree)
 		{
-		gq_gtk_container_add(scrolled, pkd->keyword_treeview);
+		GtkWidget *popover_parent = popover_parent_new(pkd->keyword_treeview);
+		gq_gtk_container_add(scrolled, popover_parent);
 		gtk_widget_show(pkd->keyword_treeview);
+		gtk_widget_show(popover_parent);
 		}
 
 	file_data_register_notify_func(bar_pane_keywords_notify_cb, pkd, NOTIFY_PRIORITY_LOW);

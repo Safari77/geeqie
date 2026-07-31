@@ -80,13 +80,13 @@
 #include "utilops.h"
 #include "window.h"
 
-static void shortcut_editing_not_fully_implemented();
-
 namespace
 {
 
 #define GQ_ICC_LOCAL "/usr/local/share/color/icc/"
 #define GQ_ICC_SYSTEM "/usr/share/color/icc/"
+
+constexpr gint SLIDESHOW_DELAY = SLIDESHOW_MIN_SECONDS * SLIDESHOW_SUBSECOND_PRECISION;
 
 constexpr gint PRE_FORMATTED_COLUMNS = 5;
 constexpr gint KEYWORD_DIALOG_WIDTH = 400;
@@ -136,8 +136,6 @@ enum {
 	EDITOR_NAME_MAX_LENGTH = 32,
 	EDITOR_COMMAND_MAX_LENGTH = 1024
 };
-
-static void image_overlay_set_text_colors(gint i);
 
 static GtkWidget *keyword_text;
 static void config_tab_keywords_save();
@@ -207,57 +205,52 @@ enum {
  *-----------------------------------------------------------------------------
  */
 
-static void zoom_increment_cb(GtkSpinButton *spin, gpointer)
+static void zoom_increment_cb(GtkSpinButton *spin, gpointer data)
 {
-	c_options->image.zoom_increment = static_cast<gint>((gtk_spin_button_get_value(spin) * 100.0) + 0.01);
+	auto *option = static_cast<gint *>(data);
+
+	*option = static_cast<gint>((gtk_spin_button_get_value(spin) * 100.0) + 0.01);
 }
 
-static void slideshow_delay_hours_cb(GtkSpinButton *spin, gpointer)
+static void slideshow_delay_hours_cb(GtkSpinButton *spin, gpointer data)
 {
-	gint mins_secs_tenths;
-	gint delay;
+	auto *option = static_cast<gint *>(data);
 
-	mins_secs_tenths = c_options->slideshow.delay %
-						(3600 * SLIDESHOW_SUBSECOND_PRECISION);
+	const gint mins_secs_tenths = *option %
+	        (3600 * SLIDESHOW_SUBSECOND_PRECISION);
 
-	delay = ((gtk_spin_button_get_value(spin) *
-								(3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
-								mins_secs_tenths);
+	const gint delay = (gtk_spin_button_get_value(spin) *
+	                    (3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
+	        mins_secs_tenths;
 
-	c_options->slideshow.delay = delay > 0 ? delay : SLIDESHOW_MIN_SECONDS *
-													SLIDESHOW_SUBSECOND_PRECISION;
+	*option = delay > 0 ? delay : SLIDESHOW_DELAY;
 }
 
-static void slideshow_delay_minutes_cb(GtkSpinButton *spin, gpointer)
+static void slideshow_delay_minutes_cb(GtkSpinButton *spin, gpointer data)
 {
-	gint hours;
-	gint secs_tenths;
-	gint delay;
+	auto *option = static_cast<gint *>(data);
 
-	hours = c_options->slideshow.delay / (3600 * SLIDESHOW_SUBSECOND_PRECISION);
-	secs_tenths = c_options->slideshow.delay % (60 * SLIDESHOW_SUBSECOND_PRECISION);
+	const gint hours = *option / (3600 * SLIDESHOW_SUBSECOND_PRECISION);
+	const gint secs_tenths = *option % (60 * SLIDESHOW_SUBSECOND_PRECISION);
 
-	delay = (hours * (3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
+	const gint delay = (hours * (3600 * SLIDESHOW_SUBSECOND_PRECISION)) +
 	        (gtk_spin_button_get_value(spin) *
-					(60 * SLIDESHOW_SUBSECOND_PRECISION) + secs_tenths);
+	         (60 * SLIDESHOW_SUBSECOND_PRECISION) + secs_tenths);
 
-	c_options->slideshow.delay = delay > 0 ? delay : SLIDESHOW_MIN_SECONDS *
-													SLIDESHOW_SUBSECOND_PRECISION;
+	*option = delay > 0 ? delay : SLIDESHOW_DELAY;
 }
 
-static void slideshow_delay_seconds_cb(GtkSpinButton *spin, gpointer)
+static void slideshow_delay_seconds_cb(GtkSpinButton *spin, gpointer data)
 {
-	gint hours_mins;
-	gint delay;
+	auto *option = static_cast<gint *>(data);
 
-	hours_mins = c_options->slideshow.delay / (60 * SLIDESHOW_SUBSECOND_PRECISION);
+	const gint hours_mins = *option / (60 * SLIDESHOW_SUBSECOND_PRECISION);
 
-	delay = (hours_mins * (60 * SLIDESHOW_SUBSECOND_PRECISION)) +
+	const gint delay = (hours_mins * (60 * SLIDESHOW_SUBSECOND_PRECISION)) +
 	        static_cast<gint>((gtk_spin_button_get_value(spin) *
-							static_cast<gdouble>(SLIDESHOW_SUBSECOND_PRECISION)) + 0.01);
+	                           static_cast<gdouble>(SLIDESHOW_SUBSECOND_PRECISION)) + 0.01);
 
-	c_options->slideshow.delay = delay > 0 ? delay : SLIDESHOW_MIN_SECONDS *
-													SLIDESHOW_SUBSECOND_PRECISION;
+	*option = delay > 0 ? delay : SLIDESHOW_DELAY;
 }
 
 /*
@@ -324,14 +317,12 @@ static void config_window_apply()
 	options->progressive_key_scrolling = c_options->progressive_key_scrolling;
 	options->keyboard_scroll_step = c_options->keyboard_scroll_step;
 
-	if (options->thumbnails.max_width != c_options->thumbnails.max_width
-	    || options->thumbnails.max_height != c_options->thumbnails.max_height
+	if (options->thumbnails.size != c_options->thumbnails.size
 	    || options->thumbnails.quality != c_options->thumbnails.quality)
 		{
 		thumb_format_changed = TRUE;
 		refresh = TRUE;
-		options->thumbnails.max_width = c_options->thumbnails.max_width;
-		options->thumbnails.max_height = c_options->thumbnails.max_height;
+		options->thumbnails.size = c_options->thumbnails.size;
 		options->thumbnails.quality = c_options->thumbnails.quality;
 		}
 	options->thumbnails.enable_caching = c_options->thumbnails.enable_caching;
@@ -792,46 +783,40 @@ static void add_mouse_selection_menu(GtkWidget *table, gint column, gint row, co
 	gtk_grid_attach(GTK_GRID(table), drop_down, column + 1, row, 1, 1);
 }
 
-static void thumb_size_menu_cb(GtkDropDown *drop_down, GParamSpec *, gpointer)
+static void thumb_size_menu_cb(GtkDropDown *drop_down, GParamSpec *, gpointer data)
 {
 	const guint n = gtk_drop_down_get_selected(drop_down);
 	if (n == GTK_INVALID_LIST_POSITION) return;
 
+	auto *option = static_cast<GqSize *>(data);
+
 	if (n < std::size(thumb_size_list))
 		{
-		c_options->thumbnails.max_width = thumb_size_list[n].width;
-		c_options->thumbnails.max_height = thumb_size_list[n].height;
+		*option = thumb_size_list[n];
 		}
 	else
 		{
-		c_options->thumbnails.max_width = options->thumbnails.max_width;
-		c_options->thumbnails.max_height = options->thumbnails.max_height;
+		*option = options->thumbnails.size;
 		}
 }
 
-static void add_thumb_size_menu(GtkWidget *table, gint column, gint row, const gchar *text)
+static void add_thumb_size_menu(GtkWidget *table, gint column, gint row, const gchar *text, GqSize option, GqSize *option_c)
 {
-	c_options->thumbnails.max_width = options->thumbnails.max_width;
-	c_options->thumbnails.max_height = options->thumbnails.max_height;
-
 	pref_table_label(table, column, row, text, GTK_ALIGN_START);
 
 	GtkStringList *string_list = gtk_string_list_new(nullptr);
 	guint current = GTK_INVALID_LIST_POSITION;
 	for (size_t i = 0; i < std::size(thumb_size_list); i++)
 		{
-		const int w = thumb_size_list[i].width;
-		const int h = thumb_size_list[i].height;
-
-		g_autofree gchar *buf = g_strdup_printf("%d x %d", w, h);
+		g_autofree gchar *buf = g_strdup_printf("%d x %d", thumb_size_list[i].width, thumb_size_list[i].height);
 		gtk_string_list_append(string_list, buf);
 
-		if (w == options->thumbnails.max_width && h == options->thumbnails.max_height) current = i;
+		if (thumb_size_list[i] == option) current = i;
 		}
 
 	if (current == GTK_INVALID_LIST_POSITION)
 		{
-		g_autofree gchar *buf = g_strdup_printf("%s %d x %d", _("Custom"), options->thumbnails.max_width, options->thumbnails.max_height);
+		g_autofree gchar *buf = g_strdup_printf("%s %d x %d", _("Custom"), option.width, option.height);
 		gtk_string_list_append(string_list, buf);
 
 		current = std::size(thumb_size_list);
@@ -839,8 +824,10 @@ static void add_thumb_size_menu(GtkWidget *table, gint column, gint row, const g
 
 	GtkWidget *drop_down = gtk_drop_down_new(G_LIST_MODEL(string_list), nullptr);
 	gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down), current);
+
+	*option_c = option;
 	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
-	                 G_CALLBACK(thumb_size_menu_cb), NULL);
+	                 G_CALLBACK(thumb_size_menu_cb), option_c);
 
 	gtk_grid_attach(GTK_GRID(table), drop_down, column + 1, row, 1, 1);
 }
@@ -1306,13 +1293,12 @@ static void safe_delete_clear_cb(GtkWidget *widget, gpointer)
 	gtk_widget_show(gd->dialog);
 }
 
-static void image_overlay_template_view_changed_cb(GtkWidget *buffer, gpointer data)
+static void image_overlay_template_view_changed_cb(GtkTextBuffer *buffer, gpointer data)
 {
-	gpointer profile_number_pointer = g_object_get_data(G_OBJECT(buffer), "osd_profile_number");
-	gint i = GPOINTER_TO_INT(profile_number_pointer);
+	auto **option = static_cast<gchar **>(data);
 
-	g_free(c_options->image_overlay_n[i].template_string);
-	c_options->image_overlay_n[i].template_string = text_widget_text_pull(static_cast<GtkWidget *>(data), TRUE);
+	g_free(*option);
+	*option = text_buffer_get_text(buffer, TRUE);
 }
 
 static void image_overlay_default_template_ok_cb(GenericDialog *, gpointer data)
@@ -1472,48 +1458,40 @@ static void accel_store_populate()
 		}
 }
 
+static void accel_reload_and_apply()
+{
+	accel_map_load_merged();
+	reload_registered_accels(GTK_APPLICATION(g_application_get_default()), get_keyfile_merged());
+	gtk_tree_store_clear(accel_store);
+	accel_store_populate();
+}
+
 static void text_store_edited_cb(GtkCellRendererText *, char *path_string, const char *new_text, gpointer)
 {
 	GtkTreeIter iter;
-	gchar *action_name;
 
-	if (gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(accel_store), &iter, path_string))
+	if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(accel_store), &iter, path_string)) return;
+
+	if (!accelerator_string_is_valid(new_text))
 		{
-		gtk_tree_store_set(accel_store, &iter, AE_KEY, new_text, -1);
+		warning_dialog(_("Invalid shortcut"), _("The shortcut must use GTK accelerator syntax. Separate multiple shortcuts with semicolons."),
+		               GQ_ICON_DIALOG_WARNING, nullptr);
+		return;
 		}
 
+	g_autofree gchar *action_name = nullptr;
 	gtk_tree_model_get(GTK_TREE_MODEL(accel_store), &iter, AE_ACTION, &action_name, -1);
 
-	update_modified_shortcut(action_name, new_text);
-
-	shortcut_editing_not_fully_implemented();
-}
-
-void shortcut_editing_not_fully_implemented()
-{
-	GtkWidget *dialog = gtk_message_dialog_new(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, _("Editing user-modified shortcuts"));
-
-	const char *description =
-		_("Editing within Geeqie is not yet fully implemented. \n\n \
-Geeqie must now be restarted for the changes to take effect.\n");
-
-	gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", description);
-
-	gq_gtk_dialog_run(GTK_DIALOG(dialog));
-	gq_gtk_widget_destroy(dialog);
+	if (update_modified_shortcut(action_name, new_text)) accel_reload_and_apply();
 }
 
 static void accel_default_cb(GtkWidget *, gpointer)
 {
-	/** @FIXME Shortcut editing is not implemented */
-	clear_modified_shortcuts();
-	shortcut_editing_not_fully_implemented();
+	if (clear_modified_shortcuts()) accel_reload_and_apply();
 }
 
 static void accel_reset_cb(GtkWidget *, gpointer data)
 {
-	/** @FIXME Shortcut editing is not implemented */
-
 	GtkTreeSelection *selection;
 	GtkTreeModel *model;
 	GtkTreeIter iter;
@@ -1524,19 +1502,13 @@ static void accel_reset_cb(GtkWidget *, gpointer data)
 		{
 		/* You now have the selected row iter */
 
-		char *col0 = nullptr;
-		char *key = nullptr;
+		g_autofree char *action_name = nullptr;
 
 		gtk_tree_model_get(model, &iter,
-						   0, &col0,
-						   AE_KEY, &key,
+						   AE_ACTION, &action_name,
 						   -1);
 
-		remove_modified_shortcut(col0);
-
-		g_free(col0);
-		g_free(key);
-		shortcut_editing_not_fully_implemented();
+		if (remove_modified_shortcut(action_name)) accel_reload_and_apply();
 		}
 }
 
@@ -1620,14 +1592,11 @@ static void star_rating_icon_cb(GtkEntry *entry, GtkEntryIconPosition pos, GdkEv
 		}
 }
 
-static gunichar star_rating_symbol_test(gpointer data)
+static void star_rating_symbol_test_cb(GtkWidget *button, gpointer data)
 {
 	guint64 hex_value = 0;
 
-	GtkWidget *child = gtk_widget_get_first_child(GTK_WIDGET(data));
-	GtkWidget *hex_code_label = gtk_widget_get_next_sibling(child);
-
-	GtkWidget *hex_code_entry = gtk_widget_get_next_sibling(hex_code_label);
+	GtkWidget *hex_code_entry = gtk_widget_get_prev_sibling(button);
 	const gchar *hex_code_full = gtk_editable_get_text(GTK_EDITABLE(hex_code_entry));
 
 	g_auto(GStrv) hex_code = g_strsplit(hex_code_full, "+", 2);
@@ -1641,25 +1610,18 @@ static gunichar star_rating_symbol_test(gpointer data)
 		hex_value = 0x003F; // Unicode 'Question Mark'
 		}
 
+	auto *option = static_cast<gunichar *>(data);
+	*option = hex_value;
+
 	g_autoptr(GString) str = g_string_new(nullptr);
-	str = g_string_append_unichar(str, static_cast<gunichar>(hex_value));
+	str = g_string_append_unichar(str, *option);
+
+	GtkWidget *hex_code_label = gtk_widget_get_prev_sibling(hex_code_entry);
 	gtk_label_set_text(GTK_LABEL(hex_code_label), str->str);
-
-	return hex_value;
-}
-
-static void star_rating_star_test_cb(GtkWidget *, gpointer data)
-{
-	c_options->star_rating.star = star_rating_symbol_test(data);
-}
-
-static void star_rating_rejected_test_cb(GtkWidget *, gpointer data)
-{
-	c_options->star_rating.rejected = star_rating_symbol_test(data);
 }
 
 template<gunichar star_rating_default>
-static void add_star_rating(GtkWidget *group, const gchar *label, gunichar star_rating, GCallback star_rating_test_cb)
+static void add_star_rating(GtkWidget *group, const gchar *label, gunichar star_rating, gpointer data)
 {
 	GtkWidget *hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(hbox, label);
@@ -1687,7 +1649,7 @@ static void add_star_rating(GtkWidget *group, const gchar *label, gunichar star_
 	gtk_widget_show(star_rating_entry);
 
 	GtkWidget *button = pref_button_new(nullptr, nullptr, _("Set"),
-	                                    star_rating_test_cb, hbox);
+	                                    G_CALLBACK(star_rating_symbol_test_cb), data);
 	gtk_widget_set_tooltip_text(button, _("Display selected character"));
 	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 	gtk_widget_show(button);
@@ -1720,13 +1682,13 @@ static void config_tab_general(GtkWidget *notebook)
 	group = pref_group_new(vbox, FALSE, _("Thumbnails"), GTK_ORIENTATION_VERTICAL);
 
 	table = pref_table_new(group, 2, 2, FALSE, FALSE);
-	add_thumb_size_menu(table, 0, 0, _("Size:"));
+	add_thumb_size_menu(table, 0, 0, _("Size:"), options->thumbnails.size, &c_options->thumbnails.size);
 	add_quality_menu(table, 0, 1, _("Quality:"), options->thumbnails.quality, &c_options->thumbnails.quality);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(hbox, _("Custom size: "));
-	pref_spin_new_int(hbox, _("Width:"), nullptr, 1, 512, 1, options->thumbnails.max_width, &c_options->thumbnails.max_width);
-	pref_spin_new_int(hbox, _("Height:"), nullptr, 1, 512, 1, options->thumbnails.max_height, &c_options->thumbnails.max_height);
+	pref_spin_new_int(hbox, _("Width:"), nullptr, 1, 512, 1, options->thumbnails.size.width, &c_options->thumbnails.size.width);
+	pref_spin_new_int(hbox, _("Height:"), nullptr, 1, 512, 1, options->thumbnails.size.height, &c_options->thumbnails.size.height);
 
 	ct_button = pref_checkbox_new_int(group, _("Cache thumbnails and sim. files"),
 					  options->thumbnails.enable_caching, &c_options->thumbnails.enable_caching);
@@ -1779,9 +1741,9 @@ static void config_tab_general(GtkWidget *notebook)
 	c_options->star_rating = options->star_rating;
 
 	add_star_rating<STAR_RATING_STAR>(group, _("Star character: "), options->star_rating.star,
-	                                  G_CALLBACK(star_rating_star_test_cb));
+	                                  &c_options->star_rating.star);
 	add_star_rating<STAR_RATING_REJECTED>(group, _("Rejected character: "), options->star_rating.rejected,
-	                                      G_CALLBACK(star_rating_rejected_test_cb));
+	                                      &c_options->star_rating.rejected);
 
 	pref_spacer(group, PREF_PAD_GROUP);
 
@@ -1797,19 +1759,19 @@ static void config_tab_general(GtkWidget *notebook)
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 
 	spin = pref_spin_new(hbox, _("Delay between image change hrs:mins:secs.dec"), nullptr,
-										0, 23, 1.0, 0,
-										options->slideshow.delay ? hours : 0.0,
-										G_CALLBACK(slideshow_delay_hours_cb), nullptr);
+	                     0, 23, 1.0, 0,
+	                     options->slideshow.delay ? hours : 0.0,
+	                     G_CALLBACK(slideshow_delay_hours_cb), &c_options->slideshow.delay);
 	gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin), GTK_UPDATE_ALWAYS);
 	spin = pref_spin_new(hbox, ":" , nullptr,
-										0, 59, 1.0, 0,
-										options->slideshow.delay ? minutes: 0.0,
-										G_CALLBACK(slideshow_delay_minutes_cb), nullptr);
+	                     0, 59, 1.0, 0,
+	                     options->slideshow.delay ? minutes: 0.0,
+	                     G_CALLBACK(slideshow_delay_minutes_cb), &c_options->slideshow.delay);
 	gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin), GTK_UPDATE_ALWAYS);
 	spin = pref_spin_new(hbox, ":", nullptr,
-										SLIDESHOW_MIN_SECONDS, 59, 1.0, 1,
-										options->slideshow.delay ? seconds : 10.0,
-										G_CALLBACK(slideshow_delay_seconds_cb), nullptr);
+	                     SLIDESHOW_MIN_SECONDS, 59, 1.0, 1,
+	                     options->slideshow.delay ? seconds : 10.0,
+	                     G_CALLBACK(slideshow_delay_seconds_cb), &c_options->slideshow.delay);
 	gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin), GTK_UPDATE_ALWAYS);
 
 	pref_checkbox_new_int(group, _("Random"), options->slideshow.random, &c_options->slideshow.random);
@@ -1949,9 +1911,9 @@ static void config_tab_image(GtkWidget *notebook)
 			      options->image.zoom_2pass, &c_options->image.zoom_2pass);
 
 	c_options->image.zoom_increment = options->image.zoom_increment;
-	spin = pref_spin_new(group, _("Zoom increment:"), nullptr,
-			     0.01, 4.0, 0.01, 2, static_cast<gdouble>(options->image.zoom_increment) / 100.0,
-			     G_CALLBACK(zoom_increment_cb), nullptr);
+	spin = pref_spin_new(group, _("Zoom increment:"), nullptr, 0.01, 4.0, 0.01, 2,
+	                     static_cast<gdouble>(options->image.zoom_increment) / 100.0,
+	                     G_CALLBACK(zoom_increment_cb), &c_options->image.zoom_increment);
 	gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin), GTK_UPDATE_ALWAYS);
 
 	c_options->image.zoom_style = options->image.zoom_style;
@@ -2130,7 +2092,6 @@ static void config_tab_windows(GtkWidget *notebook)
 
 static GtkWidget *osd_profiles(gint i)
 {
-	GtkTextBuffer *buffer;
 	GtkWidget *button;
 	GtkWidget *group;
 	GtkWidget *hbox;
@@ -2177,12 +2138,11 @@ static GtkWidget *osd_profiles(gint i)
 
 	button = pref_button_new(nullptr, GQ_ICON_SELECT_COLOR, _("Text"), G_CALLBACK(image_overlay_set_text_color_cb), GINT_TO_POINTER(i));
 	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	c_options->image_overlay_n[i].text_color = options->image_overlay_n[i].text_color;
 
 	button = pref_button_new(nullptr, GQ_ICON_SELECT_COLOR, _("Background"), G_CALLBACK(image_overlay_set_background_color_cb), GINT_TO_POINTER(i));
 	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
-	image_overlay_set_text_colors(i);
+	c_options->image_overlay_n[i].background = options->image_overlay_n[i].background;
 
 	button = pref_button_new(nullptr, nullptr, _("Defaults"), G_CALLBACK(image_overlay_default_template_cb), image_overlay_template_view);
 	gq_gtk_box_pack_end(GTK_BOX(hbox), button, FALSE, FALSE, 0);
@@ -2192,12 +2152,11 @@ static GtkWidget *osd_profiles(gint i)
 	gq_gtk_box_pack_end(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 	gtk_widget_show(button);
 
-	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(image_overlay_template_view));
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(image_overlay_template_view));
 	if (options->image_overlay_n[i].template_string) gtk_text_buffer_set_text(buffer, options->image_overlay_n[i].template_string, -1);
-	g_object_set_data(G_OBJECT(buffer), "osd_profile_number", GINT_TO_POINTER(i));
 
 	g_signal_connect(G_OBJECT(buffer), "changed",
-	                 G_CALLBACK(image_overlay_template_view_changed_cb), image_overlay_template_view);
+	                 G_CALLBACK(image_overlay_template_view_changed_cb), &c_options->image_overlay_n[i].template_string);
 
 	return page;
 }
@@ -3086,7 +3045,7 @@ static void config_tab_color(GtkWidget *notebook)
 #if !HAVE_LCMS
 	gtk_widget_set_sensitive(pref_group_parent(group), FALSE);
 #endif
-	pref_checkbox_new_int(group, _("Use system screen profile if available"),
+	pref_checkbox_new_int(group, _("Use system display profile when available"),
 			      options->color_profile.use_x11_screen_profile, &c_options->color_profile.use_x11_screen_profile);
 
 	table = pref_table_new(group, 2, 1, FALSE, FALSE);
@@ -3441,8 +3400,7 @@ static void config_tab_accelerators(GtkWidget *notebook)
 	const char *tooltip = _("Click here and type the required key combination \n \
 The converted keycode is copied to the clipboard. \n\n \
 Use a semicolon to separate multiple entries. \n \
-Double-click on the Key column and add or replace the text. \n\n \
-Geeqie must be restarted for the changes to take effect.\n");
+Double-click on the Key column and add or replace the text.\n");
 
 	gtk_widget_set_tooltip_text(key_label, tooltip);
 	gtk_widget_set_tooltip_text(key_value, tooltip);
@@ -3821,12 +3779,6 @@ void show_about_window(LayoutWindow *lw)
 	g_object_unref(data_stream);
 	g_object_unref(in_stream_authors);
 	g_object_unref(in_stream_translators);
-}
-
-static void image_overlay_set_text_colors(gint i)
-{
-	c_options->image_overlay_n[i].text_color = options->image_overlay_n[i].text_color;
-	c_options->image_overlay_n[i].background = options->image_overlay_n[i].background;
 }
 
 /*
