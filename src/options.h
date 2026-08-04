@@ -141,7 +141,6 @@ struct ConfOptions
 
 	gboolean with_rename;
 	gboolean collections_duplicates;
-	gboolean collections_on_top;
 	gboolean hide_window_in_fullscreen;
 	gboolean hide_osd_in_fullscreen;
 
@@ -237,7 +236,6 @@ struct ConfOptions
 		GqSize size;
 		gboolean enable_caching;
 		gboolean cache_into_dirs;
-		gboolean use_xvpics;
 		gboolean spec_standard;
 		GdkInterpType quality;
 		gboolean use_exif;
@@ -445,7 +443,7 @@ struct CommandLine
 extern ConfOptions *options;
 extern CommandLine *command_line;
 
-ConfOptions *init_options(ConfOptions *options);
+ConfOptions *conf_options_new();
 void setup_default_options(ConfOptions *options);
 void save_options(ConfOptions *options);
 gboolean load_options(ConfOptions *options);

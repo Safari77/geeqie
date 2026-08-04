@@ -53,9 +53,11 @@ struct ViewFile
 	GtkWidget *filter_check[FILEDATA_MARKS_SIZE];
 
 	struct {
-		GtkWidget *combo;
+		GtkWidget *control;
+		GtkWidget *entry;
+		GtkWidget *history_button;
 		GtkWidget *frame;
-		gint count;
+		gint selected;
 		gint last_selected;
 		gboolean case_sensitive;
 	} file_filter;
@@ -87,6 +89,9 @@ struct ViewFile
 	gboolean marks_enabled;
 	gint active_mark;
 	gint clicked_mark;
+	GtkEventController *marks_filter_controller;
+	GtkEventController *marks_filter_context_controller;
+	gulong marks_filter_tooltip_id;
 
 	/* stars */
 	FileData *stars_filedata;

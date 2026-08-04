@@ -277,7 +277,7 @@ void config_entry_to_option(GtkWidget *entry, gchar **option, gchar *(*func)(con
 		}
 }
 
-static void config_window_apply()
+static void config_window_apply(const ConfOptions *c_options)
 {
 	gboolean refresh = FALSE;
 
@@ -287,9 +287,9 @@ static void config_window_apply()
 	if (options->file_filter.dot_prefix_hidden_files != c_options->file_filter.dot_prefix_hidden_files) refresh = TRUE;
 	if (options->file_filter.show_parent_directory != c_options->file_filter.show_parent_directory) refresh = TRUE;
 	if (options->file_filter.show_dot_directory != c_options->file_filter.show_dot_directory) refresh = TRUE;
-	if (options->file_sort.case_sensitive != c_options->file_sort.case_sensitive) refresh = TRUE;
 	if (options->file_filter.disable_file_extension_checks != c_options->file_filter.disable_file_extension_checks) refresh = TRUE;
 	if (options->file_filter.disable != c_options->file_filter.disable) refresh = TRUE;
+	if (options->file_sort.case_sensitive != c_options->file_sort.case_sensitive) refresh = TRUE;
 
 	options->file_ops.confirm_delete = c_options->file_ops.confirm_delete;
 	options->file_ops.enable_delete_key = c_options->file_ops.enable_delete_key;
@@ -322,16 +322,8 @@ static void config_window_apply()
 		{
 		thumb_format_changed = TRUE;
 		refresh = TRUE;
-		options->thumbnails.size = c_options->thumbnails.size;
-		options->thumbnails.quality = c_options->thumbnails.quality;
 		}
-	options->thumbnails.enable_caching = c_options->thumbnails.enable_caching;
-	options->thumbnails.cache_into_dirs = c_options->thumbnails.cache_into_dirs;
-	options->thumbnails.use_exif = c_options->thumbnails.use_exif;
-	options->thumbnails.use_color_management = c_options->thumbnails.use_color_management;
-	options->thumbnails.collection_preview = c_options->thumbnails.collection_preview;
-	options->thumbnails.use_ft_metadata = c_options->thumbnails.use_ft_metadata;
-	options->thumbnails.spec_standard = c_options->thumbnails.spec_standard;
+	options->thumbnails = c_options->thumbnails;
 
 	options->file_filter = c_options->file_filter;
 
@@ -447,7 +439,6 @@ static void config_window_apply()
 	options->marks_save = c_options->marks_save;
 	options->with_rename = c_options->with_rename;
 	options->collections_duplicates = c_options->collections_duplicates;
-	options->collections_on_top = c_options->collections_on_top;
 	options->hide_window_in_fullscreen = c_options->hide_window_in_fullscreen;
 	options->hide_osd_in_fullscreen = c_options->hide_osd_in_fullscreen;
 	config_entry_to_option(help_search_engine_entry, &options->help_search_engine, nullptr);
@@ -558,7 +549,7 @@ static void config_window_ok_cb(GtkWidget *widget, gpointer data)
 	lw->options.preferences_window.rect = widget_get_root_origin_geometry(widget);
 	lw->options.preferences_window.page_number = gtk_notebook_get_current_page(notebook);
 
-	config_window_apply();
+	config_window_apply(c_options);
 	layout_util_sync(lw);
 	save_options(options);
 	config_window_close_cb(nullptr, nullptr);
@@ -738,7 +729,7 @@ static void mouse_buttons_selection_menu_cb(GtkDropDown *drop_down, GParamSpec *
 {
 	auto option = static_cast<gchar **>(data);
 
-	g_autoptr(GObject) item = G_OBJECT(gtk_drop_down_get_selected_item(drop_down));
+	GObject *item = G_OBJECT(gtk_drop_down_get_selected_item(drop_down));
 	const char *label = gtk_string_object_get_string(GTK_STRING_OBJECT(item));
 
 	std::vector<ActionItem> list = get_action_items();
@@ -887,10 +878,12 @@ static void stereo_mode_menu_cb(GtkDropDown *drop_down, GParamSpec *, gpointer d
 		}
 }
 
-static void add_stereo_mode_menu(GtkWidget *table, gint column, gint row, const gchar *text,
-			     gint option, gint *option_c, gboolean add_fixed)
+static void add_stereo_mode_menu(GtkWidget *parent_box, const gchar *text,
+                                 gint option, gint *option_c, bool add_fixed)
 {
-	pref_table_label(table, column, row, text, GTK_ALIGN_START);
+	GtkWidget *table = pref_table_new(parent_box, 2, 1, FALSE, FALSE);
+
+	pref_table_label(table, 0, 0, text, GTK_ALIGN_START);
 
 	static const char *strings[] = {
 	    _("Single image"),
@@ -947,7 +940,31 @@ static void add_stereo_mode_menu(GtkWidget *table, gint column, gint row, const 
 	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
 	                 G_CALLBACK(stereo_mode_menu_cb), option_c);
 
-	gtk_grid_attach(GTK_GRID(table), drop_down, column + 1, row, 1, 1);
+	gtk_grid_attach(GTK_GRID(table), drop_down, 1, 0, 1, 1);
+}
+
+static void add_stereo_mode_options(GtkWidget *parent_box, gint mode,
+                                    ConfOptions::Stereo::ModeOptions &mode_options)
+{
+	GtkWidget *table = pref_table_new(parent_box, 2, 2, TRUE, FALSE);
+	GtkWidget *box;
+
+	box = pref_table_box(table, 0, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
+	pref_checkbox_new_int(box, _("Mirror left image"),
+	                      mode & PR_STEREO_MIRROR_LEFT, &mode_options.mirror_left);
+	box = pref_table_box(table, 1, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
+	pref_checkbox_new_int(box, _("Flip left image"),
+	                      mode & PR_STEREO_FLIP_LEFT, &mode_options.flip_left);
+	box = pref_table_box(table, 0, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
+	pref_checkbox_new_int(box, _("Mirror right image"),
+	                      mode & PR_STEREO_MIRROR_RIGHT, &mode_options.mirror_right);
+	box = pref_table_box(table, 1, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
+	pref_checkbox_new_int(box, _("Flip right image"),
+	                      mode & PR_STEREO_FLIP_RIGHT, &mode_options.flip_right);
+	pref_checkbox_new_int(parent_box, _("Swap left and right images"),
+	                      mode & PR_STEREO_SWAP, &mode_options.swap);
+	pref_checkbox_new_int(parent_box, _("Disable stereo mode on single image source"),
+	                      mode & PR_STEREO_TEMP_DISABLE, &mode_options.temp_disable);
 }
 
 static void video_menu_cb(GtkDropDown *drop_down, GParamSpec *, gpointer data)
@@ -1537,30 +1554,33 @@ static GtkWidget *scrolled_notebook_page(GtkWidget *notebook, const gchar *title
 	return vbox;
 }
 
-static void cache_standard_cb(GtkWidget *widget, gpointer)
+static void cache_standard_cb(GtkWidget *widget, gpointer data)
 {
 	if (gtk_check_button_get_active(GTK_CHECK_BUTTON(widget)))
 		{
-		c_options->thumbnails.spec_standard =TRUE;
-		c_options->thumbnails.cache_into_dirs = FALSE;
+		auto *option = static_cast<ConfOptions *>(data);
+		option->thumbnails.spec_standard = TRUE;
+		option->thumbnails.cache_into_dirs = FALSE;
 		}
 }
 
-static void cache_geeqie_cb(GtkWidget *widget, gpointer)
+static void cache_geeqie_cb(GtkWidget *widget, gpointer data)
 {
 	if (gtk_check_button_get_active(GTK_CHECK_BUTTON(widget)))
 		{
-		c_options->thumbnails.spec_standard =FALSE;
-		c_options->thumbnails.cache_into_dirs = FALSE;
+		auto *option = static_cast<ConfOptions *>(data);
+		option->thumbnails.spec_standard = FALSE;
+		option->thumbnails.cache_into_dirs = FALSE;
 		}
 }
 
-static void cache_local_cb(GtkWidget *widget, gpointer)
+static void cache_local_cb(GtkWidget *widget, gpointer data)
 {
 	if (gtk_check_button_get_active(GTK_CHECK_BUTTON(widget)))
 		{
-		c_options->thumbnails.cache_into_dirs = TRUE;
-		c_options->thumbnails.spec_standard =FALSE;
+		auto *option = static_cast<ConfOptions *>(data);
+		option->thumbnails.cache_into_dirs = TRUE;
+		option->thumbnails.spec_standard = FALSE;
 		}
 }
 
@@ -1658,7 +1678,7 @@ static void add_star_rating(GtkWidget *group, const gchar *label, gunichar star_
 /* general options tab */
 static void timezone_database_install_cb(GtkWidget *widget, gpointer data);
 
-static void config_tab_general(GtkWidget *notebook)
+static void config_tab_general(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *vbox;
 	GtkWidget *hbox;
@@ -1701,22 +1721,22 @@ static void config_tab_general(GtkWidget *notebook)
 	group_frame = pref_frame_new(subgroup, TRUE, _("Use Geeqie thumbnail style and cache"),
 										GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	button = pref_radiobutton_new(group_frame, nullptr,  get_thumbnails_cache_dir(),
-							!options->thumbnails.spec_standard && !options->thumbnails.cache_into_dirs,
-							G_CALLBACK(cache_geeqie_cb), nullptr);
+	                              !options->thumbnails.spec_standard && !options->thumbnails.cache_into_dirs,
+	                              G_CALLBACK(cache_geeqie_cb), c_options);
 
 	group_frame = pref_frame_new(subgroup, TRUE,
 							_("Store thumbnails local to image folder (non-standard)"),
 							GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	pref_radiobutton_new(group_frame, button, "*/.thumbnails",
-							!options->thumbnails.spec_standard && options->thumbnails.cache_into_dirs,
-							G_CALLBACK(cache_local_cb), nullptr);
+	                     !options->thumbnails.spec_standard && options->thumbnails.cache_into_dirs,
+	                     G_CALLBACK(cache_local_cb), c_options);
 
 	group_frame = pref_frame_new(subgroup, TRUE,
 							_("Use standard thumbnail style and cache, shared with other applications"),
 							GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	pref_radiobutton_new(group_frame, button, get_thumbnails_standard_cache_dir(),
-							options->thumbnails.spec_standard && !options->thumbnails.cache_into_dirs,
-							G_CALLBACK(cache_standard_cb), nullptr);
+	                     options->thumbnails.spec_standard && !options->thumbnails.cache_into_dirs,
+	                     G_CALLBACK(cache_standard_cb), c_options);
 
 	pref_checkbox_new_int(group, _("Use EXIF thumbnails when available (EXIF thumbnails may be outdated)"),
 			      options->thumbnails.use_exif, &c_options->thumbnails.use_exif);
@@ -1890,7 +1910,7 @@ static void config_tab_general(GtkWidget *notebook)
 }
 
 /* image tab */
-static void config_tab_image(GtkWidget *notebook)
+static void config_tab_image(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *hbox;
 	GtkWidget *vbox;
@@ -2011,7 +2031,7 @@ static GtkWidget *create_popover(GtkWidget *child, GtkPositionType pos)
 	return popover;
 }
 
-static void config_tab_windows(GtkWidget *notebook)
+static void config_tab_windows(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *hbox;
 	GtkWidget *vbox;
@@ -2090,7 +2110,7 @@ static void config_tab_windows(GtkWidget *notebook)
 			      options->fullscreen.disable_saver, &c_options->fullscreen.disable_saver);
 }
 
-static GtkWidget *osd_profiles(gint i)
+static GtkWidget *osd_profiles(gint i, ConfOptions *c_options)
 {
 	GtkWidget *button;
 	GtkWidget *group;
@@ -2161,7 +2181,7 @@ static GtkWidget *osd_profiles(gint i)
 	return page;
 }
 
-static void config_tab_osd(GtkWidget *notebook)
+static void config_tab_osd(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *hbox;
 	GtkWidget *label;
@@ -2178,7 +2198,7 @@ static void config_tab_osd(GtkWidget *notebook)
 
 	for (gint i = 0; i < OVERLAY_SCREEN_DISPLAY_PROFILE_COUNT; i++)
 		{
-		page = osd_profiles(i);
+		page = osd_profiles(i, c_options);
 		g_autofree gchar *profile_name = g_strdup_printf("OSD %i", i + 1);
 		gtk_notebook_append_page(GTK_NOTEBOOK(notebook_osd_profiles), page, gtk_label_new(profile_name));
 		}
@@ -2315,7 +2335,7 @@ static gboolean search_function_cb(GtkTreeModel *model, gint, const gchar *key, 
 	return ret;
 }
 
-static void config_tab_files(GtkWidget *notebook)
+static void config_tab_files(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *hbox;
 	GtkWidget *frame;
@@ -2507,7 +2527,7 @@ static void pref_checkbox_add_markup(GtkWidget *checkbox, const char *format, ..
 }
 
 /* metadata tab */
-static void config_tab_metadata(GtkWidget *notebook)
+static void config_tab_metadata(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *vbox;
 	GtkWidget *hbox;
@@ -2989,7 +3009,7 @@ static void add_intent_menu(GtkWidget *table, gint column, gint row, const gchar
 }
 #endif
 
-static void config_tab_color(GtkWidget *notebook)
+static void config_tab_color(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *label;
 	GtkWidget *vbox;
@@ -3062,23 +3082,25 @@ static void config_tab_color(GtkWidget *notebook)
 
 /* advanced entry tab */
 template<gboolean use_system_trash>
-static void use_trash_cb(GtkWidget *widget, gpointer)
+static void use_trash_cb(GtkWidget *widget, gpointer data)
 {
 	if (!gtk_check_button_get_active(GTK_CHECK_BUTTON(widget))) return;
 
-	c_options->file_ops.use_system_trash = use_system_trash;
-	c_options->file_ops.no_trash = FALSE;
+	auto *option = static_cast<ConfOptions *>(data);
+	option->file_ops.use_system_trash = use_system_trash;
+	option->file_ops.no_trash = FALSE;
 }
 
-static void use_no_trash_cb(GtkWidget *widget, gpointer)
+static void use_no_trash_cb(GtkWidget *widget, gpointer data)
 {
 	if (gtk_check_button_get_active(GTK_CHECK_BUTTON(widget)))
 		{
-		c_options->file_ops.no_trash = TRUE;
+		auto *option = static_cast<gboolean *>(data);
+		*option = TRUE;
 		}
 }
 
-static void config_tab_behavior(GtkWidget *notebook)
+static void config_tab_behavior(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *hbox;
 	GtkWidget *vbox;
@@ -3089,7 +3111,7 @@ static void config_tab_behavior(GtkWidget *notebook)
 	GtkWidget *table;
 	GtkWidget *marks;
 	GtkWidget *with_rename;
-	GtkWidget *collections_on_top;
+	GtkWidget *collections_duplicates;
 	GtkWidget *hide_window_in_fullscreen;
 	GtkWidget *hide_osd_in_fullscreen;
 	GtkWidget *tmp;
@@ -3107,7 +3129,7 @@ static void config_tab_behavior(GtkWidget *notebook)
 
 	ct_button = pref_radiobutton_new(group, nullptr, _("Use Geeqie trash location"),
 	                                 !options->file_ops.use_system_trash && !options->file_ops.no_trash,
-	                                 G_CALLBACK(use_trash_cb<FALSE>), nullptr);
+	                                 G_CALLBACK(use_trash_cb<FALSE>), c_options);
 
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_checkbox_link_sensitivity(ct_button, hbox);
@@ -3145,10 +3167,10 @@ static void config_tab_behavior(GtkWidget *notebook)
 
 	pref_radiobutton_new(group, ct_button, _("Use system Trash bin"),
 	                     options->file_ops.use_system_trash && !options->file_ops.no_trash,
-	                     G_CALLBACK(use_trash_cb<TRUE>), nullptr);
+	                     G_CALLBACK(use_trash_cb<TRUE>), c_options);
 
 	pref_radiobutton_new(group, ct_button, _("Use no trash at all"),
-	                     options->file_ops.no_trash, G_CALLBACK(use_no_trash_cb), nullptr);
+	                     options->file_ops.no_trash, G_CALLBACK(use_no_trash_cb), &c_options->file_ops.no_trash);
 
 	gtk_widget_show(button);
 
@@ -3178,17 +3200,13 @@ static void config_tab_behavior(GtkWidget *notebook)
 				options->with_rename, &c_options->with_rename);
 	gtk_widget_set_tooltip_text(with_rename,_("Change the default button for Copy/Move dialogs"));
 
-	collections_on_top = pref_checkbox_new_int(group, _("Permit duplicates in Collections"),
+	collections_duplicates = pref_checkbox_new_int(group, _("Permit duplicates in Collections"),
 				options->collections_duplicates, &c_options->collections_duplicates);
-	gtk_widget_set_tooltip_text(collections_on_top, _("Allow the same image to be in a Collection more than once"));
-
-	collections_on_top = pref_checkbox_new_int(group, _("Open collections on top"),
-				options->collections_on_top, &c_options->collections_on_top);
-	gtk_widget_set_tooltip_text(collections_on_top, _("Open collections window on top"));
+	gtk_widget_set_tooltip_text(collections_duplicates, _("Allow the same image to be in a Collection more than once"));
 
 	hide_window_in_fullscreen = pref_checkbox_new_int(group, _("Hide window in fullscreen"),
 				options->hide_window_in_fullscreen, &c_options->hide_window_in_fullscreen);
-	gtk_widget_set_tooltip_text(hide_window_in_fullscreen, _("When alt-tabbing, prevent Geeqie window showing twice"));
+	gtk_widget_set_tooltip_text(hide_window_in_fullscreen, _("When alt-tabbing, prevent the normal Geeqie window from showing alongside the fullscreen window"));
 
 	hide_osd_in_fullscreen = pref_checkbox_new_int(group, _("Hide OSD in fullscreen"),
 				options->hide_osd_in_fullscreen, &c_options->hide_osd_in_fullscreen);
@@ -3427,18 +3445,18 @@ Double-click on the Key column and add or replace the text.\n");
 }
 
 /* toolbar tab */
-static void config_tab_toolbar(GtkWidget *notebook, ToolbarType bar)
+static void config_tab_toolbar(GtkWidget *notebook, GtkWidget *window, ToolbarType bar)
 {
 	const gchar *title = (bar == TOOLBAR_MAIN) ? _("Toolbar Main") : _("Toolbar Status");
 	GtkWidget *vbox = scrolled_notebook_page(notebook, title);
 
-	GtkWidget *toolbardata = toolbar_select_new(layout_window_first(), bar);
+	GtkWidget *toolbardata = toolbar_select_new(layout_window_first(), window, bar);
 	gq_gtk_box_pack_start(GTK_BOX(vbox), toolbardata, TRUE, TRUE, 0);
 	gtk_widget_show(vbox);
 }
 
 /* advanced tab */
-static void config_tab_advanced(GtkWidget *notebook)
+static void config_tab_advanced(GtkWidget *notebook, ConfOptions *c_options)
 {
 	GtkWidget *alternate_checkbox;
 	GtkWidget *dupes_threads_spin;
@@ -3506,67 +3524,29 @@ static void config_tab_advanced(GtkWidget *notebook)
 }
 
 /* stereo tab */
-static void config_tab_stereo(GtkWidget *notebook)
+static void config_tab_stereo(GtkWidget *notebook, ConfOptions *c_options)
 {
-	GtkWidget *vbox;
 	GtkWidget *group;
-	GtkWidget *group2;
-	GtkWidget *table;
-	GtkWidget *box;
-	GtkWidget *box2;
-	GtkWidget *fs_button;
-	vbox = scrolled_notebook_page(notebook, _("Stereo"));
+
+	GtkWidget *vbox = scrolled_notebook_page(notebook, _("Stereo"));
 
 	group = pref_group_new(vbox, FALSE, _("Windowed stereo mode"), GTK_ORIENTATION_VERTICAL);
 
-	table = pref_table_new(group, 2, 1, FALSE, FALSE);
-	add_stereo_mode_menu(table, 0, 0, _("Windowed stereo mode"), options->stereo.mode, &c_options->stereo.mode, FALSE);
-
-	table = pref_table_new(group, 2, 2, TRUE, FALSE);
-	box = pref_table_box(table, 0, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Mirror left image"),
-			      options->stereo.mode & PR_STEREO_MIRROR_LEFT, &c_options->stereo.tmp.mirror_left);
-	box = pref_table_box(table, 1, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Flip left image"),
-			      options->stereo.mode & PR_STEREO_FLIP_LEFT, &c_options->stereo.tmp.flip_left);
-	box = pref_table_box(table, 0, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Mirror right image"),
-			      options->stereo.mode & PR_STEREO_MIRROR_RIGHT, &c_options->stereo.tmp.mirror_right);
-	box = pref_table_box(table, 1, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Flip right image"),
-			      options->stereo.mode & PR_STEREO_FLIP_RIGHT, &c_options->stereo.tmp.flip_right);
-	pref_checkbox_new_int(group, _("Swap left and right images"),
-			      options->stereo.mode & PR_STEREO_SWAP, &c_options->stereo.tmp.swap);
-	pref_checkbox_new_int(group, _("Disable stereo mode on single image source"),
-			      options->stereo.mode & PR_STEREO_TEMP_DISABLE, &c_options->stereo.tmp.temp_disable);
+	add_stereo_mode_menu(group, _("Windowed stereo mode"), options->stereo.mode, &c_options->stereo.mode, false);
+	add_stereo_mode_options(group, options->stereo.mode, c_options->stereo.tmp);
 
 	group = pref_group_new(vbox, FALSE, _("Fullscreen stereo mode"), GTK_ORIENTATION_VERTICAL);
-	fs_button = pref_checkbox_new_int(group, _("Use different settings for fullscreen"),
-			      options->stereo.enable_fsmode, &c_options->stereo.enable_fsmode);
-	box2 = pref_box_new(group, FALSE, GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
-	pref_checkbox_link_sensitivity(fs_button, box2);
-	table = pref_table_new(box2, 2, 1, FALSE, FALSE);
-	add_stereo_mode_menu(table, 0, 0, _("Fullscreen stereo mode"), options->stereo.fsmode, &c_options->stereo.fsmode, TRUE);
-	table = pref_table_new(box2, 2, 2, TRUE, FALSE);
-	box = pref_table_box(table, 0, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Mirror left image"),
-	                      options->stereo.fsmode & PR_STEREO_MIRROR_LEFT, &c_options->stereo.fstmp.mirror_left);
-	box = pref_table_box(table, 1, 0, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Flip left image"),
-	                      options->stereo.fsmode & PR_STEREO_FLIP_LEFT, &c_options->stereo.fstmp.flip_left);
-	box = pref_table_box(table, 0, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Mirror right image"),
-	                      options->stereo.fsmode & PR_STEREO_MIRROR_RIGHT, &c_options->stereo.fstmp.mirror_right);
-	box = pref_table_box(table, 1, 1, GTK_ORIENTATION_HORIZONTAL, nullptr);
-	pref_checkbox_new_int(box, _("Flip right image"),
-	                      options->stereo.fsmode & PR_STEREO_FLIP_RIGHT, &c_options->stereo.fstmp.flip_right);
-	pref_checkbox_new_int(box2, _("Swap left and right images"),
-	                      options->stereo.fsmode & PR_STEREO_SWAP, &c_options->stereo.fstmp.swap);
-	pref_checkbox_new_int(box2, _("Disable stereo mode on single image source"),
-	                      options->stereo.fsmode & PR_STEREO_TEMP_DISABLE, &c_options->stereo.fstmp.temp_disable);
 
-	group2 = pref_group_new(box2, FALSE, _("Fixed position"), GTK_ORIENTATION_VERTICAL);
-	table = pref_table_new(group2, 5, 3, FALSE, FALSE);
+	GtkWidget *fs_button = pref_checkbox_new_int(group, _("Use different settings for fullscreen"),
+	                                             options->stereo.enable_fsmode, &c_options->stereo.enable_fsmode);
+	GtkWidget *box = pref_box_new(group, FALSE, GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
+	pref_checkbox_link_sensitivity(fs_button, box);
+
+	add_stereo_mode_menu(box, _("Fullscreen stereo mode"), options->stereo.fsmode, &c_options->stereo.fsmode, true);
+	add_stereo_mode_options(box, options->stereo.fsmode, c_options->stereo.fstmp);
+
+	GtkWidget *group2 = pref_group_new(box, FALSE, _("Fixed position"), GTK_ORIENTATION_VERTICAL);
+	GtkWidget *table = pref_table_new(group2, 5, 3, FALSE, FALSE);
 	pref_table_spin_new_int(table, 0, 0, _("Width"), nullptr, 1, 5000, 1,
 	                        options->stereo.fixed_size.width, &c_options->stereo.fixed_size.width);
 	pref_table_spin_new_int(table, 3, 0, _("Height"), nullptr, 1, 5000, 1,
@@ -3582,16 +3562,11 @@ static void config_tab_stereo(GtkWidget *notebook)
 }
 
 /* Main preferences window */
-static void config_window_create(LayoutWindow *lw)
+static GtkWidget *config_window_create(LayoutWindow *lw, ConfOptions *c_options)
 {
-	GtkWidget *win_vbox;
-	GtkWidget *notebook;
 	GtkWidget *button;
-	GtkWidget *ct_button;
 
-	if (!c_options) c_options = init_options(nullptr);
-
-	configwindow = window_new("preferences", PIXBUF_INLINE_ICON_CONFIG, _("Preferences"));
+	GtkWidget *configwindow = window_new("preferences", PIXBUF_INLINE_ICON_CONFIG, _("Preferences"));
 	DEBUG_NAME(configwindow);
 	if (lw && lw->window) gtk_window_set_transient_for(GTK_WINDOW(configwindow), GTK_WINDOW(lw->window));
 	g_signal_connect(G_OBJECT(configwindow), "close-request",
@@ -3607,29 +3582,28 @@ static void config_window_create(LayoutWindow *lw)
 	gtk_window_set_resizable(GTK_WINDOW(configwindow), TRUE);
 	gq_gtk_widget_set_border_width(configwindow, PREF_PAD_BORDER);
 
-	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
-	gq_gtk_container_add(configwindow, win_vbox);
-	gtk_widget_show(win_vbox);
+	GtkWidget *win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
+	gtk_window_set_child(GTK_WINDOW(configwindow), win_vbox);
 
-	notebook = gtk_notebook_new();
+	GtkWidget *notebook = gtk_notebook_new();
 	gtk_notebook_set_tab_pos(GTK_NOTEBOOK(notebook), GTK_POS_LEFT);
 	gtk_notebook_set_scrollable(GTK_NOTEBOOK(notebook), TRUE);
 	gq_gtk_box_pack_start(GTK_BOX(win_vbox), notebook, TRUE, TRUE, 0);
 
-	config_tab_general(notebook);
-	config_tab_image(notebook);
-	config_tab_osd(notebook);
-	config_tab_windows(notebook);
+	config_tab_general(notebook, c_options);
+	config_tab_image(notebook, c_options);
+	config_tab_osd(notebook, c_options);
+	config_tab_windows(notebook, c_options);
 	config_tab_accelerators(notebook);
-	config_tab_files(notebook);
-	config_tab_metadata(notebook);
+	config_tab_files(notebook, c_options);
+	config_tab_metadata(notebook, c_options);
 	config_tab_keywords(notebook);
-	config_tab_color(notebook);
-	config_tab_stereo(notebook);
-	config_tab_behavior(notebook);
-	config_tab_toolbar(notebook, TOOLBAR_MAIN);
-	config_tab_toolbar(notebook, TOOLBAR_STATUS);
-	config_tab_advanced(notebook);
+	config_tab_color(notebook, c_options);
+	config_tab_stereo(notebook, c_options);
+	config_tab_behavior(notebook, c_options);
+	config_tab_toolbar(notebook, configwindow, TOOLBAR_MAIN);
+	config_tab_toolbar(notebook, configwindow, TOOLBAR_STATUS);
+	config_tab_advanced(notebook, c_options);
 
 	gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), lw->options.preferences_window.page_number);
 
@@ -3639,29 +3613,25 @@ static void config_window_create(LayoutWindow *lw)
 
 	button = pref_button_new(nullptr, GQ_ICON_HELP, _("Help"),
 				 G_CALLBACK(config_window_help_cb), notebook);
-	gq_gtk_container_add(hbox, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(hbox), button);
 
 	button = pref_button_new(nullptr, GQ_ICON_OK, "OK",
 				 G_CALLBACK(config_window_ok_cb), notebook);
-	gq_gtk_container_add(hbox, button);
+	gtk_box_append(GTK_BOX(hbox), button);
 	gtk_window_set_default_widget(GTK_WINDOW(configwindow), button);
-	gtk_widget_show(button);
 
-	ct_button = button;
+	GtkWidget *ct_button = button;
 
 	button = pref_button_new(nullptr, GQ_ICON_CANCEL, _("Cancel"),
 				 G_CALLBACK(config_window_close_cb), nullptr);
-	gq_gtk_container_add(hbox, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(hbox), button);
 
 	if (!get_alternative_button_order(configwindow))
 		{
 		gq_gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
 		}
 
-	gtk_widget_show(notebook);
-	gtk_widget_show(configwindow);
+	return configwindow;
 }
 
 /*
@@ -3672,13 +3642,14 @@ static void config_window_create(LayoutWindow *lw)
 
 void show_config_window(LayoutWindow *lw)
 {
-	if (configwindow)
+	if (!configwindow)
 		{
-		gtk_window_present(GTK_WINDOW(configwindow));
-		return;
+		if (!c_options) c_options = conf_options_new();
+
+		configwindow = config_window_create(lw, c_options);
 		}
 
-	config_window_create(lw);
+	gtk_window_present(GTK_WINDOW(configwindow));
 }
 
 /*

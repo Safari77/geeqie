@@ -6440,14 +6440,6 @@ msgstr "Tillåt dubbletter i samlingar"
 msgid "Allow the same image to be in a Collection more than once"
 msgstr "Tillåt att samma bild används i en samling mer än en gång"
 
-#: src/preferences.cc:3614
-msgid "Open collections on top"
-msgstr "Öppna samling högst upp"
-
-#: src/preferences.cc:3616
-msgid "Open collections window on top"
-msgstr "Öppna samlingsfönstret högst upp"
-
 #: src/preferences.cc:3618
 msgid "Hide window in fullscreen"
 msgstr "Göm fönster i fullskärm"
@@ -9017,9 +9009,6 @@ msgstr ""
 
 #~ msgid "Best"
 #~ msgstr "Bäst"
-
-#~ msgid "Use xvpics thumbnails when found (read only)"
-#~ msgstr "Använd xvpics-miniatyrbilder om sådana finns (endast läsning)"
 
 #~ msgid "Offscreen cache size (Mb per image):"
 #~ msgstr "Storlek på dold cache (megabyte per bild):"

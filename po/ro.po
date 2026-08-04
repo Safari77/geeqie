@@ -6686,16 +6686,6 @@ msgstr ""
 msgid "Allow the same image to be in a Collection more than once"
 msgstr ""
 
-#: src/preferences.cc:3614
-#, fuzzy
-msgid "Open collections on top"
-msgstr "Deschide colecţia"
-
-#: src/preferences.cc:3616
-#, fuzzy
-msgid "Open collections window on top"
-msgstr "Deschide colecţia"
-
 #: src/preferences.cc:3618
 msgid "Hide window in fullscreen"
 msgstr ""
@@ -9336,9 +9326,6 @@ msgstr ""
 
 #~ msgid "Best"
 #~ msgstr "Cea mai bună"
-
-#~ msgid "Use xvpics thumbnails when found (read only)"
-#~ msgstr "Foloseşte miniaturile xvpics disponibile (numai pt. citire)"
 
 #~ msgid "Offscreen cache size (Mb per image):"
 #~ msgstr "Memorie tampon în afara ecranului (Mb/imagine):"

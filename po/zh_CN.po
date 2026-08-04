@@ -6719,16 +6719,6 @@ msgstr ""
 msgid "Allow the same image to be in a Collection more than once"
 msgstr ""
 
-#: src/preferences.cc:3614
-#, fuzzy
-msgid "Open collections on top"
-msgstr "打开图片集"
-
-#: src/preferences.cc:3616
-#, fuzzy
-msgid "Open collections window on top"
-msgstr "打开图片集"
-
 #: src/preferences.cc:3618
 msgid "Hide window in fullscreen"
 msgstr ""
@@ -9297,9 +9287,6 @@ msgstr ""
 
 #~ msgid "Best"
 #~ msgstr "最好"
-
-#~ msgid "Use xvpics thumbnails when found (read only)"
-#~ msgstr "如发现 xvpics 缩略图就使用 (只读)"
 
 #~ msgid "Offscreen cache size (Mb per image):"
 #~ msgstr "屏幕外缓冲大小 (Mb 每图像):"

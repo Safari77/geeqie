@@ -304,8 +304,34 @@ GtkWidget *popover_parent_new(GtkWidget *child)
 #endif
 }
 
+static gboolean popover_detach_cb(gpointer data)
+{
+	auto *popover = GTK_WIDGET(data);
+	GtkWidget *parent = gtk_widget_get_parent(popover);
+	if (!parent) return G_SOURCE_REMOVE;
+
+#if HAVE_GTK4_22
+	if (GTK_IS_POPOVER_BIN(parent))
+		{
+		gtk_popover_bin_set_popover(GTK_POPOVER_BIN(parent), nullptr);
+		return G_SOURCE_REMOVE;
+		}
+#endif
+
+	gtk_widget_unparent(popover);
+	return G_SOURCE_REMOVE;
+}
+
+static void popover_closed_cb(GtkPopover *popover, gpointer)
+{
+	g_idle_add_full(G_PRIORITY_LOW, popover_detach_cb,
+	                g_object_ref(popover), g_object_unref);
+}
+
 void popover_set_parent(GtkWidget *popover, GtkWidget *parent)
 {
+	g_signal_connect(popover, "closed", G_CALLBACK(popover_closed_cb), nullptr);
+
 #if HAVE_GTK4_22
 	if (GTK_IS_POPOVER_BIN(parent))
 		{

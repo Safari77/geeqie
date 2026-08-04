@@ -214,11 +214,9 @@ static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModi
 
 		}
 
-	if (lw->vf->file_filter.combo)
+	if (lw->vf->file_filter.entry)
 		{
-		GtkWidget *combo_entry = gtk_combo_box_get_child(GTK_COMBO_BOX(lw->vf->file_filter.combo));
-
-		if (combo_entry && gtk_widget_has_focus(combo_entry))
+		if (gtk_widget_has_focus(lw->vf->file_filter.entry))
 			{
 			return FALSE;
 			}
@@ -786,7 +784,7 @@ static void layout_menu_thumb_cb(GSimpleAction *action, GVariant *state, gpointe
 
 	layout_thumb_set(lw, enabled);
 
-	g_simple_action_set_state(action, g_variant_new_boolean(!enabled));
+	g_simple_action_set_state(action, state);
 }
 
 static void layout_menu_list_cb(GSimpleAction *action, GVariant *state, gpointer data)
@@ -1023,6 +1021,16 @@ struct OpenRecentDialogData
 static void open_recent_dialog_data_free(OpenRecentDialogData *dialog_data)
 {
 	if (!dialog_data) return;
+
+	/* Destroying the list clears its selection and can emit row-selected after
+	 * the dialog buttons have already been destroyed. Do not let that callback
+	 * use stale widget pointers while the dialog is being torn down. */
+	if (dialog_data->list)
+		{
+		g_signal_handlers_disconnect_by_data(dialog_data->list, dialog_data);
+		}
+	dialog_data->list = nullptr;
+	dialog_data->open_button = nullptr;
 
 	generic_dialog_close(dialog_data->gd);
 	g_free(dialog_data);
@@ -2331,7 +2339,7 @@ static GList *layout_window_menu_list()
 	return g_list_sort(list, layout_window_menu_list_sort_cb);
 }
 
-static void layout_menu_new_window_update(LayoutWindow *lw)
+void layout_menu_new_window_update(LayoutWindow *lw)
 {
 	if (!lw || !lw->builder) return;
 
@@ -2905,11 +2913,6 @@ void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type)
 {
 	if (type >= TOOLBAR_COUNT) return;
 
-	if (layout_window_count() > 0)
-		{
-		return;
-		}
-
 	switch (type)
 		{
 		case TOOLBAR_MAIN:
@@ -3143,7 +3146,7 @@ static void layout_util_sync_views(LayoutWindow *lw)
 
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-connected-zoom-menu");
-		g_simple_action_set_enabled(G_SIMPLE_ACTION(action), FALSE);
+		g_simple_action_set_enabled(G_SIMPLE_ACTION(action), lw->split_mode != SPLIT_NONE);
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-split-pane-sync");
 		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(lw->options.split_pane_sync));
@@ -3151,11 +3154,11 @@ static void layout_util_sync_views(LayoutWindow *lw)
 
 		if (lw->options.file_view_type == FILEVIEW_LIST)
 			{
-			g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string("main-win-list"));
+			g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string("list"));
 			}
-		else if (lw->split_mode == SPLIT_VERT)
+		else
 			{
-			g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string("main-win-icons"));
+			g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_string("icons"));
 			}
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-crop");
 		if (options->rectangle_draw_aspect_ratio == RECTANGLE_DRAW_ASPECT_RATIO_NONE)
@@ -3410,9 +3413,9 @@ static gboolean layout_bar_sort_enabled(LayoutWindow *lw)
 }
 
 
-static void layout_bar_sort_destroyed(GtkWidget *, gpointer  )
+static void layout_bar_sort_destroyed(GtkWidget *, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto *lw = static_cast<LayoutWindow *>(data);
 
 	lw->bar_sort = nullptr;
 

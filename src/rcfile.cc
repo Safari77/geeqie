@@ -458,7 +458,6 @@ static void write_global_attributes(GString *outstr, gint indent)
 
 	WRITE_NL(); WRITE_BOOL(*options, with_rename);
 	WRITE_NL(); WRITE_BOOL(*options, collections_duplicates);
-	WRITE_NL(); WRITE_BOOL(*options, collections_on_top);
 	WRITE_NL(); WRITE_BOOL(*options, hide_window_in_fullscreen);
 	WRITE_NL(); WRITE_BOOL(*options, hide_osd_in_fullscreen);
 
@@ -509,7 +508,6 @@ static void write_global_attributes(GString *outstr, gint indent)
 	WRITE_NL(); WRITE_INT_FULL("thumbnails.max_height", options->thumbnails.size.height);
 	WRITE_NL(); WRITE_BOOL(*options, thumbnails.enable_caching);
 	WRITE_NL(); WRITE_BOOL(*options, thumbnails.cache_into_dirs);
-	WRITE_NL(); WRITE_BOOL(*options, thumbnails.use_xvpics);
 	WRITE_NL(); WRITE_BOOL(*options, thumbnails.spec_standard);
 	WRITE_NL(); WRITE_UINT(*options, thumbnails.quality);
 	WRITE_NL(); WRITE_BOOL(*options, thumbnails.use_exif);
@@ -933,7 +931,6 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 		if (READ_CHAR(*options, external_preview.extract)) continue;
 
 		if (READ_BOOL(*options, collections_duplicates)) continue;
-		if (READ_BOOL(*options, collections_on_top)) continue;
 		if (READ_BOOL(*options, hide_window_in_fullscreen)) continue;
 		if (READ_BOOL(*options, hide_osd_in_fullscreen)) continue;
 
@@ -974,7 +971,6 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 
 		if (READ_BOOL(*options, thumbnails.enable_caching)) continue;
 		if (READ_BOOL(*options, thumbnails.cache_into_dirs)) continue;
-		if (READ_BOOL(*options, thumbnails.use_xvpics)) continue;
 		if (READ_BOOL(*options, thumbnails.spec_standard)) continue;
 		if (READ_UINT_ENUM_CLAMP(*options, thumbnails.quality, GDK_INTERP_NEAREST, GDK_INTERP_BILINEAR)) continue;
 		if (READ_BOOL(*options, thumbnails.use_exif)) continue;
@@ -1702,6 +1698,11 @@ static void options_parse_layout(GQParserData *parser_data, const gchar *element
 static void options_parse_layout_end(gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
+	for (gint i = 0; i < TOOLBAR_COUNT; i++)
+		{
+		auto type = static_cast<ToolbarType>(i);
+		if (!lw->toolbar_actions[type]) layout_toolbar_add_default(lw, type);
+		}
 	layout_util_sync(lw);
 }
 

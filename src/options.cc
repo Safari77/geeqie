@@ -54,11 +54,11 @@ void image_overlay_init(ConfOptions::ImageOverlay &image_overlay)
 ConfOptions *options;
 CommandLine *command_line;
 
-ConfOptions *init_options(ConfOptions *options)
+ConfOptions *conf_options_new()
 {
 	gint i;
 
-	if (!options) options = g_new0(ConfOptions, 1);
+	auto *options = g_new0(ConfOptions, 1);
 
 	options->collections.rectangular_selection = FALSE;
 
@@ -111,7 +111,6 @@ ConfOptions *init_options(ConfOptions *options)
 	options->marks_save = TRUE;
 	options->with_rename = FALSE;
 	options->collections_duplicates = FALSE;
-	options->collections_on_top = FALSE;
 	options->hide_window_in_fullscreen = TRUE;
 	options->hide_osd_in_fullscreen = FALSE;
 
@@ -201,7 +200,6 @@ ConfOptions *init_options(ConfOptions *options)
 	options->thumbnails.size = { DEFAULT_THUMB_WIDTH, DEFAULT_THUMB_HEIGHT };
 	options->thumbnails.quality = GDK_INTERP_TILES;
 	options->thumbnails.spec_standard = TRUE;
-	options->thumbnails.use_xvpics = TRUE;
 	options->thumbnails.use_exif = FALSE;
 	options->thumbnails.use_color_management = FALSE;
 	options->thumbnails.use_ft_metadata = TRUE;
@@ -230,7 +228,7 @@ ConfOptions *init_options(ConfOptions *options)
 	options->printer.template_string = nullptr;
 	options->printer.image_font = g_strdup("Serif 10");
 	options->printer.page_font = g_strdup("Serif 10");
-	options->printer.page_text = nullptr;
+	options->printer.page_text = g_strdup("");
 	options->printer.image_text_position = FOOTER_1;
 	options->printer.page_text_position = HEADER_1;
 

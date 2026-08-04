@@ -94,6 +94,26 @@ static void touchpad_zoom_cb(GtkGestureZoom *controller, double, gpointer data)
 	layout_image_zoom_set(lw, gtk_gesture_zoom_get_scale_delta(controller) * image_zoom_get_real(lw->image), TRUE);
 }
 
+static GtkEventController *touchpad_zoom_new(GtkWidget *widget, LayoutWindow *lw)
+{
+	GtkEventController *controller = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new());
+	g_signal_connect(controller, "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
+
+	/* Unlike GTK3's gtk_gesture_zoom_new(widget), the GTK4 constructor does
+	 * not attach the gesture. gtk_widget_add_controller() takes ownership. */
+	gtk_widget_add_controller(widget, controller);
+
+	return controller;
+}
+
+static void touchpad_zoom_remove(GtkWidget *widget, GtkEventController *&controller)
+{
+	if (!controller) return;
+
+	gtk_widget_remove_controller(widget, controller);
+	controller = nullptr;
+}
+
 void layout_image_full_screen_start(LayoutWindow *lw)
 {
 	if (!layout_valid(&lw)) return;
@@ -102,6 +122,8 @@ void layout_image_full_screen_start(LayoutWindow *lw)
 
 	const auto layout_image_fullscreen_stop_func = [lw](FullScreenData *fs)
 	{
+		touchpad_zoom_remove(fs->imd->pr, lw->touchpad_zoom);
+
 		/* restore image window */
 		if (lw->image == fs->imd)
 			lw->image = fs->normal_imd;
@@ -119,8 +141,7 @@ void layout_image_full_screen_start(LayoutWindow *lw)
 
 	layout_keyboard_init(lw, lw->full_screen->window);
 
-	lw->touchpad_zoom = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new());
-	g_signal_connect(lw->touchpad_zoom, "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
+	lw->touchpad_zoom = touchpad_zoom_new(lw->full_screen->imd->pr, lw);
 
 	layout_actions_add_window(lw, lw->full_screen->window);
 
@@ -145,8 +166,6 @@ void layout_image_full_screen_stop(LayoutWindow *lw)
 		image_osd_copy_status(lw->image, lw->full_screen->normal_imd);
 
 	fullscreen_stop(lw->full_screen);
-
-	g_object_unref(lw->touchpad_zoom);
 
 	layout_image_animate_update_image(lw);
 }
@@ -751,21 +770,28 @@ static void layout_image_pop_menu_hide_selectable_toolbars_cb(GSimpleAction *act
 
 #include "layout-image-actions.inc"
 
+static GtkWidget *layout_image_pop_menu_action_window(LayoutWindow *lw)
+{
+	return lw->full_screen ? lw->full_screen->window : lw->window;
+}
+
 static void layout_image_pop_menu_ensure_actions(LayoutWindow *lw)
 {
-	if (g_object_get_data(G_OBJECT(lw->window), LAYOUT_IMAGE_POPUP_ACTIONS_KEY))
+	GtkWidget *window = layout_image_pop_menu_action_window(lw);
+	if (g_object_get_data(G_OBJECT(window), LAYOUT_IMAGE_POPUP_ACTIONS_KEY))
 		{
 		return;
 		}
 
 	GApplication *app = g_application_get_default();
-	register_actions_from_table(GTK_APPLICATION(app), lw->window, layout_image_actions, get_keyfile_merged(), lw);
-	g_object_set_data(G_OBJECT(lw->window), LAYOUT_IMAGE_POPUP_ACTIONS_KEY, GINT_TO_POINTER(TRUE));
+	register_actions_from_table(GTK_APPLICATION(app), window, layout_image_actions, get_keyfile_merged(), lw);
+	g_object_set_data(G_OBJECT(window), LAYOUT_IMAGE_POPUP_ACTIONS_KEY, GINT_TO_POINTER(TRUE));
 }
 
 static void layout_image_pop_menu_set_enabled(LayoutWindow *lw, const gchar *name, gboolean enabled)
 {
-	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), name);
+	GtkWidget *window = layout_image_pop_menu_action_window(lw);
+	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(window), name);
 	if (action)
 		{
 		g_simple_action_set_enabled(G_SIMPLE_ACTION(action), enabled);
@@ -774,7 +800,8 @@ static void layout_image_pop_menu_set_enabled(LayoutWindow *lw, const gchar *nam
 
 static void layout_image_pop_menu_set_boolean_state(LayoutWindow *lw, const gchar *name, gboolean state)
 {
-	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), name);
+	GtkWidget *window = layout_image_pop_menu_action_window(lw);
+	GAction *action = g_action_map_lookup_action(G_ACTION_MAP(window), name);
 	if (action)
 		{
 		g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(state));
@@ -1825,6 +1852,30 @@ static void layout_image_scroll_cb(ImageWindow *imd, const GqScrollEvent *event,
 		layout_image_activate(lw, i, FALSE);
 		}
 
+	if (event->direction == GDK_SCROLL_SMOOTH)
+		{
+		if (event->state & GDK_CONTROL_MASK)
+			{
+			const gdouble increment = image_smooth_scroll_zoom_delta(imd, event->dy, get_zoom_increment());
+			if (increment != 0.0)
+				{
+				layout_image_zoom_adjust_at_point(lw, increment, event->x, event->y,
+				                                  event->state & GDK_SHIFT_MASK);
+				}
+			}
+		else
+			{
+			gint x;
+			gint y;
+			image_smooth_scroll_get_deltas(imd, event->dx, event->dy, 10.0, x, y);
+			if (x != 0 || y != 0)
+				{
+				layout_image_scroll(lw, x, y, event->state & GDK_SHIFT_MASK);
+				}
+			}
+		return;
+		}
+
 
 	if ((event->state & GDK_CONTROL_MASK) ||
 				(imd->mouse_wheel_mode && !options->image_lm_click_nav))
@@ -2062,8 +2113,7 @@ GtkWidget *layout_image_new(LayoutWindow *lw, gint i)
 
 		image_set_focus_in_func(lw->split_images[i], layout_image_focus_in_cb, lw);
 
-		lw->split_images_touchpad_zoom[i] = GTK_EVENT_CONTROLLER(gtk_gesture_zoom_new());
-		g_signal_connect(lw->split_images_touchpad_zoom[i], "scale-changed", G_CALLBACK(touchpad_zoom_cb), lw);
+		lw->split_images_touchpad_zoom[i] = touchpad_zoom_new(lw->split_images[i]->pr, lw);
 		}
 
 	return lw->split_images[i]->widget;
@@ -2079,9 +2129,6 @@ static void layout_image_deactivate(LayoutWindow *lw, gint i)
 	image_attach_window(lw->split_images[i], nullptr, nullptr, nullptr, FALSE);
 	image_select(lw->split_images[i], false);
 
-	/** @FIXME The gtk_gesture_zoom_new() is leaking here
-	 * g_object_unref(lw->split_images_touchpad_zoom[i]);
-	 */
 }
 
 /* force should be set after change of lw->split_mode */
@@ -2187,6 +2234,7 @@ static void layout_image_setup_split_common(LayoutWindow *lw, gint n)
 		{
 		if (lw->split_images[i])
 			{
+			touchpad_zoom_remove(lw->split_images[i]->pr, lw->split_images_touchpad_zoom[i]);
 			g_object_unref(lw->split_images[i]->widget);
 			lw->split_images[i] = nullptr;
 			}
