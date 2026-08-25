@@ -31,7 +31,6 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
-#include "compat.h"
 #include "geometry.h"
 
 struct GqColor;
@@ -186,6 +185,7 @@ struct PixbufRenderer
 
 	gdouble norm_center_x;	/**< coordinates of viewport center in the image, in range 0.0 - 1.0 */
 	gdouble norm_center_y;  /**< these coordinates are used for ScrollReset::NOCHANGE and should be preserved over periods with NULL pixbuf */
+	gint tile_cache_max;    /**< maximum MiB used for rendered image tiles */
 
 	gdouble subpixel_x_scroll; /**< subpixel scroll alignment, used to prevent accumulation of rounding errors */
 	gdouble subpixel_y_scroll;
@@ -253,6 +253,12 @@ struct PixbufRenderer
 	gint scroller_xinc;
 	gint scroller_yinc;
 
+	guint birdseye_hide_id;
+	gint birdseye_overlay;
+	gint birdseye_width;
+	gint birdseye_height;
+	gboolean birdseye_drag;
+
 	gint orientation;
 
 	gint stereo_mode;
@@ -267,6 +273,24 @@ struct PixbufRenderer
 	RendererFuncs *renderer2;
 
 	gboolean ignore_alpha;
+};
+
+struct GqMouseButtonEvent
+{
+	guint button;
+	gdouble x;
+	gdouble y;
+	GdkModifierType state;
+	guint press_count;
+};
+
+struct GqPointerMotionEvent
+{
+	gdouble x;
+	gdouble y;
+	gdouble dx;
+	gdouble dy;
+	GdkModifierType state;
 };
 
 struct PixbufRendererClass

@@ -31,7 +31,6 @@
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 
-#include "compat.h"
 #include "exif.h"
 #include "filedata.h"
 #include "image-load.h"
@@ -227,7 +226,7 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	pref_checkbox_link_sensitivity(image_text_button, subgroup);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(subgroup), hbox, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(subgroup), hbox);
 
 	/* order is important */
 	button1 = pref_radiobutton_new(hbox, nullptr,  _("Header 1"),
@@ -246,14 +245,11 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	                               options->printer.image_text_position == FOOTER_2,
 	                               G_CALLBACK(image_text_position_cb<FOOTER_2>), pw);
 	pw->image_group[FOOTER_2] = button1;
-	gtk_widget_show(hbox);
 
 	image_text_template_view = gtk_text_view_new();
 
 	scrolled_pre_formatted = osd_new(PRE_FORMATTED_COLUMNS, image_text_template_view);
-	gq_gtk_box_pack_start(GTK_BOX(subgroup), scrolled_pre_formatted, FALSE, FALSE, 0);
-	gtk_widget_show(scrolled_pre_formatted);
-	gtk_widget_show(subgroup);
+	gtk_box_append(GTK_BOX(subgroup), scrolled_pre_formatted);
 
 	gtk_widget_set_tooltip_markup(image_text_template_view,
 					_("Extensive formatting options are shown in the Help file"));
@@ -263,11 +259,19 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 									GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(subgroup), scrolled, TRUE, TRUE, 5);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(scrolled, 5);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(scrolled, 5);
+		}
+	gtk_box_append(GTK_BOX(subgroup), scrolled);
 
-	gq_gtk_container_add(scrolled, image_text_template_view);
-	gtk_widget_show(image_text_template_view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), image_text_template_view);
 
 	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(image_text_template_view));
 	if (options->printer.template_string) gtk_text_buffer_set_text(buffer, options->printer.template_string, -1);
@@ -280,8 +284,7 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	button = pref_button_new(nullptr, GQ_ICON_SELECT_FONT, _("Font"),
 	                         G_CALLBACK(print_set_font_cb<image_text_font_title>), options->printer.image_font);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(hbox), button);
 
 	pref_spacer(group, PREF_PAD_GAP);
 
@@ -294,7 +297,7 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	pref_checkbox_link_sensitivity(page_text_button, subgroup);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(subgroup), hbox, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(subgroup), hbox);
 
 	/* order is important */
 	button2 = pref_radiobutton_new(hbox, nullptr, _("Header 1"),
@@ -313,15 +316,23 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	                               options->printer.page_text_position == FOOTER_2,
 	                               G_CALLBACK(page_text_position_cb<FOOTER_2>), pw);
 	pw->page_group[FOOTER_2] = button2;
-	gtk_widget_show(hbox);
 
 	scrolled = gtk_scrolled_window_new();
 	gtk_widget_set_size_request(scrolled, 50, 50);
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(subgroup), scrolled, TRUE, TRUE, 5);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(subgroup))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(scrolled, 5);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(scrolled, 5);
+		}
+	gtk_box_append(GTK_BOX(subgroup), scrolled);
 
 	page_text_view = gtk_text_view_new();
 	pw->page_text = gtk_text_view_get_buffer(GTK_TEXT_VIEW(page_text_view ));
@@ -329,8 +340,7 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	g_object_ref(pw->page_text);
 
 	gtk_widget_set_tooltip_markup(page_text_view, (_("Text shown on each page of a single or multi-page print job")));
-	gq_gtk_container_add(scrolled, page_text_view);
-	gtk_widget_show(page_text_view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), page_text_view);
 
 	hbox = pref_box_new(subgroup, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
 
@@ -338,8 +348,7 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	button = pref_button_new(nullptr, GQ_ICON_SELECT_FONT, _("Font"),
 	                         G_CALLBACK(print_set_font_cb<page_text_font_title>), options->printer.page_font);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(hbox), button);
 }
 
 gboolean paginate_cb(GtkPrintOperation *, GtkPrintContext *, gpointer data)
@@ -698,8 +707,10 @@ void print_window_new(GList *selection, GtkWidget *parent)
 	pw->parent = parent;
 
 	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_widget_set_border_width(vbox, PREF_PAD_BORDER);
-	gtk_widget_show(vbox);
+	gtk_widget_set_margin_top(vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(vbox, PREF_PAD_BORDER);
 
 	print_text_menu(vbox, pw);
 	pw->vbox = vbox;

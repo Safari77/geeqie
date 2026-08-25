@@ -136,7 +136,7 @@ ConfOptions *conf_options_new()
 	options->image.max_enlargement_size = 900;
 	options->image.max_window_size = 90;
 	options->image.scroll_reset_method = ScrollReset::NOCHANGE;
-	options->image.tile_cache_max = 10;
+	options->image.tile_cache_max = 64;
 	options->image.image_cache_max = 128; /* 4 x 10MPix */
 	options->image.use_custom_border_color = FALSE;
 	options->image.use_custom_border_color_in_fullscreen = TRUE;
@@ -157,6 +157,7 @@ ConfOptions *conf_options_new()
 
 	options->lazy_image_sync = FALSE;
 	options->mousewheel_scrolls = FALSE;
+	options->show_birdseye = FALSE;
 	options->image_lm_click_nav = TRUE;
 	options->image_l_click_archive = FALSE;
 	options->image_l_click_video = TRUE;
@@ -187,6 +188,7 @@ ConfOptions *conf_options_new()
 	options->show_icon_names = TRUE;
 	options->show_star_rating = FALSE;
 	options->show_collection_infotext = FALSE;
+	options->show_collection_marks = FALSE;
 	options->show_predefined_keyword_tree = TRUE;
 	options->expand_menu_toolbar = FALSE;
 	options->hamburger_menu = FALSE;

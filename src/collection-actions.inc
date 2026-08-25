@@ -18,6 +18,19 @@ static const gchar *const sort_mode_targets[] =
 static const ActionDef collection_actions[] =
 {
 		{
+		"win.collection-win-append-from-main-window",
+		nullptr,
+		N_("Append from main window"),
+		collection_table_append_main_window_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
 		"win.collection-win-append-from-collection",
 		nullptr,
 		N_("Append from collection…"),
@@ -44,9 +57,22 @@ static const ActionDef collection_actions[] =
 		},
 
 		{
+		"win.collection-win-close",
+		nullptr,
+		N_("Close window"),
+		collection_table_close_window_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
 		"win.collection-win-copy",
 		nullptr,
-		N_("Copy"),
+		N_("Copy File To…"),
 		collection_table_popup_copy_cb,
 		nullptr,
 		ActionStateType::NONE,
@@ -320,6 +346,19 @@ static const ActionDef collection_actions[] =
 		nullptr,
 		N_("Show infotext"),
 		collection_table_popup_show_infotext_cb,
+		nullptr,
+		ActionStateType::BOOLEAN,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
+		"win.collection-win-show-marks",
+		nullptr,
+		N_("Show marks"),
+		collection_table_popup_show_marks_cb,
 		nullptr,
 		ActionStateType::BOOLEAN,
 		FALSE,

@@ -65,6 +65,11 @@ constexpr gint PR_DRAG_SCROLL_THRESHHOLD = 4;
 /* increase pan rate when holding down shift */
 constexpr gint PR_PAN_SHIFT_MULTIPLIER = 6;
 
+constexpr gint PR_BIRDSEYE_MAX_WIDTH = 180;
+constexpr gint PR_BIRDSEYE_MAX_HEIGHT = 120;
+constexpr gint PR_BIRDSEYE_MARGIN = 12;
+constexpr guint PR_BIRDSEYE_HIDE_DELAY = 1500;
+
 } // namespace
 
 /* default min and max zoom */
@@ -132,6 +137,8 @@ static void pixbuf_renderer_set_property(GObject *object, guint prop_id,
 static void pixbuf_renderer_get_property(GObject *object, guint prop_id,
 					 GValue *value, GParamSpec *pspec);
 static void pr_scroller_timer_set(PixbufRenderer *pr, gboolean start);
+static void pr_birdseye_hide(PixbufRenderer *pr);
+static void pr_birdseye_show(PixbufRenderer *pr);
 
 
 static void pr_source_tile_free_all(PixbufRenderer *pr);
@@ -279,7 +286,7 @@ static void pixbuf_renderer_class_init(PixbufRendererClass *renderer_class)
 							  "Display cache size MiB",
 							  nullptr,
 							  0,
-							  128,
+							  1024,
 							  PR_CACHE_SIZE_DEFAULT,
 							  static_cast<GParamFlags>(G_PARAM_READABLE | G_PARAM_WRITABLE)));
 
@@ -446,11 +453,15 @@ static void pixbuf_renderer_init(PixbufRenderer *pr)
 	pr->zoom = 1.0;
 	pr->scale = 1.0;
 	pr->aspect_ratio = 1.0;
+	pr->tile_cache_max = PR_CACHE_SIZE_DEFAULT;
 
 	pr->scroll_reset = ScrollReset::TOPLEFT;
 
 	pr->scroller_id = 0;
 	pr->scroller_overlay = -1;
+	pr->birdseye_hide_id = 0;
+	pr->birdseye_overlay = -1;
+	pr->birdseye_drag = FALSE;
 
 	pr->mouse = { -1, -1 };
 
@@ -490,6 +501,7 @@ static void pixbuf_renderer_finalize(GObject *object)
 	if (pr->pixbuf) g_object_unref(pr->pixbuf);
 
 	pr_scroller_timer_set(pr, FALSE);
+	pr_birdseye_hide(pr);
 
 	pr_source_tile_free_all(pr);
 }
@@ -536,6 +548,7 @@ static void pixbuf_renderer_set_property(GObject *object, guint prop_id,
 			pr->complete = g_value_get_boolean(value);
 			break;
 		case PROP_CACHE_SIZE_DISPLAY:
+			pr->tile_cache_max = g_value_get_uint(value);
 			break;
 		case PROP_CACHE_SIZE_TILES:
 			pr->source_tiles_cache_size = g_value_get_uint(value);
@@ -601,6 +614,7 @@ static void pixbuf_renderer_get_property(GObject *object, guint prop_id,
 			g_value_set_boolean(value, pr->complete);
 			break;
 		case PROP_CACHE_SIZE_DISPLAY:
+			g_value_set_uint(value, pr->tile_cache_max);
 			break;
 		case PROP_CACHE_SIZE_TILES:
 			g_value_set_uint(value, pr->source_tiles_cache_size);
@@ -699,9 +713,6 @@ static void pr_get_monitor_size(PixbufRenderer *pr, gint *width, gint *height)
 
 static gboolean pr_parent_window_resize(PixbufRenderer *pr, gint w, gint h)
 {
-	GtkAllocation widget_allocation;
-	GtkAllocation parent_allocation;
-
 	if (!pr_parent_window_sizable(pr)) return FALSE;
 
 	if (pr->window_limit)
@@ -719,13 +730,15 @@ static gboolean pr_parent_window_resize(PixbufRenderer *pr, gint w, gint h)
 
 	auto *widget = GTK_WIDGET(pr);
 
-	gtk_widget_get_allocation(widget, &widget_allocation);
-	gtk_widget_get_allocation(pr->parent_window, &parent_allocation);
+	const gint widget_width = gtk_widget_get_width(widget);
+	const gint widget_height = gtk_widget_get_height(widget);
+	const gint parent_width = gtk_widget_get_width(pr->parent_window);
+	const gint parent_height = gtk_widget_get_height(pr->parent_window);
 
-	w += parent_allocation.width - widget_allocation.width;
-	h += parent_allocation.height - widget_allocation.height;
+	w += parent_width - widget_width;
+	h += parent_height - widget_height;
 
-	if (w == parent_allocation.width && h == parent_allocation.height)
+	if (w == parent_width && h == parent_height)
 		{
 		return FALSE;
 		}
@@ -765,6 +778,86 @@ static void pixbuf_renderer_update_zoom(PixbufRenderer *pr, gboolean lazy)
 {
 	pr->renderer->update_zoom(pr->renderer, lazy);
 	if (pr->renderer2) pr->renderer2->update_zoom(pr->renderer2, lazy);
+}
+
+static void pr_birdseye_hide(PixbufRenderer *pr)
+{
+	g_clear_handle_id(&pr->birdseye_hide_id, g_source_remove);
+	if (pr->birdseye_overlay != -1)
+		{
+		pixbuf_renderer_overlay_remove(pr, pr->birdseye_overlay);
+		pr->birdseye_overlay = -1;
+		}
+	pr->birdseye_drag = FALSE;
+}
+
+static gboolean pr_birdseye_hide_cb(gpointer data)
+{
+	auto pr = static_cast<PixbufRenderer *>(data);
+	pr->birdseye_hide_id = 0;
+	if (!pr->birdseye_drag) pr_birdseye_hide(pr);
+	return G_SOURCE_REMOVE;
+}
+
+static void pr_birdseye_show(PixbufRenderer *pr)
+{
+	if (!options->show_birdseye || !pr->pixbuf || pr->image_width <= 0 || pr->image_height <= 0 ||
+	    (pr->width <= pr->vis_width && pr->height <= pr->vis_height))
+		{
+		pr_birdseye_hide(pr);
+		return;
+		}
+
+	gdouble scale = std::min(static_cast<gdouble>(PR_BIRDSEYE_MAX_WIDTH) / pr->image_width,
+	                         static_cast<gdouble>(PR_BIRDSEYE_MAX_HEIGHT) / pr->image_height);
+	pr->birdseye_width = std::max(1, static_cast<gint>(pr->image_width * scale));
+	pr->birdseye_height = std::max(1, static_cast<gint>(pr->image_height * scale));
+
+	g_autoptr(GdkPixbuf) oriented = pixbuf_apply_orientation(pr->pixbuf, pr->orientation);
+	g_autoptr(GdkPixbuf) overview = gdk_pixbuf_scale_simple(oriented ? oriented : pr->pixbuf,
+	                                                       pr->birdseye_width, pr->birdseye_height,
+	                                                       GDK_INTERP_BILINEAR);
+	if (!overview) return;
+
+	GdkRectangle visible;
+	pixbuf_renderer_get_visible_rect(pr, visible);
+	const gint x = std::clamp(static_cast<gint>(visible.x * scale), 0, pr->birdseye_width - 1);
+	const gint y = std::clamp(static_cast<gint>(visible.y * scale), 0, pr->birdseye_height - 1);
+	const gint width = std::clamp(static_cast<gint>(visible.width * scale), 2, pr->birdseye_width - x);
+	const gint height = std::clamp(static_cast<gint>(visible.height * scale), 2, pr->birdseye_height - y);
+	pixbuf_set_rect(overview, x, y, width, height, {255, 255, 255, 255}, 2, 2, 2, 2);
+	pixbuf_set_rect(overview, 0, 0, pr->birdseye_width, pr->birdseye_height,
+	                {0, 0, 0, 255}, 1, 1, 1, 1);
+
+	if (pr->birdseye_overlay == -1)
+		{
+		pr->birdseye_overlay = pixbuf_renderer_overlay_add(pr, overview,
+		                                                     -pr->birdseye_width - PR_BIRDSEYE_MARGIN,
+		                                                     PR_BIRDSEYE_MARGIN, OVL_RELATIVE);
+		}
+	else
+		{
+		pixbuf_renderer_overlay_set(pr, pr->birdseye_overlay, overview,
+		                            -pr->birdseye_width - PR_BIRDSEYE_MARGIN, PR_BIRDSEYE_MARGIN);
+		}
+
+	g_clear_handle_id(&pr->birdseye_hide_id, g_source_remove);
+	pr->birdseye_hide_id = g_timeout_add(PR_BIRDSEYE_HIDE_DELAY, pr_birdseye_hide_cb, pr);
+}
+
+static gboolean pr_birdseye_contains(const PixbufRenderer *pr, gdouble x, gdouble y)
+{
+	const gint left = pr->viewport_width - pr->birdseye_width - PR_BIRDSEYE_MARGIN;
+	return pr->birdseye_overlay != -1 && x >= left && x < left + pr->birdseye_width &&
+	       y >= PR_BIRDSEYE_MARGIN && y < PR_BIRDSEYE_MARGIN + pr->birdseye_height;
+}
+
+static void pr_birdseye_scroll_to(PixbufRenderer *pr, gdouble x, gdouble y)
+{
+	const gint left = pr->viewport_width - pr->birdseye_width - PR_BIRDSEYE_MARGIN;
+	const gdouble center_x = std::clamp((x - left) / pr->birdseye_width, 0.0, 1.0);
+	const gdouble center_y = std::clamp((y - PR_BIRDSEYE_MARGIN) / pr->birdseye_height, 0.0, 1.0);
+	pixbuf_renderer_set_scroll_center(pr, center_x, center_y);
 }
 
 
@@ -1333,6 +1426,7 @@ static void pr_update_signal(PixbufRenderer *pr)
 
 static void pr_zoom_signal(PixbufRenderer *pr)
 {
+	pr_birdseye_show(pr);
 	g_signal_emit(pr, signals[SIGNAL_ZOOM], 0, pr->zoom);
 }
 
@@ -1361,6 +1455,7 @@ static void pr_button_release_signal(PixbufRenderer *pr, guint button, gdouble x
 
 static void pr_scroll_notify_signal(PixbufRenderer *pr)
 {
+	pr_birdseye_show(pr);
 	g_signal_emit(pr, signals[SIGNAL_SCROLL_NOTIFY], 0);
 }
 
@@ -2061,6 +2156,11 @@ static gboolean pr_mouse_motion_cb(GtkEventControllerMotion *controller, double 
 	pr->mouse.x = x;
 	pr->mouse.y = y;
 	pr_update_pixel_signal(pr);
+	if (pr->birdseye_drag)
+		{
+		pr_birdseye_scroll_to(pr, x, y);
+		return TRUE;
+		}
 
 	if (!pr->in_drag) return FALSE;
 
@@ -2073,7 +2173,7 @@ static gboolean pr_mouse_motion_cb(GtkEventControllerMotion *controller, double 
 		gtk_widget_set_cursor_from_name(widget, "crosshair");
 		}
 
-	auto state = static_cast<GdkModifierType>(0);
+	GdkModifierType state = GDK_NO_MODIFIER_MASK;
 
 	if (GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller)))
 		{
@@ -2152,7 +2252,7 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 			break;
 
 		case GDK_BUTTON_SECONDARY:
-			pr_clicked_signal_button(pr, button, x, y, static_cast<GdkModifierType>(0), 1);
+			pr_clicked_signal_button(pr, button, x, y, GDK_NO_MODIFIER_MASK, 1);
 			break;
 
 		default:
@@ -2171,10 +2271,18 @@ static gboolean pr_mouse_press_common(GtkWidget *widget,
 static void pr_mouse_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer)
 {
 	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+	auto pr = PIXBUF_RENDERER(widget);
 
 	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 	GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture));
-	pr_button_press_signal(PIXBUF_RENDERER(widget), button, x, y, state, n_press);
+	if (button == GDK_BUTTON_PRIMARY && pr_birdseye_contains(pr, x, y))
+		{
+		pr->birdseye_drag = TRUE;
+		g_clear_handle_id(&pr->birdseye_hide_id, g_source_remove);
+		pr_birdseye_scroll_to(pr, x, y);
+		return;
+		}
+	pr_button_press_signal(pr, button, x, y, state, n_press);
 
 	pr_mouse_press_common(widget, button, x, y);
 }
@@ -2185,6 +2293,12 @@ static void pr_mouse_release_cb(GtkGestureClick *gesture, gint n_press, gdouble 
 	auto *pr = PIXBUF_RENDERER(widget);
 	guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 	GdkModifierType state = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture));
+	if (pr->birdseye_drag)
+		{
+		pr->birdseye_drag = FALSE;
+		pr_birdseye_show(pr);
+		return;
+		}
 
 	pr_button_release_signal(pr, button, x, y, state, n_press);
 

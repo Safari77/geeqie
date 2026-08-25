@@ -32,7 +32,6 @@
 #include <config.h>
 
 #include "cache.h"
-#include "compat.h"
 #include "editors.h"
 #include "exif.h"
 #include "filedata.h"
@@ -87,13 +86,13 @@ GdkPixbuf *file_util_get_error_icon(FileData *fd, GList *list, GtkWidget *)
 {
 	static PixmapErrors pe = []() -> PixmapErrors
 	{
-		GtkIconTheme *icon_theme = gq_icon_theme_get_default();
+		GtkIconTheme *icon_theme = gtk_icon_theme_get_for_display(gdk_display_get_default());
 
 		constexpr gint size = 16;
 
-		GdkPixbuf *pb_error = gq_gtk_icon_theme_load_icon_copy(icon_theme, GQ_ICON_DIALOG_ERROR, size, GTK_ICON_LOOKUP_NONE);
-		GdkPixbuf *pb_warning = gq_gtk_icon_theme_load_icon_copy(icon_theme, GQ_ICON_DIALOG_WARNING, size, GTK_ICON_LOOKUP_NONE);
-		GdkPixbuf *pb_apply = gq_gtk_icon_theme_load_icon_copy(icon_theme, GQ_ICON_APPLY, size, GTK_ICON_LOOKUP_NONE);
+		GdkPixbuf *pb_error = icon_theme_load_pixbuf_copy(icon_theme, GQ_ICON_DIALOG_ERROR, size, GTK_ICON_LOOKUP_NONE);
+		GdkPixbuf *pb_warning = icon_theme_load_pixbuf_copy(icon_theme, GQ_ICON_DIALOG_WARNING, size, GTK_ICON_LOOKUP_NONE);
+		GdkPixbuf *pb_apply = icon_theme_load_pixbuf_copy(icon_theme, GQ_ICON_APPLY, size, GTK_ICON_LOOKUP_NONE);
 
 		return {pb_error, pb_warning, pb_apply};
 	}();
@@ -146,17 +145,23 @@ static void generic_dialog_add_image(GenericDialog *gd, GtkWidget *box,
 		{
 		GtkWidget *sep;
 
-		gq_gtk_box_pack_start(GTK_BOX(preview_box), vbox, FALSE, TRUE, 0);
+		gtk_box_append(GTK_BOX(preview_box), vbox);
 
 		sep = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-		gq_gtk_box_pack_start(GTK_BOX(preview_box), sep, FALSE, FALSE, 0);
-		gtk_widget_show(sep);
+		gtk_box_append(GTK_BOX(preview_box), sep);
 		}
 	else
 		{
-		gq_gtk_box_pack_start(GTK_BOX(box), vbox, FALSE, TRUE, PREF_PAD_GAP);
+		if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL)
+			{
+			gtk_widget_set_margin_end(vbox, PREF_PAD_GAP);
+			}
+		else
+			{
+			gtk_widget_set_margin_bottom(vbox, PREF_PAD_GAP);
+			}
+		gtk_box_append(GTK_BOX(box), vbox);
 		}
-	gtk_widget_show(vbox);
 
 	if (header1)
 		{
@@ -171,9 +176,10 @@ static void generic_dialog_add_image(GenericDialog *gd, GtkWidget *box,
 	imd = image_new(FALSE);
 	g_object_set(imd->pr, "zoom_expand", FALSE, NULL);
 	gtk_widget_set_size_request(imd->widget, DIALOG_DEF_IMAGE_DIM_X, DIALOG_DEF_IMAGE_DIM_Y);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), imd->widget, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), imd->widget);
 	image_change_fd(imd, fd1, 0.0);
-	gtk_widget_show(imd->widget);
 
 	if (show_filename)
 		{
@@ -204,9 +210,10 @@ static void generic_dialog_add_image(GenericDialog *gd, GtkWidget *box,
 		imd = image_new(FALSE);
 		g_object_set(imd->pr, "zoom_expand", FALSE, NULL);
 		gtk_widget_set_size_request(imd->widget, DIALOG_DEF_IMAGE_DIM_X, DIALOG_DEF_IMAGE_DIM_Y);
-		gq_gtk_box_pack_start(GTK_BOX(vbox), imd->widget, TRUE, TRUE, 0);
+		gtk_widget_set_hexpand(imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(vbox), imd->widget);
 		if (fd2) image_change_fd(imd, fd2, 0.0);
-		gtk_widget_show(imd->widget);
 
 		if (show_filename)
 			{
@@ -394,6 +401,108 @@ enum {
 	UTILITY_COLUMN_COUNT
 };
 
+namespace
+{
+
+struct UtilityListItem
+{
+	GObject parent_instance;
+	FileData *fd;
+	GdkTexture *texture;
+	gchar *path;
+	gchar *name;
+	gchar *sidecars;
+	gchar *dest_path;
+	gchar *dest_name;
+};
+
+struct UtilityListItemClass
+{
+	GObjectClass parent_class;
+};
+
+constexpr gchar UTILITY_LIST_STORE_DATA[] = "utility-list-store";
+constexpr gchar UTILITY_LIST_ITEM_DATA[] = "utility-list-item";
+constexpr gchar UTILITY_LIST_VIEW_DATA[] = "utility-list-view";
+constexpr gchar UTILITY_LIST_REORDERABLE_DATA[] = "utility-list-reorderable";
+constexpr gchar UTILITY_COLUMN_DATA[] = "utility-column-data";
+constexpr gchar UTILITY_COLUMN_INDEX_DATA[] = "utility-column-index";
+constexpr gchar UTILITY_ITEM_CHANGED_HANDLER_DATA[] = "utility-item-changed-handler";
+
+enum
+{
+	UTILITY_LIST_ITEM_CHANGED,
+	UTILITY_LIST_ITEM_LAST_SIGNAL
+};
+
+guint utility_list_item_signals[UTILITY_LIST_ITEM_LAST_SIGNAL];
+
+struct UtilityColumnData
+{
+	GtkWidget *view;
+	gint column;
+};
+
+G_DEFINE_TYPE(UtilityListItem, utility_list_item, G_TYPE_OBJECT)
+
+void utility_list_item_finalize(GObject *object)
+{
+	auto *item = reinterpret_cast<UtilityListItem *>(object);
+	g_clear_object(&item->texture);
+	g_free(item->path);
+	g_free(item->name);
+	g_free(item->sidecars);
+	g_free(item->dest_path);
+	g_free(item->dest_name);
+
+	G_OBJECT_CLASS(utility_list_item_parent_class)->finalize(object);
+}
+
+void utility_list_item_class_init(UtilityListItemClass *item_class)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(item_class);
+	object_class->finalize = utility_list_item_finalize;
+
+	utility_list_item_signals[UTILITY_LIST_ITEM_CHANGED] =
+		g_signal_new("changed", G_TYPE_FROM_CLASS(item_class), G_SIGNAL_RUN_LAST,
+			     0, nullptr, nullptr, nullptr, G_TYPE_NONE, 0);
+}
+
+void utility_list_item_init(UtilityListItem *)
+{
+}
+
+GdkTexture *utility_texture_new_from_pixbuf(GdkPixbuf *pixbuf)
+{
+	if (!pixbuf) return nullptr;
+
+	const gint height = gdk_pixbuf_get_height(pixbuf);
+	const gsize stride = gdk_pixbuf_get_rowstride(pixbuf);
+	GBytes *bytes = g_bytes_new_with_free_func(gdk_pixbuf_get_pixels(pixbuf), stride * height,
+							     reinterpret_cast<GDestroyNotify>(g_object_unref), g_object_ref(pixbuf));
+	const GdkMemoryFormat format = gdk_pixbuf_get_has_alpha(pixbuf) ? GDK_MEMORY_R8G8B8A8 : GDK_MEMORY_R8G8B8;
+	GdkTexture *texture = gdk_memory_texture_new(gdk_pixbuf_get_width(pixbuf), height, format, bytes, stride);
+	g_bytes_unref(bytes);
+
+	return texture;
+}
+
+UtilityListItem *utility_list_item_new(FileData *fd, GdkPixbuf *pixbuf, const gchar *sidecars)
+{
+	auto *item = reinterpret_cast<UtilityListItem *>(g_object_new(utility_list_item_get_type(), nullptr));
+	item->fd = fd;
+	item->texture = utility_texture_new_from_pixbuf(pixbuf);
+	item->path = g_strdup(fd->path);
+	item->name = g_strdup(fd->name);
+	item->sidecars = g_strdup(sidecars);
+	item->dest_path = g_strdup(fd->change ? fd->change->dest : "error");
+	item->dest_name = g_strdup(fd->change ? filename_from_path(fd->change->dest) : "error");
+
+	return item;
+}
+
+} // namespace
+
 struct UtilityDelayData {
 	UtilityType type;
 	UtilityPhase phase;
@@ -484,66 +593,176 @@ static void file_util_data_free(UtilityData *ud)
 	g_free(ud);
 }
 
-static GtkTreeViewColumn *file_util_dialog_add_list_column(GtkWidget *view, const gchar *text, gboolean image, gint n)
+static GListStore *file_util_dialog_list_store(GtkWidget *view)
 {
-	GtkTreeViewColumn *column;
-	GtkCellRenderer *renderer;
+	return static_cast<GListStore *>(g_object_get_data(G_OBJECT(view), UTILITY_LIST_STORE_DATA));
+}
 
-	column = gtk_tree_view_column_new();
-	gtk_tree_view_column_set_title(column, text);
-	gtk_tree_view_column_set_min_width(column, 4);
+static GdkContentProvider *file_util_list_drag_prepare(GtkDragSource *source, gdouble, gdouble, gpointer)
+{
+	GtkWidget *child = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(source));
+	auto *view = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(child), UTILITY_LIST_VIEW_DATA));
+	if (!GPOINTER_TO_INT(g_object_get_data(G_OBJECT(view), UTILITY_LIST_REORDERABLE_DATA))) return nullptr;
+
+	auto *list_item = static_cast<GtkListItem *>(g_object_get_data(G_OBJECT(child), UTILITY_LIST_ITEM_DATA));
+	auto *item = static_cast<UtilityListItem *>(gtk_list_item_get_item(list_item));
+	return item ? gdk_content_provider_new_typed(utility_list_item_get_type(), item) : nullptr;
+}
+
+static gboolean file_util_list_drop(GtkDropTarget *target, const GValue *value, gdouble, gdouble y, gpointer)
+{
+	GtkWidget *child = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(target));
+	auto *view = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(child), UTILITY_LIST_VIEW_DATA));
+	if (!GPOINTER_TO_INT(g_object_get_data(G_OBJECT(view), UTILITY_LIST_REORDERABLE_DATA))) return FALSE;
+
+	auto *source_item = static_cast<UtilityListItem *>(g_value_get_object(value));
+	auto *target_list_item = static_cast<GtkListItem *>(g_object_get_data(G_OBJECT(child), UTILITY_LIST_ITEM_DATA));
+	const guint target_position = gtk_list_item_get_position(target_list_item);
+	if (!source_item || target_position == GTK_INVALID_LIST_POSITION) return FALSE;
+
+	GListStore *store = file_util_dialog_list_store(view);
+	const guint count = g_list_model_get_n_items(G_LIST_MODEL(store));
+	guint source_position = GTK_INVALID_LIST_POSITION;
+	for (guint position = 0; position < count; position++)
+		{
+		g_autoptr(GObject) object = static_cast<GObject *>(g_list_model_get_item(G_LIST_MODEL(store), position));
+		if (object == G_OBJECT(source_item))
+			{
+			source_position = position;
+			break;
+			}
+		}
+	if (source_position == GTK_INVALID_LIST_POSITION) return FALSE;
+
+	guint insert_position = target_position;
+	if (y >= gtk_widget_get_height(child) / 2.0) insert_position++;
+	if (source_position < insert_position) insert_position--;
+	if (source_position == insert_position) return TRUE;
+
+	g_object_ref(source_item);
+	g_list_store_remove(store, source_position);
+	g_list_store_insert(store, insert_position, source_item);
+	g_object_unref(source_item);
+	return TRUE;
+}
+
+static void file_util_list_factory_setup(GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer)
+{
+	auto *column_data = static_cast<UtilityColumnData *>(g_object_get_data(G_OBJECT(factory), UTILITY_COLUMN_DATA));
+	const gint column = column_data->column;
+	GtkWidget *child = column == UTILITY_COLUMN_PIXBUF ? gtk_image_new() : gtk_label_new(nullptr);
+	if (column != UTILITY_COLUMN_PIXBUF) gtk_label_set_xalign(GTK_LABEL(child), 0.0);
+	g_object_set_data(G_OBJECT(child), UTILITY_LIST_ITEM_DATA, list_item);
+	g_object_set_data(G_OBJECT(child), UTILITY_LIST_VIEW_DATA, column_data->view);
+	g_object_set_data(G_OBJECT(child), UTILITY_COLUMN_INDEX_DATA, GINT_TO_POINTER(column));
+
+	GtkDragSource *drag_source = gtk_drag_source_new();
+	gtk_drag_source_set_actions(drag_source, GDK_ACTION_MOVE);
+	g_signal_connect(drag_source, "prepare", G_CALLBACK(file_util_list_drag_prepare), nullptr);
+	gtk_widget_add_controller(child, GTK_EVENT_CONTROLLER(drag_source));
+
+	GtkDropTarget *drop_target = gtk_drop_target_new(utility_list_item_get_type(), GDK_ACTION_MOVE);
+	g_signal_connect(drop_target, "drop", G_CALLBACK(file_util_list_drop), nullptr);
+	gtk_widget_add_controller(child, GTK_EVENT_CONTROLLER(drop_target));
+
+	gtk_list_item_set_child(list_item, child);
+}
+
+static void file_util_list_item_update(UtilityListItem *item, GtkWidget *child)
+{
+	const gint column = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(child), UTILITY_COLUMN_INDEX_DATA));
+
+	if (column == UTILITY_COLUMN_PIXBUF)
+		{
+		gtk_image_set_from_paintable(GTK_IMAGE(child), item->texture ? GDK_PAINTABLE(item->texture) : nullptr);
+		return;
+		}
+
+	const gchar *value = nullptr;
+	switch (column)
+		{
+		case UTILITY_COLUMN_PATH: value = item->path; break;
+		case UTILITY_COLUMN_NAME: value = item->name; break;
+		case UTILITY_COLUMN_SIDECARS: value = item->sidecars; break;
+		case UTILITY_COLUMN_DEST_PATH: value = item->dest_path; break;
+		case UTILITY_COLUMN_DEST_NAME: value = item->dest_name; break;
+		default: g_assert_not_reached();
+		}
+	gtk_label_set_text(GTK_LABEL(child), value ? value : "");
+}
+
+static void file_util_list_factory_bind(GtkSignalListItemFactory *, GtkListItem *list_item, gpointer)
+{
+	auto *item = static_cast<UtilityListItem *>(gtk_list_item_get_item(list_item));
+	GtkWidget *child = gtk_list_item_get_child(list_item);
+	const gulong handler_id = g_signal_connect(item, "changed", G_CALLBACK(file_util_list_item_update), child);
+	g_object_set_data(G_OBJECT(list_item), UTILITY_ITEM_CHANGED_HANDLER_DATA, GSIZE_TO_POINTER(handler_id));
+	file_util_list_item_update(item, child);
+}
+
+static void file_util_list_factory_unbind(GtkSignalListItemFactory *, GtkListItem *list_item, gpointer)
+{
+	auto *item = static_cast<UtilityListItem *>(gtk_list_item_get_item(list_item));
+	const gulong handler_id = GPOINTER_TO_SIZE(g_object_get_data(G_OBJECT(list_item), UTILITY_ITEM_CHANGED_HANDLER_DATA));
+	if (item && handler_id) g_signal_handler_disconnect(item, handler_id);
+	g_object_set_data(G_OBJECT(list_item), UTILITY_ITEM_CHANGED_HANDLER_DATA, nullptr);
+}
+
+static GtkColumnViewColumn *file_util_dialog_add_list_column(GtkWidget *view, const gchar *text, gboolean image, gint n)
+{
+	GtkListItemFactory *factory = gtk_signal_list_item_factory_new();
+	auto *column_data = g_new(UtilityColumnData, 1);
+	column_data->view = view;
+	column_data->column = n;
+	g_object_set_data_full(G_OBJECT(factory), UTILITY_COLUMN_DATA, column_data, g_free);
+	g_signal_connect(factory, "setup", G_CALLBACK(file_util_list_factory_setup), nullptr);
+	g_signal_connect(factory, "bind", G_CALLBACK(file_util_list_factory_bind), nullptr);
+	g_signal_connect(factory, "unbind", G_CALLBACK(file_util_list_factory_unbind), nullptr);
+
+	GtkColumnViewColumn *column = gtk_column_view_column_new(text, factory);
 	if (image)
 		{
-		gtk_tree_view_column_set_min_width(column, 20);
-		gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
-		renderer = gtk_cell_renderer_pixbuf_new();
-		gtk_tree_view_column_pack_start(column, renderer, TRUE);
-		gtk_tree_view_column_add_attribute(column, renderer, "pixbuf", n);
+		gtk_column_view_column_set_fixed_width(column, 20);
 		}
 	else
 		{
-		gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_GROW_ONLY);
-		renderer = gtk_cell_renderer_text_new();
-		gtk_tree_view_column_pack_start(column, renderer, TRUE);
-		gtk_tree_view_column_add_attribute(column, renderer, "text", n);
+		gtk_column_view_column_set_expand(column, TRUE);
+		gtk_column_view_column_set_resizable(column, TRUE);
 		}
-	gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
+	gtk_column_view_append_column(GTK_COLUMN_VIEW(view), column);
+	g_object_unref(column);
 
 	return column;
 }
 
 static void file_util_dialog_list_select(GtkWidget *view, gint n)
 {
-	GtkTreeModel *store;
-	GtkTreeIter iter;
-	GtkTreeSelection *selection;
-
-	store = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
-	if (gtk_tree_model_iter_nth_child(store, &iter, nullptr, n))
+	auto *selection = GTK_SINGLE_SELECTION(gtk_column_view_get_model(GTK_COLUMN_VIEW(view)));
+	if (n >= 0 && static_cast<guint>(n) < g_list_model_get_n_items(G_LIST_MODEL(file_util_dialog_list_store(view))))
 		{
-		selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(view));
-		gtk_tree_selection_select_iter(selection, &iter);
+		gtk_single_selection_set_selected(selection, n);
 		}
 }
 
 static GtkWidget *file_util_dialog_add_list(GtkWidget *box, GList *list, gboolean full_paths, gboolean with_sidecars)
 {
 	GtkWidget *view;
-	GtkListStore *store;
+	GListStore *store;
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(box), scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box), scrolled);
 
-	store = gtk_list_store_new(UTILITY_COLUMN_COUNT, G_TYPE_POINTER, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
-	view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
-	g_object_unref(store);
-
-	gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(view), TRUE);
-	gtk_tree_view_set_enable_search(GTK_TREE_VIEW(view), FALSE);
+	store = g_list_store_new(utility_list_item_get_type());
+	GtkSingleSelection *selection = gtk_single_selection_new(G_LIST_MODEL(g_object_ref(store)));
+	gtk_single_selection_set_autoselect(selection, FALSE);
+	gtk_single_selection_set_can_unselect(selection, TRUE);
+	view = gtk_column_view_new(GTK_SELECTION_MODEL(selection));
+	g_object_set_data_full(G_OBJECT(view), UTILITY_LIST_STORE_DATA, g_object_ref(store), g_object_unref);
 
 	file_util_dialog_add_list_column(view, "", TRUE, UTILITY_COLUMN_PIXBUF);
 
@@ -557,30 +776,21 @@ static GtkWidget *file_util_dialog_add_list(GtkWidget *box, GList *list, gboolea
 		}
 
 	gtk_widget_set_size_request(view, UTILITY_LIST_MIN_WIDTH, UTILITY_LIST_MIN_HEIGHT);
-	gq_gtk_container_add(scrolled, view);
-	gtk_widget_show(view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), view);
 
 	while (list)
 		{
 		auto fd = static_cast<FileData *>(list->data);
-		GtkTreeIter iter;
-
 		g_autofree gchar *sidecars = with_sidecars ? file_data_sc_list_to_string(fd) : nullptr;
 		GdkPixbuf *icon = file_util_get_error_icon(fd, list, view);
-		gtk_list_store_append(store, &iter);
-		gtk_list_store_set(store, &iter,
-				   UTILITY_COLUMN_FD, fd,
-				   UTILITY_COLUMN_PIXBUF, icon,
-				   UTILITY_COLUMN_PATH, fd->path,
-				   UTILITY_COLUMN_NAME, fd->name,
-				   UTILITY_COLUMN_SIDECARS, sidecars,
-				   UTILITY_COLUMN_DEST_PATH, fd->change ? fd->change->dest : "error",
-				   UTILITY_COLUMN_DEST_NAME, fd->change ? filename_from_path(fd->change->dest) : "error",
-				   -1);
+		UtilityListItem *item = utility_list_item_new(fd, icon, sidecars);
+		g_list_store_append(store, item);
+		g_object_unref(item);
 
 		list = list->next;
 		}
 
+	g_object_unref(store);
 	return view;
 }
 
@@ -695,29 +905,43 @@ static void file_util_progress_window_new(UtilityData *ud)
 	ud->progress_label = gtk_label_new(_("Starting…"));
 	gtk_label_set_xalign(GTK_LABEL(ud->progress_label), 0.0);
 	gtk_label_set_ellipsize(GTK_LABEL(ud->progress_label), PANGO_ELLIPSIZE_MIDDLE);
-	gq_gtk_box_pack_start(GTK_BOX(ud->progress_gd->vbox), ud->progress_label, FALSE, FALSE, 5);
-	gtk_widget_show(ud->progress_label);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(ud->progress_gd->vbox))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(ud->progress_label, 5);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(ud->progress_label, 5);
+		}
+	gtk_box_append(GTK_BOX(ud->progress_gd->vbox), ud->progress_label);
 
 	/* Progress bar and spinner in hbox */
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(ud->progress_gd->vbox), hbox, FALSE, FALSE, 0);
-	gtk_widget_show(hbox);
+	gtk_box_append(GTK_BOX(ud->progress_gd->vbox), hbox);
 
 	ud->progress_bar = gtk_progress_bar_new();
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ud->progress_bar), 0.0);
 	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(ud->progress_bar), TRUE);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), ud->progress_bar, TRUE, TRUE, 0);
-	gtk_widget_show(ud->progress_bar);
+	gtk_widget_set_hexpand(ud->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(ud->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), ud->progress_bar);
 
 	ud->progress_spinner = gtk_spinner_new();
 	gtk_spinner_start(GTK_SPINNER(ud->progress_spinner));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), ud->progress_spinner, FALSE, FALSE, 5);
-	gtk_widget_show(ud->progress_spinner);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(ud->progress_spinner, 5);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(ud->progress_spinner, 5);
+		}
+	gtk_box_append(GTK_BOX(hbox), ud->progress_spinner);
 
 	/* Set default window size */
 	gtk_window_set_default_size(GTK_WINDOW(ud->progress_gd->dialog), PROGRESS_WINDOW_WIDTH, PROGRESS_WINDOW_HEIGHT);
 
-	gtk_widget_show(ud->progress_gd->dialog);
+	gtk_window_present(GTK_WINDOW(ud->progress_gd->dialog));
 }
 
 static void file_util_progress_update(UtilityData *ud)
@@ -807,7 +1031,7 @@ static gint file_util_perform_ci_cb(gpointer resume_data, EditorFlags flags, GLi
 
 			generic_dialog_add_button(d, GQ_ICON_GO_NEXT, _("Co_ntinue"),
 						  file_util_resume_cb, TRUE);
-			gtk_widget_show(d->dialog);
+			gtk_window_present(GTK_WINDOW(d->dialog));
 			ret = EDITOR_CB_SUSPEND;
 			}
 		else
@@ -1207,7 +1431,7 @@ static void file_util_check_ci(UtilityData *ud)
 		/* fatal error */
 		generic_dialog_add_message(d, GQ_ICON_DIALOG_WARNING, _("This operation can't continue:"), desc, TRUE);
 		}
-	gtk_widget_show(d->dialog);
+	gtk_window_present(GTK_WINDOW(d->dialog));
 }
 
 
@@ -1374,14 +1598,12 @@ static gchar *file_util_rename_multiple_auto_format_name(const gchar *format, co
 
 static void file_util_rename_preview_update(UtilityData *ud)
 {
-	GtkTreeModel *store;
-	GtkTreeSelection *selection;
-	GtkTreeIter iter;
-	GtkTreeIter iter_selected;
+	GListStore *store = file_util_dialog_list_store(ud->listview);
+	auto *selection = GTK_SINGLE_SELECTION(gtk_column_view_get_model(GTK_COLUMN_VIEW(ud->listview)));
+	auto *selected_item = static_cast<UtilityListItem *>(gtk_single_selection_get_selected_item(selection));
 	const gchar *front;
 	const gchar *end;
 	const gchar *format;
-	gboolean valid;
 	gint start_n;
 	gint padding;
 	gint n;
@@ -1391,13 +1613,11 @@ static void file_util_rename_preview_update(UtilityData *ud)
 
 	if (mode == UTILITY_RENAME)
 		{
-		selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ud->listview));
-		if (gtk_tree_selection_get_selected(selection, &store, &iter))
+		if (selected_item)
 			{
-			FileData *fd;
+			FileData *fd = selected_item->fd;
 			const char *dest = gtk_editable_get_text(GTK_EDITABLE(ud->rename_entry));
 
-			gtk_tree_model_get(store, &iter, UTILITY_COLUMN_FD, &fd, -1);
 			g_assert(ud->with_sidecars); /* sidecars must be renamed too, it would break the pairing otherwise */
 
 			g_autofree gchar *dirname = g_path_get_dirname(fd->change->dest);
@@ -1417,10 +1637,11 @@ static void file_util_rename_preview_update(UtilityData *ud)
 				}
 			generic_dialog_image_set(ud, fd);
 
-			gtk_list_store_set(GTK_LIST_STORE(store), &iter,
-				   UTILITY_COLUMN_DEST_PATH, fd->change->dest,
-				   UTILITY_COLUMN_DEST_NAME, filename_from_path(fd->change->dest),
-				   -1);
+			g_free(selected_item->dest_path);
+			g_free(selected_item->dest_name);
+			selected_item->dest_path = g_strdup(fd->change->dest);
+			selected_item->dest_name = g_strdup(filename_from_path(fd->change->dest));
+			g_signal_emit(selected_item, utility_list_item_signals[UTILITY_LIST_ITEM_CHANGED], 0);
 			}
 		}
 	else
@@ -1446,14 +1667,14 @@ static void file_util_rename_preview_update(UtilityData *ud)
 			options->cp_mv_rn.auto_start = start_n;
 			}
 
-		store = gtk_tree_view_get_model(GTK_TREE_VIEW(ud->listview));
 		n = start_n;
-		valid = gtk_tree_model_get_iter_first(store, &iter);
-		while (valid)
+		const guint count = g_list_model_get_n_items(G_LIST_MODEL(store));
+		for (guint position = 0; position < count; position++)
 			{
+			g_autoptr(GObject) object = static_cast<GObject *>(g_list_model_get_item(G_LIST_MODEL(store), position));
+			auto *item = reinterpret_cast<UtilityListItem *>(object);
 			g_autofree gchar *dest = nullptr;
-			FileData *fd;
-			gtk_tree_model_get(store, &iter, UTILITY_COLUMN_FD, &fd, -1);
+			FileData *fd = item->fd;
 
 			if (mode == UTILITY_RENAME_FORMATTED)
 				{
@@ -1483,21 +1704,17 @@ static void file_util_rename_preview_update(UtilityData *ud)
 				default:;
 				}
 
-			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ud->listview));
-			gtk_tree_selection_get_selected(selection, &store, &iter_selected);
-			g_autoptr(GtkTreePath) path_iter = gtk_tree_model_get_path(store, &iter);
-			g_autoptr(GtkTreePath) path_selected = gtk_tree_model_get_path(store, &iter_selected);
-			if (!gtk_tree_path_compare(path_iter, path_selected))
+			if (item == selected_item)
 				{
 				generic_dialog_image_set(ud, fd);
 				}
 
-			gtk_list_store_set(GTK_LIST_STORE(store), &iter,
-					   UTILITY_COLUMN_DEST_PATH, fd->change->dest,
-					   UTILITY_COLUMN_DEST_NAME, filename_from_path(fd->change->dest),
-					   -1);
+			g_free(item->dest_path);
+			g_free(item->dest_name);
+			item->dest_path = g_strdup(fd->change->dest);
+			item->dest_name = g_strdup(filename_from_path(fd->change->dest));
+			g_signal_emit(item, utility_list_item_signals[UTILITY_LIST_ITEM_CHANGED], 0);
 			n++;
-			valid = gtk_tree_model_iter_next(store, &iter);
 			}
 		}
 
@@ -1505,16 +1722,14 @@ static void file_util_rename_preview_update(UtilityData *ud)
 	 * multiple destination filenames with the same name the
 	 * error icons must be updated
 	 */
-	valid = gtk_tree_model_get_iter_first(store, &iter);
-	while (valid)
+	const guint count = g_list_model_get_n_items(G_LIST_MODEL(store));
+	for (guint position = 0; position < count; position++)
 		{
-		FileData *fd;
-		gtk_tree_model_get(store, &iter, UTILITY_COLUMN_FD, &fd, -1);
-
-		gtk_list_store_set(GTK_LIST_STORE(store), &iter,
-			   UTILITY_COLUMN_PIXBUF, file_util_get_error_icon(fd, ud->flist, ud->listview),
-			   -1);
-		valid = gtk_tree_model_iter_next(store, &iter);
+		g_autoptr(GObject) object = static_cast<GObject *>(g_list_model_get_item(G_LIST_MODEL(store), position));
+		auto *item = reinterpret_cast<UtilityListItem *>(object);
+		g_autoptr(GdkTexture) texture = utility_texture_new_from_pixbuf(file_util_get_error_icon(item->fd, ud->flist, ud->listview));
+		g_set_object(&item->texture, texture);
+		g_signal_emit(item, utility_list_item_signals[UTILITY_LIST_ITEM_CHANGED], 0);
 		}
 
 }
@@ -1541,7 +1756,7 @@ static gboolean file_util_rename_idle_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void file_util_rename_preview_order_cb(GtkTreeModel *, GtkTreePath *, GtkTreeIter *, gpointer data)
+static void file_util_rename_preview_order_cb(GListModel *, guint, guint, guint, gpointer data)
 {
 	auto ud = static_cast<UtilityData *>(data);
 
@@ -1551,18 +1766,13 @@ static void file_util_rename_preview_order_cb(GtkTreeModel *, GtkTreePath *, Gtk
 }
 
 
-static gboolean file_util_preview_cb(GtkTreeSelection *, GtkTreeModel *store,
-				     GtkTreePath *tpath, gboolean path_currently_selected,
-				     gpointer data)
+static void file_util_preview_cb(GtkSingleSelection *selection, GParamSpec *, gpointer data)
 {
 	auto ud = static_cast<UtilityData *>(data);
-	GtkTreeIter iter;
-	FileData *fd = nullptr;
+	auto *item = static_cast<UtilityListItem *>(gtk_single_selection_get_selected_item(selection));
+	if (!item) return;
 
-	if (path_currently_selected ||
-	    !gtk_tree_model_get_iter(store, &iter, tpath)) return TRUE;
-
-	gtk_tree_model_get(store, &iter, UTILITY_COLUMN_FD, &fd, -1);
+	FileData *fd = item->fd;
 	generic_dialog_image_set(ud, fd);
 
 	ud->sel_fd = fd;
@@ -1574,12 +1784,11 @@ static gboolean file_util_preview_cb(GtkTreeSelection *, GtkTreeModel *store,
 		gtk_widget_grab_focus(ud->rename_entry);
 		gtk_label_set_text(GTK_LABEL(ud->rename_label), fd->name);
 		g_signal_handlers_block_by_func(ud->rename_entry, (gpointer)(file_util_rename_preview_entry_cb), ud);
-		gq_gtk_entry_set_text(GTK_ENTRY(ud->rename_entry), name);
+		entry_set_text(GTK_ENTRY(ud->rename_entry), name);
 		gtk_editable_select_region(GTK_EDITABLE(ud->rename_entry), 0, filename_base_length(name));
 		g_signal_handlers_unblock_by_func(ud->rename_entry, (gpointer)file_util_rename_preview_entry_cb, ud);
 		}
 
-	return TRUE;
 }
 
 
@@ -1608,7 +1817,6 @@ static void file_util_details_cb(GenericDialog *, gpointer data)
 static void file_util_dialog_init_simple_list(UtilityData *ud)
 {
 	GtkWidget *box;
-	GtkTreeSelection *selection;
 	g_autofree gchar *dir_msg = nullptr;
 
 	const gchar *icon_name;
@@ -1655,9 +1863,8 @@ static void file_util_dialog_init_simple_list(UtilityData *ud)
 
 	if (ud->type == UtilityType::WRITE_METADATA) file_util_dialog_add_list_column(ud->listview, _("Write to file"), FALSE, UTILITY_COLUMN_DEST_NAME);
 
-	selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ud->listview));
-	gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
-	gtk_tree_selection_set_select_function(selection, file_util_preview_cb, ud, nullptr);
+	auto *selection = GTK_SINGLE_SELECTION(gtk_column_view_get_model(GTK_COLUMN_VIEW(ud->listview)));
+	g_signal_connect(selection, "notify::selected-item", G_CALLBACK(file_util_preview_cb), ud);
 
 	generic_dialog_add_image(ud->gd, box, nullptr, nullptr, FALSE, nullptr, nullptr, FALSE);
 
@@ -1666,7 +1873,7 @@ static void file_util_dialog_init_simple_list(UtilityData *ud)
 	    ud->type == UtilityType::DELETE_FOLDER)
 		box_append_safe_delete_status(ud->gd);
 
-	gtk_widget_show(ud->gd->dialog);
+	gtk_window_present(GTK_WINDOW(ud->gd->dialog));
 
 	file_util_dialog_list_select(ud->listview, 0);
 }
@@ -1692,19 +1899,18 @@ static GtkWidget *furm_simple_vlabel(GtkWidget *box, const gchar *text, gboolean
 	GtkWidget *label;
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(box), vbox, expand, expand, 0);
-	gtk_widget_show(vbox);
+	gtk_widget_set_hexpand(vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? expand : FALSE);
+	gtk_widget_set_vexpand(vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? expand : FALSE);
+	gtk_box_append(GTK_BOX(box), vbox);
 
 	label = gtk_label_new(text);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
-	gtk_widget_show(label);
+	gtk_box_append(GTK_BOX(vbox), label);
 
 	return vbox;
 }
 
 static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_image)
 {
-	GtkTreeModel *store;
 	GtkWidget *box;
 	GtkWidget *hbox;
 	GtkWidget *box2;
@@ -1739,14 +1945,13 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 
 	file_util_dialog_add_list_column(ud->listview, _("New name"), FALSE, UTILITY_COLUMN_DEST_NAME);
 
-	GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ud->listview));
-	gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
-	gtk_tree_selection_set_select_function(selection, file_util_preview_cb, ud, nullptr);
+	auto *selection = GTK_SINGLE_SELECTION(gtk_column_view_get_model(GTK_COLUMN_VIEW(ud->listview)));
+	g_signal_connect(selection, "notify::selected-item", G_CALLBACK(file_util_preview_cb), ud);
 
-	gtk_tree_view_set_reorderable(GTK_TREE_VIEW(ud->listview), TRUE);
+	g_object_set_data(G_OBJECT(ud->listview), UTILITY_LIST_REORDERABLE_DATA, GINT_TO_POINTER(TRUE));
 
-	store = gtk_tree_view_get_model(GTK_TREE_VIEW(ud->listview));
-	g_signal_connect(G_OBJECT(store), "row_changed",
+	GListStore *store = file_util_dialog_list_store(ud->listview);
+	g_signal_connect(G_OBJECT(store), "items-changed",
 			 G_CALLBACK(file_util_rename_preview_order_cb), ud);
 	gtk_widget_set_size_request(ud->listview, 300, 150);
 
@@ -1759,18 +1964,16 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 		generic_dialog_add_image(ud->gd, box, nullptr, nullptr, FALSE, nullptr, nullptr, FALSE);
 		}
 
-	gtk_widget_show(ud->gd->dialog);
+	gtk_window_present(GTK_WINDOW(ud->gd->dialog));
 
 
 	ud->notebook = gtk_notebook_new();
 
-	gq_gtk_box_pack_start(GTK_BOX(ud->gd->vbox), ud->notebook, FALSE, FALSE, 0);
-	gtk_widget_show(ud->notebook);
+	gtk_box_append(GTK_BOX(ud->gd->vbox), ud->notebook);
 
 
 	page = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gtk_notebook_append_page(GTK_NOTEBOOK(ud->notebook), page, gtk_label_new(_("Manual rename")));
-	gtk_widget_show(page);
 
 	table = pref_table_new(page, 2, 2, FALSE, FALSE);
 
@@ -1787,11 +1990,9 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 	g_signal_connect(G_OBJECT(ud->rename_entry), "changed",
 			 G_CALLBACK(file_util_rename_preview_entry_cb), ud);
 
-	gtk_widget_show(ud->rename_entry);
 
 	page = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gtk_notebook_append_page(GTK_NOTEBOOK(ud->notebook), page, gtk_label_new(_("Auto rename")));
-	gtk_widget_show(page);
 
 
 	hbox = pref_box_new(page, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
@@ -1801,8 +2002,9 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 	combo = history_combo_new(&ud->auto_entry_front, "", "numerical_rename_prefix", -1);
 	g_signal_connect(G_OBJECT(ud->auto_entry_front), "changed",
 			 G_CALLBACK(file_util_rename_preview_entry_cb), ud);
-	gq_gtk_box_pack_start(GTK_BOX(box2), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	gtk_widget_set_hexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box2), combo);
 
 	box2 = furm_simple_vlabel(hbox, _("Start #"), FALSE);
 
@@ -1815,8 +2017,9 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 	combo = history_combo_new(&ud->auto_entry_end, options->cp_mv_rn.auto_end, "numerical_rename_suffix", -1);
 	g_signal_connect(G_OBJECT(ud->auto_entry_end), "changed",
 			 G_CALLBACK(file_util_rename_preview_entry_cb), ud);
-	gq_gtk_box_pack_start(GTK_BOX(box2), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	gtk_widget_set_hexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box2), combo);
 
 	ud->auto_spin_pad = pref_spin_new(page, _("Padding:"), nullptr,
 					  1.0, 8.0, 1.0, 0, options->cp_mv_rn.auto_padding,
@@ -1824,7 +2027,6 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 
 	page = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 	gtk_notebook_append_page(GTK_NOTEBOOK(ud->notebook), page, gtk_label_new(_("Formatted rename")));
-	gtk_widget_show(page);
 
 	hbox = pref_box_new(page, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
 
@@ -1833,8 +2035,9 @@ static void file_util_dialog_init_source_dest(UtilityData *ud, gboolean second_i
 	combo = history_combo_new(&ud->format_entry, "", "auto_rename_format", -1);
 	g_signal_connect(G_OBJECT(ud->format_entry), "changed",
 			 G_CALLBACK(file_util_rename_preview_entry_cb), ud);
-	gq_gtk_box_pack_start(GTK_BOX(box2), combo, TRUE, TRUE, 0);
-	gtk_widget_show(combo);
+	gtk_widget_set_hexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(combo, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box2))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box2), combo);
 
 	box2 = furm_simple_vlabel(hbox, _("Start #"), FALSE);
 
@@ -1864,25 +2067,19 @@ static void file_util_finalize_all(UtilityData *ud)
 
 static gboolean file_util_exclude_fd(UtilityData *ud, FileData *fd)
 {
-	GtkTreeModel *store;
-	GtkTreeIter iter;
-	gboolean valid;
-
 	if (!g_list_find(ud->flist, fd)) return FALSE;
 
-	store = gtk_tree_view_get_model(GTK_TREE_VIEW(ud->listview));
-	valid = gtk_tree_model_get_iter_first(store, &iter);
-	while (valid)
+	GListStore *store = file_util_dialog_list_store(ud->listview);
+	const guint count = g_list_model_get_n_items(G_LIST_MODEL(store));
+	for (guint position = 0; position < count; position++)
 		{
-		FileData *store_fd;
-		gtk_tree_model_get(store, &iter, UTILITY_COLUMN_FD, &store_fd, -1);
-
-		if (store_fd == fd)
+		g_autoptr(GObject) object = static_cast<GObject *>(g_list_model_get_item(G_LIST_MODEL(store), position));
+		auto *item = reinterpret_cast<UtilityListItem *>(object);
+		if (item->fd == fd)
 			{
-			gtk_list_store_remove(GTK_LIST_STORE(store), &iter);
+			g_list_store_remove(store, position);
 			break;
 			}
-		valid = gtk_tree_model_iter_next(store, &iter);
 		}
 
 	ud->flist = g_list_remove(ud->flist, fd);
@@ -1987,7 +2184,7 @@ static void file_util_warn_op_in_progress(const gchar *title)
 
 static void file_util_details_dialog_close_cb(GtkWidget *, gpointer data)
 {
-	gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
+	gtk_window_destroy(GTK_WINDOW(data));
 }
 
 static void file_util_details_dialog_destroy_cb(GtkWidget *widget, gpointer data)
@@ -2091,7 +2288,7 @@ static void file_util_details_dialog(UtilityData *ud, FileData *fd)
 
 	generic_dialog_add_image(gd, box, fd, nullptr, FALSE, nullptr, nullptr, FALSE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void file_util_write_metadata_details_dialog(UtilityData *ud, FileData *fd)
@@ -2163,7 +2360,6 @@ static void file_util_write_metadata_details_dialog(UtilityData *ud, FileData *f
 
 		pref_label_bold(label, TRUE, FALSE);
 		gtk_grid_attach(GTK_GRID(table), label, 0, i, 1, 1);
-		gtk_widget_show(label);
 
 		label = gtk_label_new(value);
 
@@ -2172,7 +2368,6 @@ static void file_util_write_metadata_details_dialog(UtilityData *ud, FileData *f
 
 		gtk_label_set_wrap(GTK_LABEL(label), TRUE);
 		gtk_grid_attach(GTK_GRID(table), label, 1, i, 1, 1);
-		gtk_widget_show(label);
 
 		i++;
 		}
@@ -2180,7 +2375,7 @@ static void file_util_write_metadata_details_dialog(UtilityData *ud, FileData *f
 	generic_dialog_add_image(gd, box, fd, nullptr, FALSE, nullptr, nullptr, FALSE);
 
 	gtk_widget_set_size_request(gd->dialog, DIALOG_WIDTH, -1);
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 
 	g_list_free(keys);
 }
@@ -2734,7 +2929,7 @@ static void file_util_delete_dir_full(FileData *fd, GtkWidget *parent, UtilityPh
 		rlist = filelist_sort_path(rlist);
 		file_util_dialog_add_list(box, rlist, FALSE, FALSE);
 
-		gtk_widget_show(gd->dialog);
+		gtk_window_present(GTK_WINDOW(gd->dialog));
 		}
 	else
 		{
@@ -3149,7 +3344,7 @@ static GdkContentProvider *clipboard_build_provider(const PathList &path_list, g
 	g_autoptr(GBytes) copied_bytes = g_bytes_new(copied->str, copied->len);
 
 	GdkContentProvider *copied_provider =
-	        gdk_content_provider_new_for_bytes("application/x-special-gnome-copied-files",
+	        gdk_content_provider_new_for_bytes("x-special/gnome-copied-files",
 	                                           copied_bytes);
 
 	GdkContentProvider *providers[] = {

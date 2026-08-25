@@ -26,8 +26,6 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
-#include "compat.h"
-
 class FileData;
 struct ViewDir;
 
@@ -36,13 +34,15 @@ ViewDir *vdlist_new(ViewDir *vd);
 gboolean vdlist_set_fd(ViewDir *vd, FileData *dir_fd);
 void vdlist_refresh(ViewDir *vd);
 
-gboolean vdlist_find_row(ViewDir *vd, FileData *fd, GtkTreeIter *iter);
+FileData *vdlist_fd_at_point(ViewDir *vd, gdouble x, gdouble y);
+void vdlist_color_set(ViewDir *vd, FileData *fd, gboolean set);
+void vdlist_scroll_to_fd(ViewDir *vd, FileData *fd, gfloat y_align);
+void vdlist_rename_by_data(ViewDir *vd, FileData *fd);
 
-void vdlist_rename_by_row(ViewDir *vd, FileData *fd);
 FileData *vdlist_row_by_path(ViewDir *vd, const gchar *path, gint *row);
 
-gboolean vdlist_press_key_cb(GtkWidget *widget, const GqKeyEvent *event, gpointer data);
-gboolean vdlist_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data);
+gboolean vdlist_press_key_cb(GtkWidget *widget, guint keyval, gpointer data);
+void vdlist_press_cb(ViewDir *vd, gdouble x, gdouble y);
 
 void vdlist_destroy_cb(GtkWidget *widget, gpointer data);
 

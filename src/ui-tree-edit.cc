@@ -26,9 +26,7 @@
 
 #include <glib-object.h>
 
-#include "compat.h"
 #include "geometry.h"
-#include "layout.h"
 #include "misc.h"
 #include "ui-menu.h"
 #include "ui-misc.h"
@@ -70,7 +68,7 @@ static void tree_edit_close(TreeEditData *ted)
 		}
 	else
 		{
-		gq_gtk_widget_destroy(ted->window);
+		gtk_window_destroy(GTK_WINDOW(ted->window));
 		}
 
 	g_free(ted->old_name);
@@ -159,7 +157,6 @@ static gboolean tree_edit_by_path_idle_cb(gpointer data)
 
 	gtk_widget_set_size_request(ted->entry, w, h);
 	gtk_popover_set_pointing_to(GTK_POPOVER(ted->window), &pointing_to);
-	gtk_widget_show(ted->window);
 	popover_popup(ted->window);
 
 	/* grab it */
@@ -224,9 +221,8 @@ gboolean tree_edit_by_path(GtkTreeView *tree, GtkTreePath *tpath, gint column, c
 	/* create the window */
 
 	ted->entry = gtk_entry_new();
-	gq_gtk_entry_set_text(GTK_ENTRY(ted->entry), ted->old_name);
+	entry_set_text(GTK_ENTRY(ted->entry), ted->old_name);
 	gtk_editable_select_region(GTK_EDITABLE(ted->entry), 0, strlen(ted->old_name));
-	gtk_widget_show(ted->entry);
 
 	ted->window = gtk_popover_new();
 	popover_set_parent(ted->window, GTK_WIDGET(ted->tree));

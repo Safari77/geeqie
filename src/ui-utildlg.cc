@@ -32,7 +32,6 @@
 
 #include <config.h>
 
-#include "compat.h"
 #include "intl.h"
 #include "main-defines.h"
 #include "misc.h"
@@ -106,7 +105,7 @@ void generic_dialog_close(GenericDialog *gd)
 	auto *role = static_cast<const gchar *>(g_object_get_data(G_OBJECT(gd->dialog), GENERIC_DIALOG_ROLE_DATA_KEY));
 	generic_dialog_save_window(actual_title, role, rect);
 
-	gq_gtk_widget_destroy(gd->dialog);
+	gtk_window_destroy(GTK_WINDOW(gd->dialog));
 	g_free(gd);
 }
 
@@ -185,46 +184,26 @@ static gboolean generic_dialog_delete_cb(GtkWidget *, gpointer data)
 	return TRUE;
 }
 
-static void generic_dialog_show_cb(GtkWidget *widget, gpointer data)
-{
-	auto gd = static_cast<GenericDialog *>(data);
-	if (gd->cancel_button)
-		{
-		gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), gd->cancel_button, -1);
-		}
-
-	g_signal_handlers_disconnect_by_func(G_OBJECT(widget), (gpointer)(generic_dialog_show_cb), gd);
-}
-
 GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, const gchar *text,
 				     void (*func_cb)(GenericDialog *, gpointer), gboolean is_default)
 {
-	GtkWidget *button;
-	gboolean alternative_order;
-
-	button = pref_button_new(nullptr, icon_name, text,
-				 G_CALLBACK(generic_dialog_click_cb), gd);
+	GtkWidget *button = pref_button_new(nullptr, icon_name, text,
+	                                    G_CALLBACK(generic_dialog_click_cb), gd);
 
 	g_object_set_data(G_OBJECT(button), "dialog_function", reinterpret_cast<void *>(func_cb));
 
-	gq_gtk_container_add(gd->hbox, button);
-
-	alternative_order = get_alternative_button_order(gd->hbox);
-
 	if (is_default)
 		{
+		gtk_box_append(GTK_BOX(gd->hbox), button);
+
 		gtk_window_set_default_widget(GTK_WINDOW(gd->dialog), button);
 		gtk_widget_grab_focus(button);
 		gd->default_cb = func_cb;
-
-		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, -1);
 		}
 	else
 		{
-		if (!alternative_order) gq_gtk_box_reorder_child(GTK_BOX(gd->hbox), button, 0);
+		gtk_box_prepend(GTK_BOX(gd->hbox), button);
 		}
-
-	gtk_widget_show(button);
 
 	return button;
 }
@@ -235,7 +214,7 @@ GtkWidget *generic_dialog_add_button(GenericDialog *gd, const gchar *icon_name, 
  * @param icon_stock_id
  * @param heading
  * @param text
- * @param expand Used as the "expand" and "fill" parameters in the eventual call to gq_gtk_box_pack_start()
+ * @param expand Whether the message should expand in the box orientation
  * @returns
  *
  *
@@ -253,8 +232,7 @@ GtkWidget *generic_dialog_add_message(GenericDialog *gd, const gchar *icon_name,
 		GtkWidget *image = gtk_image_new_from_icon_name(icon_name);
 		gtk_widget_set_halign(image, GTK_ALIGN_CENTER);
 		gtk_widget_set_valign(image, GTK_ALIGN_START);
-		gq_gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 0);
-		gtk_widget_show(image);
+		gtk_box_append(GTK_BOX(hbox), image);
 		}
 
 	vbox = pref_box_new(hbox, TRUE, GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
@@ -375,21 +353,23 @@ static void generic_dialog_setup(GenericDialog *gd,
 	gtk_widget_add_controller(gd->dialog, controller);
 
 	gtk_window_set_resizable(GTK_WINDOW(gd->dialog), TRUE);
-	gq_gtk_widget_set_border_width(gd->dialog, PREF_PAD_BORDER);
+	gtk_widget_set_margin_top(gd->dialog, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(gd->dialog, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(gd->dialog, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(gd->dialog, PREF_PAD_BORDER);
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled), TRUE);
 	gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(scrolled), TRUE);
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_BUTTON_SPACE);
-	gq_gtk_container_add(scrolled, vbox);
-	gq_gtk_container_add(gd->dialog, scrolled);
-	gtk_widget_show(scrolled);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), vbox);
+	gtk_window_set_child(GTK_WINDOW(gd->dialog), scrolled);
 
-	gtk_widget_show(vbox);
 
 	gd->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), gd->vbox, TRUE, TRUE, 0);
-	gtk_widget_show(gd->vbox);
+	gtk_widget_set_hexpand(gd->vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(gd->vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), gd->vbox);
 
 	gd->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
 	gtk_widget_set_halign(gd->hbox, GTK_ALIGN_END);
@@ -397,17 +377,7 @@ static void generic_dialog_setup(GenericDialog *gd,
 
 	if (gd->cancel_cb)
 		{
-		gd->cancel_button = generic_dialog_add_button(gd, GQ_ICON_CANCEL, _("Cancel"), gd->cancel_cb, TRUE);
-		}
-	else
-		{
-		gd->cancel_button = nullptr;
-		}
-
-	if (get_alternative_button_order(gd->hbox))
-		{
-		g_signal_connect(G_OBJECT(gd->dialog), "show",
-				 G_CALLBACK(generic_dialog_show_cb), gd);
+		generic_dialog_add_button(gd, GQ_ICON_CANCEL, _("Cancel"), gd->cancel_cb, TRUE);
 		}
 
 	gd->default_cb = nullptr;
@@ -450,7 +420,7 @@ GenericDialog *warning_dialog(const gchar *heading, const gchar *text,
 
 	generic_dialog_add_message(gd, icon_name, heading, text, TRUE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 
 	return gd;
 }

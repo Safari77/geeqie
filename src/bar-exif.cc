@@ -30,7 +30,6 @@
 #include <config.h>
 
 #include "bar.h"
-#include "compat.h"
 #include "exif.h"
 #include "filedata.h"
 #include "intl.h"
@@ -144,15 +143,13 @@ void bar_pane_exif_setup_entry_box(PaneExifData *ped, ExifEntry *ee)
 		}
 
 	ee->box = gtk_box_new(horizontal ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(ee->ebox, ee->box);
-	gtk_widget_show(ee->box);
+	gtk_frame_set_child(GTK_FRAME(ee->ebox), ee->box);
 
 	ee->title_label = gtk_label_new(nullptr);
 	gtk_label_set_xalign(GTK_LABEL(ee->title_label), horizontal ? 1.0 : 0.0);
 	gtk_label_set_yalign(GTK_LABEL(ee->title_label), 0.5);
 	gtk_size_group_add_widget(ped->size_group, ee->title_label);
-	gq_gtk_box_pack_start(GTK_BOX(ee->box), ee->title_label, FALSE, TRUE, 0);
-	gtk_widget_show(ee->title_label);
+	gtk_box_append(GTK_BOX(ee->box), ee->title_label);
 
 	if (editable)
 		{
@@ -169,8 +166,17 @@ void bar_pane_exif_setup_entry_box(PaneExifData *ped, ExifEntry *ee)
 		gtk_label_set_yalign(GTK_LABEL(ee->value_widget), 0.5);
 		}
 
-	gq_gtk_box_pack_start(GTK_BOX(ee->box), ee->value_widget, TRUE, TRUE, 1);
-	gtk_widget_show(ee->value_widget);
+	gtk_widget_set_hexpand(ee->value_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(ee->box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(ee->value_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(ee->box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(ee->box))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(ee->value_widget, 1);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(ee->value_widget, 1);
+		}
+	gtk_box_append(GTK_BOX(ee->box), ee->value_widget);
 }
 
 GtkWidget *bar_pane_exif_add_entry(PaneExifData *ped, const gchar *key, const gchar *title, gboolean if_set, gboolean editable)
@@ -197,7 +203,7 @@ GtkWidget *bar_pane_exif_add_entry(PaneExifData *ped, const gchar *key, const gc
 	gtk_widget_remove_css_class(ee->ebox, "frame");
 	g_object_set_data_full(G_OBJECT(ee->ebox), "entry_data", ee, bar_pane_exif_entry_destroy);
 
-	gq_gtk_box_pack_start(GTK_BOX(ped->vbox), ee->ebox, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(ped->vbox), ee->ebox);
 
 	bar_pane_exif_entry_dnd_init(ee->ebox);
 	GtkGesture *menu_gesture = gtk_gesture_click_new();
@@ -231,11 +237,11 @@ void bar_pane_exif_reparent_entry(GtkWidget *entry, GtkWidget *pane)
 	g_object_ref(entry);
 
 	gtk_size_group_remove_widget(old_ped->size_group, ee->title_label);
-	gq_gtk_container_remove(old_ped->vbox, entry);
+	gtk_box_remove(GTK_BOX(old_ped->vbox), entry);
 
 	ee->ped = ped;
 	gtk_size_group_add_widget(ped->size_group, ee->title_label);
-	gq_gtk_box_pack_start(GTK_BOX(ped->vbox), entry, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(ped->vbox), entry);
 }
 
 void bar_pane_exif_entry_update_title(ExifEntry *ee)
@@ -266,14 +272,14 @@ void bar_pane_exif_update_entry(PaneExifData *ped, GtkWidget *entry, gboolean up
 	if (!ped->show_all && ee->if_set && !ee->editable && (!text || !*text))
 		{
 		gtk_label_set_text(GTK_LABEL(ee->value_widget), nullptr);
-		gtk_widget_hide(entry);
+		gtk_widget_set_visible(entry, FALSE);
 		}
 	else
 		{
 		if (ee->editable)
 			{
 			g_signal_handlers_block_by_func(ee->value_widget, (gpointer *)bar_pane_exif_entry_changed, ee);
-			gq_gtk_entry_set_text(GTK_ENTRY(ee->value_widget), text ? text : "");
+			entry_set_text(GTK_ENTRY(ee->value_widget), text ? text : "");
 			g_signal_handlers_unblock_by_func(ee->value_widget, (gpointer)bar_pane_exif_entry_changed, ee);
 			gtk_widget_set_tooltip_text(ee->box, nullptr);
 			}
@@ -282,7 +288,7 @@ void bar_pane_exif_update_entry(PaneExifData *ped, GtkWidget *entry, gboolean up
 			gtk_label_set_text(GTK_LABEL(ee->value_widget), text);
 			gtk_widget_set_tooltip_text(ee->box, text);
 			}
-		gtk_widget_show(entry);
+		gtk_widget_set_visible(entry, TRUE);
 		ped->all_hidden = FALSE;
 		}
 
@@ -395,14 +401,11 @@ gboolean bar_pane_exif_dnd_drop(GtkDropTarget *, const GValue *value, gdouble x,
 		auto *entry = static_cast<GtkWidget *>(work->data);
 		if (entry == new_entry) continue;
 
-		GtkAllocation allocation;
-		gtk_widget_get_allocation(entry, &allocation);
-
-		double nx;
-		double ny;
+		graphene_point_t pane_point{static_cast<float>(x), static_cast<float>(y)};
+		graphene_point_t entry_point{};
 		if (gtk_widget_is_drawable(entry) &&
-		        gtk_widget_translate_coordinates(pane, entry, x, y, &nx, &ny) &&
-		        ny < allocation.height / 2.F)
+		        gtk_widget_compute_point(pane, entry, &pane_point, &entry_point) &&
+		        entry_point.y < gtk_widget_get_height(entry) / 2.F)
 			{
 			break;
 			}
@@ -410,7 +413,20 @@ gboolean bar_pane_exif_dnd_drop(GtkDropTarget *, const GValue *value, gdouble x,
 		pos++;
 		}
 
-	gq_gtk_box_reorder_child(GTK_BOX(ped->vbox), new_entry, pos);
+	GtkWidget *previous = nullptr;
+	gint index = 0;
+	for (GtkWidget *work = gtk_widget_get_first_child(ped->vbox);
+	     work;
+	     work = gtk_widget_get_next_sibling(work))
+		{
+		if (work == new_entry) continue;
+		if (index >= pos) break;
+
+		previous = work;
+		index++;
+		}
+
+	gtk_box_reorder_child_after(GTK_BOX(ped->vbox), new_entry, previous);
 
 	return TRUE;
 }
@@ -540,24 +556,22 @@ void bar_pane_exif_conf_dialog(GtkWidget *widget)
 
 	cdd->key_entry = gtk_entry_new();
 	gtk_widget_set_size_request(cdd->key_entry, 300, -1);
-	if (ee) gq_gtk_entry_set_text(GTK_ENTRY(cdd->key_entry), ee->key);
+	if (ee) entry_set_text(GTK_ENTRY(cdd->key_entry), ee->key);
 	gtk_grid_attach(GTK_GRID(table), cdd->key_entry, 1, 0, 1, 1);
 	generic_dialog_attach_default(gd, cdd->key_entry);
-	gtk_widget_show(cdd->key_entry);
 
 	pref_table_label(table, 0, 1, _("Title:"), GTK_ALIGN_END);
 
 	cdd->title_entry = gtk_entry_new();
 	gtk_widget_set_size_request(cdd->title_entry, 300, -1);
-	if (ee) gq_gtk_entry_set_text(GTK_ENTRY(cdd->title_entry), ee->title);
+	if (ee) entry_set_text(GTK_ENTRY(cdd->title_entry), ee->title);
 	gtk_grid_attach(GTK_GRID(table), cdd->title_entry, 1, 1, 1, 1);
 	generic_dialog_attach_default(gd, cdd->title_entry);
-	gtk_widget_show(cdd->title_entry);
 
 	pref_checkbox_new_int(gd->vbox, _("Show only if set"), cdd->if_set, &cdd->if_set);
 	pref_checkbox_new_int(gd->vbox, _("Editable (supported only for XMP)"), cdd->editable, &cdd->editable);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 [[maybe_unused]] void bar_pane_exif_conf_dialog_cb(GSimpleAction *, GVariant *, gpointer data)
@@ -737,7 +751,6 @@ GtkWidget *bar_pane_exif_new(const gchar *id, const gchar *title, gboolean expan
 
 	file_data_register_notify_func(bar_pane_exif_notify_cb, ped, NOTIFY_PRIORITY_LOW);
 
-	gtk_widget_show(ped->widget);
 
 	return ped->widget;
 }

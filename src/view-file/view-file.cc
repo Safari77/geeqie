@@ -33,6 +33,7 @@
 #include "filedata.h"
 #include "filefilter.h"
 #include "history-list.h"
+#include "image-load.h"
 #include "img-view.h"
 #include "intl.h"
 #include "layout.h"
@@ -42,8 +43,10 @@
 #include "metadata.h"
 #include "misc.h"
 #include "options.h"
+#include "pixbuf-util.h"
 #include "sort-type.h"
 #include "thumb.h"
+#include "trash.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
 #include "ui-misc.h"
@@ -173,35 +176,50 @@ static gboolean vf_press_key_cb(GtkEventControllerKey *, guint keyval, guint, Gd
  *-------------------------------------------------------------------
  */
 
-static gboolean vf_press_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+static bool vf_is_selected(const ViewFile *vf, const FileData *fd);
+
+static void vf_press_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
-	auto vf = static_cast<ViewFile *>(data);
-	gboolean ret;
+	const gint64 press_time = g_get_monotonic_time();
+	/* GtkDragSource immediately starts a second press sequence when it takes
+	 * over from GtkGestureClick. Preserve the selection across that handoff. */
+	const gboolean drag_takeover = press_time - vf->last_press_time <= 50 * G_TIME_SPAN_MILLISECOND;
+	if (!drag_takeover)
+		{
+		file_data_list_free(vf->drag_selection);
+		vf->drag_selection = nullptr;
+		}
+	else if (vf->drag_selection)
+		{
+		vf_select_none(vf);
+		vf_select_list(vf, vf->drag_selection);
+		}
+	vf->last_press_time = press_time;
+	vf->drag_started = FALSE;
+	vf->preserve_selection = FALSE;
 
 	switch (vf->type)
 	{
-	case FILEVIEW_LIST: ret = vflist_press_cb(vf, widget, event); break;
-	case FILEVIEW_ICON: ret = vficon_press_cb(vf, widget, event); break;
-	default: ret = FALSE;
+	case FILEVIEW_LIST: vflist_press_cb(vf, event); break;
+	case FILEVIEW_ICON: vficon_press_cb(vf, event); break;
+	default: break;
 	}
 
-	return ret;
+	if (!vf->drag_selection && vf->click_fd && vf_is_selected(vf, vf->click_fd) &&
+	    vf_selection_count(vf, nullptr) > 1)
+		{
+		vf->drag_selection = vf_selection_get_list(vf);
+		}
 }
 
-static gboolean vf_release_cb(GtkWidget *widget, const GqMouseButtonEvent *event, gpointer data)
+static void vf_release_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
-	auto vf = static_cast<ViewFile *>(data);
-	gboolean ret;
-
 	switch (vf->type)
 	{
-	case FILEVIEW_LIST: ret = vflist_release_cb(vf, widget, event); break;
-	case FILEVIEW_ICON: ret = vficon_release_cb(vf, widget, event); break;
-
-	default: ret = FALSE;
+	case FILEVIEW_LIST: vflist_release_cb(vf, event); break;
+	case FILEVIEW_ICON: vficon_release_cb(vf, event); break;
+	default: break;
 	}
-
-	return ret;
 }
 
 
@@ -355,7 +373,8 @@ void vf_click_at_point(ViewFile *vf, gdouble x, gdouble y, GdkModifierType state
 {
 	if (!vf) return;
 
-	const GqMouseButtonEvent event{
+	const ViewFileMouseButtonEvent event{
+		vf->listview,
 		GDK_BUTTON_PRIMARY,
 		x,
 		y,
@@ -363,8 +382,8 @@ void vf_click_at_point(ViewFile *vf, gdouble x, gdouble y, GdkModifierType state
 		1
 	};
 
-	vf_press_cb(vf->listview, &event, vf);
-	vf_release_cb(vf->listview, &event, vf);
+	vf_press_cb(vf, event);
+	vf_release_cb(vf, event);
 }
 
 static GdkContentProvider *vf_dnd_prepare(GtkDragSource *source, gdouble x, gdouble y, gpointer data)
@@ -378,6 +397,11 @@ static GdkContentProvider *vf_dnd_prepare(GtkDragSource *source, gdouble x, gdou
 		}
 
 	if (!vf->click_fd) return nullptr;
+	if (vf->drag_selection && g_list_find(vf->drag_selection, vf->click_fd))
+		{
+		vf_select_none(vf);
+		vf_select_list(vf, vf->drag_selection);
+		}
 
 	g_autoptr(FileDataList) list = nullptr;
 
@@ -392,8 +416,16 @@ static GdkContentProvider *vf_dnd_prepare(GtkDragSource *source, gdouble x, gdou
 
 	if (!list) return nullptr;
 
+	vf->drag_started = TRUE;
 	dnd_set_drag_icon(source, vf->click_fd->thumb_pixbuf, g_list_length(list), vf->click_fd);
 	return dnd_file_list_content_provider(list);
+}
+
+static void vf_dnd_end(GtkDragSource *, GdkDrag *, gboolean, gpointer data)
+{
+	auto *vf = static_cast<ViewFile *>(data);
+	file_data_list_free(vf->drag_selection);
+	vf->drag_selection = nullptr;
 }
 
 struct VfDndTextDropData
@@ -458,6 +490,7 @@ static void vf_dnd_init(ViewFile *vf)
 	gtk_drag_source_set_actions(drag_source, static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK));
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_source), 0);
 	g_signal_connect(drag_source, "prepare", G_CALLBACK(vf_dnd_prepare), vf);
+	g_signal_connect(drag_source, "drag-end", G_CALLBACK(vf_dnd_end), vf);
 	gtk_widget_add_controller(vf->listview, GTK_EVENT_CONTROLLER(drag_source));
 
 	static const char *mime_types[] = {"text/plain"};
@@ -540,11 +573,69 @@ static void vf_pop_menu_copy_cb(GtkWidget *, gpointer data)
 	file_util_copy(nullptr, vf_pop_menu_file_list(vf), nullptr, vf->listview);
 }
 
+struct VfCopyImageData
+{
+	ImageLoader *loader;
+	GdkClipboard *clipboard;
+};
+
+template<gboolean success>
+static void vf_pop_menu_copy_image_done_cb(ImageLoader *loader, gpointer data)
+{
+	auto *copy_data = static_cast<VfCopyImageData *>(data);
+	GdkPixbuf *pixbuf = success ? image_loader_get_pixbuf(loader) : nullptr;
+
+	if (pixbuf)
+		{
+		g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
+		gdk_clipboard_set_texture(copy_data->clipboard, texture);
+		}
+
+	g_object_unref(copy_data->clipboard);
+	image_loader_free(copy_data->loader);
+	g_free(copy_data);
+}
+
+static void vf_pop_menu_copy_image_cb(GtkWidget *, gpointer data)
+{
+	auto *vf = static_cast<ViewFile *>(data);
+	if (!vf->click_fd) return;
+
+	GdkClipboard *clipboard = gdk_display_get_clipboard(gtk_widget_get_display(vf->listview));
+	if (!clipboard) return;
+
+	auto *copy_data = g_new(VfCopyImageData, 1);
+	copy_data->loader = image_loader_new(vf->click_fd);
+	copy_data->clipboard = GDK_CLIPBOARD(g_object_ref(clipboard));
+	g_signal_connect(copy_data->loader, "done", G_CALLBACK(vf_pop_menu_copy_image_done_cb<TRUE>), copy_data);
+	g_signal_connect(copy_data->loader, "error", G_CALLBACK(vf_pop_menu_copy_image_done_cb<FALSE>), copy_data);
+
+	if (!image_loader_start(copy_data->loader))
+		{
+		vf_pop_menu_copy_image_done_cb<FALSE>(copy_data->loader, copy_data);
+		}
+}
+
 static void vf_pop_menu_move_cb(GtkWidget *, gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
 
 	file_util_move(nullptr, vf_pop_menu_file_list(vf), nullptr, vf->listview);
+}
+
+template<gboolean move>
+static void vf_pop_menu_restore_cb(GtkWidget *, gpointer data)
+{
+	auto vf = static_cast<ViewFile *>(data);
+	g_autoptr(FileDataList) list = vf_pop_menu_file_list(vf);
+
+	for (GList *work = list; work; work = work->next)
+		{
+		auto fd = static_cast<FileData *>(work->data);
+		file_util_safe_trash_restore(fd->path, move, vf->listview);
+		}
+
+	if (move) vf_refresh_idle(vf);
 }
 
 static void vf_pop_menu_rename_cb(GtkWidget *, gpointer data)
@@ -657,9 +748,20 @@ static void vf_pop_menu_copy_action_cb(GSimpleAction *, GVariant *, gpointer dat
 	vf_pop_menu_copy_cb(nullptr, vf_from_action_data(data));
 }
 
+static void vf_pop_menu_copy_image_action_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	vf_pop_menu_copy_image_cb(nullptr, vf_from_action_data(data));
+}
+
 static void vf_pop_menu_move_action_cb(GSimpleAction *, GVariant *, gpointer data)
 {
 	vf_pop_menu_move_cb(nullptr, vf_from_action_data(data));
+}
+
+template<gboolean move>
+static void vf_pop_menu_restore_action_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	vf_pop_menu_restore_cb<move>(nullptr, vf_from_action_data(data));
 }
 
 static void vf_pop_menu_rename_action_cb(GSimpleAction *, GVariant *, gpointer data)
@@ -917,6 +1019,7 @@ GtkWidget *vf_pop_menu(ViewFile *vf, GtkWidget *parent, gdouble x, gdouble y)
 	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-view-file.ui");
 	GMenu *menu_model = G_MENU(gtk_builder_get_object(builder, "menu-view-file"));
 	GMenu *marks_section = G_MENU(gtk_builder_get_object(builder, "marks-section"));
+	GMenu *trash_restore_section = G_MENU(gtk_builder_get_object(builder, "trash-restore-section"));
 
 	if (vf->clicked_mark > 0 && vf->click_fd)
 		{
@@ -968,11 +1071,23 @@ GtkWidget *vf_pop_menu(ViewFile *vf, GtkWidget *parent, gdouble x, gdouble y)
 		}
 
 	vf->editmenu_fd_list = vf_pop_menu_file_list(vf);
+	gboolean trash_selection = (vf->editmenu_fd_list != nullptr);
+	for (GList *work = vf->editmenu_fd_list; trash_selection && work; work = work->next)
+		{
+		auto fd = static_cast<FileData *>(work->data);
+		g_autofree gchar *original_path = file_util_safe_trash_original_path(fd->path);
+		trash_selection = (original_path != nullptr);
+		}
+	if (trash_selection)
+		{
+		gmenu_append_action_item(trash_restore_section, _("Copy back to original location"), "win.view-file-restore-copy");
+		gmenu_append_action_item(trash_restore_section, _("Move back to original location"), "win.view-file-restore-move");
+		}
 	GMenu *plugins_menu = G_MENU(gtk_builder_get_object(builder, "plugins-submenu"));
 	plugins_menu_populate(plugins_menu, "win.view-file-plugin-run", vf->editmenu_fd_list);
 
 	GMenu *collections_menu = G_MENU(gtk_builder_get_object(builder, "collections-submenu"));
-	submenu_add_collections_new(collections_menu, active, "win.view-file-collections", vf);
+	submenu_add_collections_new(collections_menu, "win.view-file-collections");
 
 	GMenu *sort_menu = G_MENU(gtk_builder_get_object(builder, "sort-submenu"));
 	for (const SortType sort_type : { SORT_NAME, SORT_NUMBER, SORT_TIME, SORT_CTIME, SORT_EXIFTIME,
@@ -998,6 +1113,7 @@ GtkWidget *vf_pop_menu(ViewFile *vf, GtkWidget *parent, gdouble x, gdouble y)
 	vf_pop_menu_set_action_enabled(vf, "view-file-view-new", active);
 	vf_pop_menu_set_action_enabled(vf, "view-file-open-archive", active && class_archive);
 	vf_pop_menu_set_action_enabled(vf, "view-file-copy", active);
+	vf_pop_menu_set_action_enabled(vf, "view-file-copy-image", active);
 	vf_pop_menu_set_action_enabled(vf, "view-file-move", active);
 	vf_pop_menu_set_action_enabled(vf, "view-file-rename", active);
 	vf_pop_menu_set_action_enabled(vf, "view-file-copy-path", active);
@@ -1065,6 +1181,8 @@ gboolean vf_set_fd(ViewFile *vf, FileData *dir_fd)
 static void vf_destroy_cb(GtkWidget *, gpointer data)
 {
 	auto vf = static_cast<ViewFile *>(data);
+	file_data_list_free(vf->drag_selection);
+
 	if (vf->marks_filter_controller && vf->layout && vf->layout->window)
 		{
 		gtk_widget_remove_controller(vf->layout->window, vf->marks_filter_controller);
@@ -1098,7 +1216,8 @@ static void vf_destroy_cb(GtkWidget *, gpointer data)
 		{
 		g_signal_handlers_disconnect_matched(G_OBJECT(vf->popup), G_SIGNAL_MATCH_DATA,
 						     0, 0, nullptr, nullptr, vf);
-		gq_gtk_widget_destroy(vf->popup);
+		gtk_popover_popdown(GTK_POPOVER(vf->popup));
+		gtk_widget_unparent(vf->popup);
 		}
 
 	if (vf->read_metadata_in_idle_id)
@@ -1192,7 +1311,7 @@ static void vf_marks_tooltip_ok_cb(GenericDialog *gd, gpointer data)
 
 static void vf_marks_filter_on_icon_press(GtkEntry *edit_widget, GtkEntryIconPosition, GdkEvent *, gpointer)
 {
-	gq_gtk_entry_set_text(edit_widget, "");
+	entry_set_text(edit_widget, "");
 }
 
 static void vf_marks_tooltip_help_cb(GenericDialog *, gpointer)
@@ -1224,7 +1343,7 @@ static void vf_marks_tooltip_open_dialog(GtkWidget *widget, gint mark_no)
 	gtk_widget_set_size_request(mte->edit_widget, 300, -1);
 	if (options->marks_tooltips[mte->mark_no])
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(mte->edit_widget), options->marks_tooltips[mte->mark_no]);
+		entry_set_text(GTK_ENTRY(mte->edit_widget), options->marks_tooltips[mte->mark_no]);
 		}
 	gtk_grid_attach(GTK_GRID(table), mte->edit_widget, 1, 0, 1, 1);
 	generic_dialog_attach_default(gd, mte->edit_widget);
@@ -1236,9 +1355,8 @@ static void vf_marks_tooltip_open_dialog(GtkWidget *widget, gint mark_no)
 	g_signal_connect(GTK_ENTRY(mte->edit_widget), "icon-press",
 	                 G_CALLBACK(vf_marks_filter_on_icon_press), nullptr);
 
-	gtk_widget_show(mte->edit_widget);
 	gtk_widget_grab_focus(mte->edit_widget);
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void vf_marks_filter_window_context_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer data)
@@ -1268,7 +1386,7 @@ static void vf_file_filter_history_item_cb(GtkWidget *button, gpointer data)
 	const auto *text = static_cast<const gchar *>(g_object_get_data(G_OBJECT(button), "file-filter-text"));
 	if (!text) return;
 
-	gq_gtk_entry_set_text(GTK_ENTRY(vf->file_filter.entry), text);
+	entry_set_text(GTK_ENTRY(vf->file_filter.entry), text);
 	gtk_editable_set_position(GTK_EDITABLE(vf->file_filter.entry), -1);
 	vf->file_filter.selected = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "file-filter-index"));
 	vf->file_filter.last_selected = vf->file_filter.selected;
@@ -1358,28 +1476,33 @@ static gboolean vf_file_filter_press_cb(GtkWidget *widget, gpointer data)
 
 static void vf_gesture_press_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
 {
-	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
-	GqMouseButtonEvent event = {
+	ViewFileMouseButtonEvent event{
+		gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture)),
 		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
 		x,
 		y,
 		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
-		static_cast<guint>(n_press)
+		n_press
 	};
-	vf_press_cb(widget, &event, data);
+	vf_press_cb(static_cast<ViewFile *>(data), event);
+
+	if (event.button == GDK_BUTTON_SECONDARY)
+		{
+		gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+		}
 }
 
 static void vf_gesture_release_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
 {
-	GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
-	GqMouseButtonEvent event = {
+	ViewFileMouseButtonEvent event{
+		gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture)),
 		gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)),
 		x,
 		y,
 		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(gesture)),
-		static_cast<guint>(n_press)
+		n_press
 	};
-	vf_release_cb(widget, &event, data);
+	vf_release_cb(static_cast<ViewFile *>(data), event);
 }
 
 static void vf_file_filter_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble, gdouble, gpointer data)
@@ -1404,7 +1527,7 @@ static GtkWidget *vf_marks_filter_init(ViewFile *vf)
 		gtk_widget_set_can_target(button, FALSE);
 		gtk_widget_add_css_class(button, "marks-filter-button");
 		g_object_set_data(G_OBJECT(button), "mark-number", GINT_TO_POINTER(i));
-		gq_gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
+		gtk_box_append(GTK_BOX(hbox), button);
 		g_signal_connect(G_OBJECT(button), "toggled",
 			 G_CALLBACK(vf_marks_filter_toggle_cb), vf);
 
@@ -1474,8 +1597,11 @@ static void vf_file_filter_rating_toggled_cb(GtkCheckButton *button, gpointer da
 		}
 }
 
-static void vf_file_filter_class_set_all(FileFilterMenuData *menu_data, gboolean state)
+template<gboolean state>
+static void vf_file_filter_class_set_all_cb(GSimpleAction *, GVariant *, gpointer data)
 {
+	auto *menu_data = static_cast<FileFilterMenuData *>(data);
+
 	for (gint i = 0; i < FILE_FORMAT_CLASSES; i++)
 		{
 		options->class_filter[i] = state;
@@ -1487,8 +1613,11 @@ static void vf_file_filter_class_set_all(FileFilterMenuData *menu_data, gboolean
 	vf_refresh(menu_data->vf);
 }
 
-static void vf_file_filter_rating_set_all(FileFilterMenuData *menu_data, gboolean state)
+template<gboolean state>
+static void vf_file_filter_rating_set_all_cb(GtkWidget *, gpointer data)
 {
+	auto *menu_data = static_cast<FileFilterMenuData *>(data);
+
 	options->rating_filter = state ? 0x00FFFF : 0;
 	menu_data->updating_rating_buttons = TRUE;
 	for (gint i = 0; i < FORMAT_RATING_COUNT; i++)
@@ -1498,6 +1627,15 @@ static void vf_file_filter_rating_set_all(FileFilterMenuData *menu_data, gboolea
 	menu_data->updating_rating_buttons = FALSE;
 
 	vf_refresh(menu_data->vf);
+}
+
+template<gboolean state>
+static void vf_file_filter_add_rating_set_all(GtkWidget *parent_box, const char *label, gpointer data)
+{
+	GtkWidget *button = gtk_button_new_with_label(label);
+	gtk_button_set_has_frame(GTK_BUTTON(button), FALSE);
+	g_signal_connect(button, "clicked", G_CALLBACK(vf_file_filter_rating_set_all_cb<state>), data);
+	gtk_box_append(GTK_BOX(parent_box), button);
 }
 
 static void vf_file_filter_rating_greater_equal_cb(GtkWidget *item, gpointer data)
@@ -1516,16 +1654,6 @@ static void vf_file_filter_rating_greater_equal_cb(GtkWidget *item, gpointer dat
 	menu_data->updating_rating_buttons = FALSE;
 	vf_refresh(menu_data->vf);
 	gtk_popover_popdown(GTK_POPOVER(g_object_get_data(G_OBJECT(item), "rating-popover")));
-}
-
-static void vf_file_filter_class_select_all_cb(GSimpleAction *, GVariant *, gpointer data)
-{
-	vf_file_filter_class_set_all(static_cast<FileFilterMenuData *>(data), TRUE);
-}
-
-static void vf_file_filter_class_select_none_cb(GSimpleAction *, GVariant *, gpointer data)
-{
-	vf_file_filter_class_set_all(static_cast<FileFilterMenuData *>(data), FALSE);
 }
 
 static GtkWidget *class_filter_popover_new(ViewFile *vf)
@@ -1551,8 +1679,8 @@ static GtkWidget *class_filter_popover_new(ViewFile *vf)
 
 	g_autoptr(GSimpleAction) select_all_action = g_simple_action_new("class-select-all", nullptr);
 	g_autoptr(GSimpleAction) select_none_action = g_simple_action_new("class-select-none", nullptr);
-	g_signal_connect(select_all_action, "activate", G_CALLBACK(vf_file_filter_class_select_all_cb), menu_data);
-	g_signal_connect(select_none_action, "activate", G_CALLBACK(vf_file_filter_class_select_none_cb), menu_data);
+	g_signal_connect(select_all_action, "activate", G_CALLBACK(vf_file_filter_class_set_all_cb<TRUE>), menu_data);
+	g_signal_connect(select_none_action, "activate", G_CALLBACK(vf_file_filter_class_set_all_cb<FALSE>), menu_data);
 	g_action_map_add_action(G_ACTION_MAP(menu_data->action_group), G_ACTION(select_all_action));
 	g_action_map_add_action(G_ACTION_MAP(menu_data->action_group), G_ACTION(select_none_action));
 
@@ -1575,7 +1703,7 @@ static GtkWidget *rating_filter_popover_new(ViewFile *vf)
 
 	GtkWidget *popover = gtk_popover_new();
 	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(popover, vbox);
+	gtk_popover_set_child(GTK_POPOVER(popover), vbox);
 
 	for (int i = 0; i < FORMAT_RATING_COUNT; i++)
 		{
@@ -1601,7 +1729,7 @@ static GtkWidget *rating_filter_popover_new(ViewFile *vf)
 			g_object_set_data(G_OBJECT(comparison_item), "rating-index", GINT_TO_POINTER(i));
 			g_object_set_data(G_OBJECT(comparison_item), "rating-popover", comparison_popover);
 			g_signal_connect(comparison_item, "clicked", G_CALLBACK(vf_file_filter_rating_greater_equal_cb), menu_data);
-			gq_gtk_container_add(comparison_popover, comparison_item);
+			gtk_popover_set_child(GTK_POPOVER(comparison_popover), comparison_item);
 
 			GtkGesture *gesture = gtk_gesture_click_new();
 			gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
@@ -1614,20 +1742,9 @@ static GtkWidget *rating_filter_popover_new(ViewFile *vf)
 		}
 
 	gtk_box_append(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
-	GtkWidget *select_all = gtk_button_new_with_label(_("Select all"));
-	gtk_button_set_has_frame(GTK_BUTTON(select_all), FALSE);
-	g_signal_connect(select_all, "clicked", G_CALLBACK(+[](GtkWidget *, gpointer data)
-		{
-		vf_file_filter_rating_set_all(static_cast<FileFilterMenuData *>(data), TRUE);
-		}), menu_data);
-	gtk_box_append(GTK_BOX(vbox), select_all);
-	GtkWidget *select_none = gtk_button_new_with_label(_("Ignore Rating"));
-	gtk_button_set_has_frame(GTK_BUTTON(select_none), FALSE);
-	g_signal_connect(select_none, "clicked", G_CALLBACK(+[](GtkWidget *, gpointer data)
-		{
-		vf_file_filter_rating_set_all(static_cast<FileFilterMenuData *>(data), FALSE);
-		}), menu_data);
-	gtk_box_append(GTK_BOX(vbox), select_none);
+
+	vf_file_filter_add_rating_set_all<TRUE>(vbox, _("Select all"), menu_data);
+	vf_file_filter_add_rating_set_all<FALSE>(vbox, _("Ignore Rating"), menu_data);
 
 	g_object_set_data_full(G_OBJECT(popover), "file-filter-menu-data", menu_data, file_filter_menu_data_free);
 
@@ -1663,7 +1780,7 @@ static void file_filter_clear_cb(GtkEntry *entry, GtkEntryIconPosition pos, GdkE
 {
 	if (pos != GTK_ENTRY_ICON_SECONDARY) return;
 
-	gq_gtk_entry_set_text(entry, "");
+	entry_set_text(entry, "");
 	gtk_widget_grab_focus(GTK_WIDGET(entry));
 }
 
@@ -1694,7 +1811,7 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 	const HistoryList *history_list = history_list_find_by_key("file_filter");
 	if (history_list && !history_list->empty())
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(vf->file_filter.entry), history_list->front().c_str());
+		entry_set_text(GTK_ENTRY(vf->file_filter.entry), history_list->front().c_str());
 		vf->file_filter.selected = 0;
 		}
 
@@ -1709,23 +1826,19 @@ static GtkWidget *vf_file_filter_init(ViewFile *vf)
 	g_signal_connect(filter_gesture, "pressed", G_CALLBACK(vf_file_filter_gesture_press_cb), vf);
 	gtk_widget_add_controller(vf->file_filter.entry, GTK_EVENT_CONTROLLER(filter_gesture));
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), vf->file_filter.control, FALSE, FALSE, 0);
-	gq_gtk_container_add(frame, hbox);
-	gtk_widget_show(hbox);
+	gtk_box_append(GTK_BOX(hbox), vf->file_filter.control);
+	gtk_frame_set_child(GTK_FRAME(frame), hbox);
 
 	GtkWidget *case_sensitive = gtk_check_button_new_with_label(_("Case"));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), case_sensitive, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(hbox), case_sensitive);
 	gtk_widget_set_tooltip_text(case_sensitive, _("Case sensitive"));
 	g_signal_connect(G_OBJECT(case_sensitive), "toggled", G_CALLBACK(case_sensitive_cb), vf);
-	gtk_widget_show(case_sensitive);
 
 	GtkWidget *class_button = file_filter_menu_button_new(_("Class"), _("Select Class filter"), class_filter_popover_new(vf));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), class_button, FALSE, TRUE, 0);
-	gtk_widget_show(class_button);
+	gtk_box_append(GTK_BOX(hbox), class_button);
 
 	GtkWidget *rating_button = file_filter_menu_button_new(_("Rating"), _("Select Rating filter"), rating_filter_popover_new(vf));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), rating_button, FALSE, TRUE, 0);
-	gtk_widget_show(rating_button);
+	gtk_box_append(GTK_BOX(hbox), rating_button);
 
 	return frame;
 }
@@ -1756,10 +1869,11 @@ ViewFile *vf_new(FileViewType type, FileData *dir_fd)
 	vf->file_filter.frame = vf_file_filter_init(vf);
 
 	vf->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vf->widget), vf->filter, FALSE, FALSE, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vf->widget), vf->file_filter.frame, FALSE, FALSE, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vf->widget), vf->scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(vf->scrolled);
+	gtk_box_append(GTK_BOX(vf->widget), vf->filter);
+	gtk_box_append(GTK_BOX(vf->widget), vf->file_filter.frame);
+	gtk_widget_set_hexpand(vf->scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vf->widget))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(vf->scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vf->widget))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vf->widget), vf->scrolled);
 
 	g_signal_connect(G_OBJECT(vf->widget), "destroy",
 			 G_CALLBACK(vf_destroy_cb), vf);
@@ -1780,12 +1894,12 @@ ViewFile *vf_new(FileViewType type, FileData *dir_fd)
 
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), 0);
+	gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(gesture), GTK_PHASE_CAPTURE);
 	g_signal_connect(gesture, "pressed", G_CALLBACK(vf_gesture_press_cb), vf);
 	g_signal_connect(gesture, "released", G_CALLBACK(vf_gesture_release_cb), vf);
 	gtk_widget_add_controller(vf->listview, GTK_EVENT_CONTROLLER(gesture));
 
-	gq_gtk_container_add(vf->scrolled, vf->listview);
-	gtk_widget_show(vf->listview);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(vf->scrolled), vf->listview);
 
 	vf_dnd_init(vf);
 

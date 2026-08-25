@@ -29,7 +29,6 @@
 
 #include "cache-loader.h"
 #include "cache.h"
-#include "compat.h"
 #include "filedata.h"
 #include "intl.h"
 #include "layout.h"
@@ -221,7 +220,7 @@ static void cache_maintain_home_stop(CMData *cm)
 
 	if (!cm->remote)
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(cm->entry), _("done"));
+		entry_set_text(GTK_ENTRY(cm->entry), _("done"));
 		gtk_spinner_stop(GTK_SPINNER(cm->spinner));
 
 		gtk_widget_set_sensitive(cm->button_stop, FALSE);
@@ -351,7 +350,7 @@ static gboolean cache_maintain_home_cb(gpointer data)
 			{
 			buf = "…";
 			}
-		gq_gtk_entry_set_text(GTK_ENTRY(cm->entry), buf);
+		entry_set_text(GTK_ENTRY(cm->entry), buf);
 		}
 
 	return G_SOURCE_CONTINUE;
@@ -409,21 +408,28 @@ static void cache_maintain_home(gboolean metadata, gboolean clear, GtkWidget *pa
 	gtk_window_set_default_size(GTK_WINDOW(cm->gd->dialog), PURGE_DIALOG_WIDTH, -1);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(cm->gd->vbox), hbox, FALSE, FALSE, 5);
-	gtk_widget_show(hbox);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cm->gd->vbox))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(hbox, 5);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(hbox, 5);
+		}
+	gtk_box_append(GTK_BOX(cm->gd->vbox), hbox);
 
 	cm->entry = gtk_entry_new();
 	gtk_widget_set_can_focus(cm->entry, FALSE);
 	gtk_editable_set_editable(GTK_EDITABLE(cm->entry), FALSE);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cm->entry, TRUE, TRUE, 0);
-	gtk_widget_show(cm->entry);
+	gtk_widget_set_hexpand(cm->entry, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cm->entry, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), cm->entry);
 
 	cm->spinner = gtk_spinner_new();
 	gtk_spinner_start(GTK_SPINNER(cm->spinner));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cm->spinner, FALSE, FALSE, 0);
-	gtk_widget_show(cm->spinner);
+	gtk_box_append(GTK_BOX(hbox), cm->spinner);
 
-	gtk_widget_show(cm->gd->dialog);
+	gtk_window_present(GTK_WINDOW(cm->gd->dialog));
 
 	cm->idle_id = g_idle_add(cache_maintain_home_cb, cm);
 }
@@ -574,7 +580,7 @@ static void cache_manager_render_finish(CacheOpsData *cd)
 	cache_manager_render_reset(cd);
 	if (!cd->remote)
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("done"));
+		entry_set_text(GTK_ENTRY(cd->progress), _("done"));
 		gtk_spinner_stop(GTK_SPINNER(cd->spinner));
 
 		gtk_widget_set_sensitive(cd->group, TRUE);
@@ -588,7 +594,7 @@ static void cache_manager_render_stop_cb(GenericDialog *, gpointer data)
 {
 	auto cd = static_cast<CacheOpsData *>(data);
 
-	gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("stopped"));
+	entry_set_text(GTK_ENTRY(cd->progress), _("stopped"));
 	cache_manager_render_finish(cd);
 
 	if (cd->destroy_func)
@@ -651,7 +657,7 @@ static gboolean cache_manager_render_file(CacheOpsData *cd)
 			{
 			if (!cd->remote)
 				{
-				gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), fd->path);
+				entry_set_text(GTK_ENTRY(cd->progress), fd->path);
 				cd->count_done = cd->count_done + 1;
 				gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(cd->progress_bar), static_cast<gdouble>(cd->count_done) / cd->count_total);
 				}
@@ -682,7 +688,7 @@ static gboolean cache_manager_render_file(CacheOpsData *cd)
 
 	if (!cd->remote)
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("done"));
+		entry_set_text(GTK_ENTRY(cd->progress), _("done"));
 		}
 	cache_manager_render_finish(cd);
 
@@ -810,21 +816,22 @@ static void cache_manager_render_dialog(GtkWidget *widget, const gchar *path)
 	cd->progress = gtk_entry_new();
 	gtk_widget_set_can_focus(cd->progress, FALSE);
 	gtk_editable_set_editable(GTK_EDITABLE(cd->progress), FALSE);
-	gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("click start to begin"));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cd->progress, TRUE, TRUE, 0);
-	gtk_widget_show(cd->progress);
+	entry_set_text(GTK_ENTRY(cd->progress), _("click start to begin"));
+	gtk_widget_set_hexpand(cd->progress, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cd->progress, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), cd->progress);
 
 	cd->progress_bar = gtk_progress_bar_new();
-	gq_gtk_box_pack_start(GTK_BOX(cd->gd->vbox), cd->progress_bar, TRUE, TRUE, 0);
-	gtk_widget_show(cd->progress_bar);
+	gtk_widget_set_hexpand(cd->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cd->gd->vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cd->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cd->gd->vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(cd->gd->vbox), cd->progress_bar);
 
 	cd->spinner = gtk_spinner_new();
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cd->spinner, FALSE, FALSE, 0);
-	gtk_widget_show(cd->spinner);
+	gtk_box_append(GTK_BOX(hbox), cd->spinner);
 
 	cd->list = nullptr;
 
-	gtk_widget_show(cd->gd->dialog);
+	gtk_window_present(GTK_WINDOW(cd->gd->dialog));
 }
 
 /**
@@ -1055,14 +1062,13 @@ static void cache_manager_standard_process(GtkWidget *widget, gpointer)
 	cd->progress = gtk_progress_bar_new();
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(cd->progress), _("click start to begin"));
 	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(cd->progress), TRUE);
-	gq_gtk_box_pack_start(GTK_BOX(cd->gd->vbox), cd->progress, FALSE, FALSE, 0);
-	gtk_widget_show(cd->progress);
+	gtk_box_append(GTK_BOX(cd->gd->vbox), cd->progress);
 
 	cd->days = 30;
 	cd->tl = nullptr;
 	cd->idle_id = 0;
 
-	gtk_widget_show(cd->gd->dialog);
+	gtk_window_present(GTK_WINDOW(cd->gd->dialog));
 }
 
 void cache_manager_standard_process_remote(gboolean clear)
@@ -1100,7 +1106,7 @@ static void cache_manager_main_clear_confirm(GtkWidget *parent)
 				   _("This will remove all thumbnails and sim. files\nthat have been saved to disk, continue?"), TRUE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", cache_manager_main_clear_ok_cb, TRUE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void cache_manager_main_clear_cb(GtkWidget *widget, gpointer)
@@ -1192,7 +1198,7 @@ static void cache_manager_sim_stop_cb(GenericDialog *, gpointer data)
 {
 	auto cd = static_cast<CacheOpsData *>(data);
 
-	gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("stopped"));
+	entry_set_text(GTK_ENTRY(cd->progress), _("stopped"));
 	cache_manager_sim_finish(cd);
 }
 
@@ -1284,7 +1290,7 @@ static gboolean cache_manager_sim_file(CacheOpsData *cd)
 
 		if (!cd->remote)
 			{
-			gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), fd->path);
+			entry_set_text(GTK_ENTRY(cd->progress), fd->path);
 			}
 
 		file_data_unref(fd);
@@ -1311,7 +1317,7 @@ static gboolean cache_manager_sim_file(CacheOpsData *cd)
 
 	if (!cd->remote)
 		{
-		gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("done"));
+		entry_set_text(GTK_ENTRY(cd->progress), _("done"));
 		}
 
 	cache_manager_sim_finish(cd);
@@ -1413,21 +1419,22 @@ static void cache_manager_sim_load_dialog(GtkWidget *widget, const gchar *path)
 	cd->progress = gtk_entry_new();
 	gtk_widget_set_can_focus(cd->progress, FALSE);
 	gtk_editable_set_editable(GTK_EDITABLE(cd->progress), FALSE);
-	gq_gtk_entry_set_text(GTK_ENTRY(cd->progress), _("click start to begin"));
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cd->progress, TRUE, TRUE, 0);
-	gtk_widget_show(cd->progress);
+	entry_set_text(GTK_ENTRY(cd->progress), _("click start to begin"));
+	gtk_widget_set_hexpand(cd->progress, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cd->progress, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), cd->progress);
 
 	cd->progress_bar = gtk_progress_bar_new();
-	gq_gtk_box_pack_start(GTK_BOX(cd->gd->vbox), cd->progress_bar, TRUE, TRUE, 0);
-	gtk_widget_show(cd->progress_bar);
+	gtk_widget_set_hexpand(cd->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cd->gd->vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cd->progress_bar, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cd->gd->vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(cd->gd->vbox), cd->progress_bar);
 
 	cd->spinner = gtk_spinner_new();
-	gq_gtk_box_pack_start(GTK_BOX(hbox), cd->spinner, FALSE, FALSE, 0);
-	gtk_widget_show(cd->spinner);
+	gtk_box_append(GTK_BOX(hbox), cd->spinner);
 
 	cd->list = nullptr;
 
-	gtk_widget_show(cd->gd->dialog);
+	gtk_window_present(GTK_WINDOW(cd->gd->dialog));
 }
 
 static void cache_manager_sim_load_cb(GtkWidget *widget, gpointer)
@@ -1517,7 +1524,7 @@ static void cache_manager_cache_maintenance_load_dialog(GtkWidget *widget, const
 
 	cd->list = nullptr;
 
-	gtk_widget_show(cd->gd->dialog);
+	gtk_window_present(GTK_WINDOW(cd->gd->dialog));
 }
 
 static void cache_manager_cache_maintenance_load_cb(GtkWidget *widget, gpointer)
@@ -1639,7 +1646,7 @@ void cache_manager_show()
 	gtk_widget_set_sensitive(group, FALSE);
 	gtk_widget_set_tooltip_text(button, _("Feature disabled in this version.\nUse command line:\nGQ_CACHE_MAINTENANCE=  geeqie --cache-maintenance=<FOLDER>"));
 
-	gtk_widget_show(cache_manager->dialog->dialog);
+	gtk_window_present(GTK_WINDOW(cache_manager->dialog->dialog));
 }
 
 void cache_maintenance_notification(GtkApplication *app, const gchar *message, gboolean show_quit_button)

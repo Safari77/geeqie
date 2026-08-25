@@ -84,8 +84,7 @@ GdkContentProvider *dnd_file_list_content_provider(GList *list)
 	g_autoptr(GBytes) bytes = g_bytes_new(uri_text, strlen(uri_text));
 	GdkContentProvider *providers[] = {
 		gdk_content_provider_new_typed(GDK_TYPE_FILE_LIST, file_list),
-		gdk_content_provider_new_for_bytes("text/uri-list", bytes),
-		gdk_content_provider_new_typed(G_TYPE_STRING, uri_text)
+		gdk_content_provider_new_for_bytes("text/uri-list", bytes)
 	};
 	g_boxed_free(GDK_TYPE_FILE_LIST, file_list);
 
@@ -148,7 +147,7 @@ void dnd_set_drag_icon(GtkDragSource *source, GdkPixbuf *pixbuf, guint items, Fi
 		pixbuf_draw_layout(icon, layout, x, y, {255, 255, 255, 255});
 		}
 
-	g_autoptr(GdkTexture) texture = gdk_texture_new_for_pixbuf(icon);
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(icon);
 	gtk_drag_source_set_icon(source, GDK_PAINTABLE(texture), -8, -6);
 }
 

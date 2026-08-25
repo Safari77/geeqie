@@ -45,7 +45,9 @@ add_global_arguments('-Wno-overlength-strings', language : 'c')
 add_global_arguments('-include', 'debug.h', language : 'cpp')
 
 # To inhibit warnings for deprecated GTK stuff
-add_global_arguments('-Wno-deprecated-declarations', language : 'cpp')
+if not get_option('deprecated_warnings') and not get_option('all_deprecated_warnings')
+    add_global_arguments('-Wno-deprecated-declarations', language : 'cpp')
+endif
 
 # Project requirements
 # code_sources is all human-written geeqie C/C++ code
@@ -142,6 +144,7 @@ summary({'gq_appdir': gq_appdir,
 # Create the define constants used in the sources. Set via config.h.in
 conf_data = configuration_data()
 conf_data.set('DEBUG', debug)
+conf_data.set('SHOW_ALL_DEPRECATED_WARNINGS', get_option('all_deprecated_warnings'))
 
 conf_data.set('FD_VERBOSE_DEBUG', 0)
 if get_option('fd_verbose_debug').allowed()
@@ -836,22 +839,6 @@ if xvfb.found()
     summary({'Bash completions' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
 else
     summary({'Bash completions' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
-endif
-
-# glib types checks
-if get_option('glib-types').allowed()
-    cc_sources = []
-    glib_types_check = find_program('check-glib-types.sh', dirs : buildauxdir, required : true)
-
-    foreach source_file : code_sources
-        source_file_name = fs.name(source_file)
-        if source_file_name.endswith('.cc')
-            test('Glib Types_ ' + source_file_name, glib_types_check, args : [meson.project_source_root(), meson.project_build_root(), source_file], timeout : 200, suite : 'analysis')
-        endif
-    endforeach
-    summary({'Glib Types' : ['Test runs:', true]}, section : 'Testing', bool_yn : true)
-else
-    summary({'Glib Types' : ['Test runs:', false]}, section : 'Testing', bool_yn : true)
 endif
 
 # Unit tests

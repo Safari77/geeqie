@@ -186,7 +186,7 @@ void help_window_show(const gchar *key)
 
 static void help_search_window_show_icon_press(GtkEntry *edit_widget, GtkEntryIconPosition, gpointer)
 {
-	gq_gtk_entry_set_text(edit_widget, "");
+	entry_set_text(edit_widget, "");
 }
 
 static void help_search_window_ok_cb(GenericDialog *, gpointer data)
@@ -234,11 +234,10 @@ void help_search_window_show()
 	pref_table_label(table, 0, 0, _("Search terms:"), GTK_ALIGN_END);
 	gtk_grid_attach(GTK_GRID(table), edit_widget, 1, 0, 1, 1);
 	generic_dialog_attach_default(gd, edit_widget);
-	gtk_widget_show(edit_widget);
 
 	gtk_widget_grab_focus(edit_widget);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 void help_pdf()

@@ -37,7 +37,6 @@
 
 #include "bar-sort.h"
 #include "bar.h"
-#include "compat.h"
 #include "filedata.h"
 #include "histogram.h"
 #include "history-list.h"
@@ -49,7 +48,6 @@
 #include "layout-util.h"
 #include "main-defines.h"
 #include "main.h"
-#include "menu.h"
 #include "metadata.h"
 #include "misc.h"
 #include "options.h"
@@ -435,9 +433,14 @@ static void layout_path_entry_tab_cb(LayoutWindow *lw, const gchar *path)
 		if ((!lw->dir_fd || strcmp(lw->dir_fd->path, buf) != 0) && layout_set_path(lw, buf))
 			{
 			gtk_widget_grab_focus(lw->path_entry);
-			gint pos = -1;
-			/* put the G_DIR_SEPARATOR back, if we are in tab completion for a dir and result was path change */
-			gtk_editable_insert_text(GTK_EDITABLE(lw->path_entry), G_DIR_SEPARATOR_S, -1, &pos);
+
+			const gchar *entry_text = gtk_editable_get_text(GTK_EDITABLE(lw->path_entry));
+			if (!g_str_has_suffix(entry_text, G_DIR_SEPARATOR_S))
+				{
+				/* Keep directory results ready for completion of the next component. */
+				gint pos = -1;
+				gtk_editable_insert_text(GTK_EDITABLE(lw->path_entry), G_DIR_SEPARATOR_S, -1, &pos);
+				}
 			gtk_editable_set_position(GTK_EDITABLE(lw->path_entry), -1);
 			}
 		}
@@ -506,7 +509,6 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 
 	menu_tool_bar = layout_actions_menu_tool_bar(lw);
 	DEBUG_NAME(menu_tool_bar);
-	gtk_widget_show(menu_tool_bar);
 
 	if (!lw->scrolled_window)
 		{
@@ -518,7 +520,7 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 	if (gtk_widget_get_parent(menu_tool_bar) != lw->scrolled_window)
 		{
 		widget_remove_from_parent(menu_tool_bar);
-		gq_gtk_container_add(lw->scrolled_window, menu_tool_bar);
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(lw->scrolled_window), menu_tool_bar);
 		}
 
 	if (!options->expand_menu_toolbar)
@@ -528,19 +530,16 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 			GtkWidget *menu_bar = layout_actions_menu_bar(lw);
 
 			widget_remove_from_parent(menu_bar);
-			gq_gtk_box_pack_start(GTK_BOX(box), menu_bar, FALSE, FALSE, 0);
+			gtk_box_append(GTK_BOX(box), menu_bar);
 			}
 
 		widget_remove_from_parent(lw->scrolled_window);
-		gq_gtk_box_pack_start(GTK_BOX(box), lw->scrolled_window, FALSE, FALSE, 0);
-
-		gq_gtk_widget_show_all(lw->scrolled_window);
+		gtk_box_append(GTK_BOX(box), lw->scrolled_window);
 		}
 	else
 		{
 		widget_remove_from_parent(lw->scrolled_window);
-		gq_gtk_box_pack_start(GTK_BOX(lw->main_box), lw->scrolled_window, FALSE, FALSE, 0);
-		gq_gtk_widget_show_all(lw->scrolled_window);
+		gtk_box_prepend(GTK_BOX(lw->main_box), lw->scrolled_window);
 		}
 
 	if (options->hamburger_menu)
@@ -548,7 +547,6 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 		GtkWidget *header = gtk_header_bar_new();
 		gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(header), TRUE);
 		gtk_window_set_titlebar(GTK_WINDOW(lw->window), header);
-		gq_gtk_widget_show_all(header);
 		GtkWidget *menu_button = gtk_menu_button_new();
 		GtkWidget *image = gtk_image_new_from_icon_name("open-menu-symbolic");
 
@@ -587,14 +585,16 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 		layout_path_entry_history_cb(lw, path);
 		});
 
-	gq_gtk_box_pack_start(GTK_BOX(box), tabcomp, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(box), tabcomp);
 
 	gtk_widget_set_has_tooltip(tabcomp, TRUE);
 	g_signal_connect(G_OBJECT(tabcomp), "query_tooltip", G_CALLBACK(path_entry_tooltip_cb), lw);
 
 	GtkWidget *box_folders = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 	DEBUG_NAME(box_folders);
-	gq_gtk_box_pack_start(GTK_BOX(box), box_folders, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(box_folders, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(box_folders, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box), box_folders);
 
 	lw->vd = vd_new(lw);
 
@@ -604,7 +604,6 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 	DEBUG_NAME(lw->dir_view);
 
 	gtk_paned_set_end_child(GTK_PANED(box_folders), lw->dir_view);
-	gtk_widget_show(lw->dir_view);
 
 	scd = shortcuts_new(lw);
 	DEBUG_NAME(scd);
@@ -613,11 +612,9 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 
 	gtk_paned_set_position(GTK_PANED(box_folders), lw->options.folder_window.vdivider_pos);
 
-	gtk_widget_show(box_folders);
 
 	g_signal_connect(G_OBJECT(box_folders), "notify::position", G_CALLBACK(layout_box_folders_changed_cb), lw);
 
-	gtk_widget_show(box);
 
 	return box;
 }
@@ -744,16 +741,14 @@ static GtkWidget *layout_sort_button(LayoutWindow *lw, GtkWidget *box)
 	GtkWidget *frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
 	gtk_widget_add_css_class(frame, "frame");
-	gq_gtk_box_pack_start(GTK_BOX(box), frame, FALSE, FALSE, 0);
-	gtk_widget_show(frame);
+	gtk_box_append(GTK_BOX(box), frame);
 
 	button = layout_info_menu_button_new(sort_type_get_text(lw->options.file_view_list_sort.method), GQ_ICON_PAN_DOWN);
 	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), layout_sort_popover_new(lw));
 	gtk_widget_add_css_class(button, "flat");
 
-	gq_gtk_container_add(frame, button);
+	gtk_frame_set_child(GTK_FRAME(frame), button);
 
-	gtk_widget_show(button);
 
 	return button;
 }
@@ -820,17 +815,15 @@ static GtkWidget *layout_zoom_button(LayoutWindow *, GtkWidget *box, gint size, 
 	if (size) gtk_widget_set_size_request(frame, size, -1);
 	gtk_widget_add_css_class(frame, "frame");
 
-	gq_gtk_box_pack_start(GTK_BOX(box), frame, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(box), frame);
 
-	gtk_widget_show(frame);
 
 	button = layout_info_menu_button_new("1:1", GQ_ICON_PAN_DOWN);
 
 	gtk_widget_add_css_class(button, "flat");
 	gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), layout_zoom_popover_new());
 
-	gq_gtk_container_add(frame, button);
-	gtk_widget_show(button);
+	gtk_frame_set_child(GTK_FRAME(frame), button);
 
 	return button;
 }
@@ -1030,18 +1023,21 @@ static GtkWidget *layout_status_label(const gchar *text, GtkWidget *box, gboolea
 	gtk_widget_add_css_class(frame, "frame");
 	if (start)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(box), frame, expand, expand, 0);
+		gtk_widget_set_hexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? expand : FALSE);
+		gtk_widget_set_vexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? expand : FALSE);
+		gtk_box_append(GTK_BOX(box), frame);
 		}
 	else
 		{
-		gq_gtk_box_pack_end(GTK_BOX(box), frame, expand, expand, 0);
+		gtk_widget_set_hexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? expand : FALSE);
+		gtk_widget_set_vexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? expand : FALSE);
+		gtk_widget_set_halign(frame, GTK_ALIGN_START);
+		gtk_box_append(GTK_BOX(box), frame);
 		}
-	gtk_widget_show(frame);
 
 	label = gtk_label_new(text ? text : "");
 	gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-	gq_gtk_container_add(frame, label);
-	gtk_widget_show(label);
+	gtk_frame_set_child(GTK_FRAME(frame), label);
 
 	return label;
 }
@@ -1064,15 +1060,14 @@ static void layout_status_setup(LayoutWindow *lw, GtkWidget *box, gboolean small
 		lw->info_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		DEBUG_NAME(lw->info_box);
 		}
-	gq_gtk_box_pack_end(GTK_BOX(box), lw->info_box, FALSE, FALSE, 0);
-	gtk_widget_show(lw->info_box);
+	gtk_widget_set_valign(lw->info_box, GTK_ALIGN_START);
+	gtk_box_append(GTK_BOX(box), lw->info_box);
 
 	if (small_format)
 		{
 		hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		DEBUG_NAME(hbox);
-		gq_gtk_box_pack_start(GTK_BOX(lw->info_box), hbox, FALSE, FALSE, 0);
-		gtk_widget_show(hbox);
+		gtk_box_append(GTK_BOX(lw->info_box), hbox);
 		}
 	else
 		{
@@ -1085,12 +1080,10 @@ static void layout_status_setup(LayoutWindow *lw, GtkWidget *box, gboolean small
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(lw->info_progress_bar), "");
 	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(lw->info_progress_bar), TRUE);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), lw->info_progress_bar, FALSE, FALSE, 0);
-	gtk_widget_show(lw->info_progress_bar);
+	gtk_box_append(GTK_BOX(hbox), lw->info_progress_bar);
 
 	lw->info_sort = layout_sort_button(lw, hbox);
 	gtk_widget_set_tooltip_text(lw->info_sort, _("Select sort order"));
-	gtk_widget_show(lw->info_sort);
 
 	lw->info_status = layout_status_label(nullptr, lw->info_box, TRUE, 0, (!small_format));
 	DEBUG_NAME(lw->info_status);
@@ -1100,8 +1093,7 @@ static void layout_status_setup(LayoutWindow *lw, GtkWidget *box, gboolean small
 		{
 		hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		DEBUG_NAME(hbox);
-		gq_gtk_box_pack_start(GTK_BOX(lw->info_box), hbox, FALSE, FALSE, 0);
-		gtk_widget_show(hbox);
+		gtk_box_append(GTK_BOX(lw->info_box), hbox);
 		}
 	lw->info_details = layout_status_label(nullptr, hbox, TRUE, 0, TRUE);
 	DEBUG_NAME(lw->info_details);
@@ -1111,25 +1103,33 @@ static void layout_status_setup(LayoutWindow *lw, GtkWidget *box, gboolean small
 	toolbar_frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(toolbar_frame);
 	gtk_widget_add_css_class(toolbar_frame, "frame");
-	gq_gtk_container_add(toolbar_frame, toolbar);
-	gtk_widget_show(toolbar_frame);
-	gtk_widget_show(toolbar);
-	gq_gtk_box_pack_end(GTK_BOX(hbox), toolbar_frame, FALSE, FALSE, 0);
+	gtk_frame_set_child(GTK_FRAME(toolbar_frame), toolbar);
 	lw->info_zoom = layout_zoom_button(lw, hbox, ZOOM_LABEL_WIDTH, TRUE);
 	gtk_widget_set_tooltip_text(lw->info_zoom, _("Select zoom and scroll mode"));
-	gtk_widget_show(lw->info_zoom);
+
+	GtkWidget *status_end_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_widget_set_hexpand(status_end_box, TRUE);
+	gtk_widget_set_halign(status_end_box, GTK_ALIGN_END);
+	gtk_box_append(GTK_BOX(hbox), status_end_box);
 
 	if (small_format)
 		{
+		gtk_box_append(GTK_BOX(status_end_box), toolbar_frame);
+
 		hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		DEBUG_NAME(hbox);
-		gq_gtk_box_pack_start(GTK_BOX(lw->info_box), hbox, FALSE, FALSE, 0);
-		gtk_widget_show(hbox);
+		gtk_box_append(GTK_BOX(lw->info_box), hbox);
+
+		status_end_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+		gtk_widget_set_hexpand(status_end_box, TRUE);
+		gtk_widget_set_halign(status_end_box, GTK_ALIGN_END);
+		gtk_box_append(GTK_BOX(hbox), status_end_box);
 		}
-	lw->info_pixel = layout_status_label(nullptr, hbox, FALSE, 0, small_format); /* expand only in small format */
+	lw->info_pixel = layout_status_label(nullptr, status_end_box, TRUE, 0, small_format); /* expand only in small format */
 	DEBUG_NAME(lw->info_pixel);
 	gtk_widget_set_tooltip_text(lw->info_pixel, _("[Pixel x,y coord]: (Pixel R,G,B value)"));
-	if (!lw->options.show_info_pixel) gtk_widget_hide(gtk_widget_get_parent(lw->info_pixel));
+	if (!lw->options.show_info_pixel) gtk_widget_set_visible(gtk_widget_get_parent(lw->info_pixel), FALSE);
+	if (!small_format) gtk_box_append(GTK_BOX(status_end_box), toolbar_frame);
 }
 
 /*
@@ -1373,7 +1373,7 @@ static void layout_sync_path(LayoutWindow *lw)
 {
 	if (!lw->dir_fd) return;
 
-	if (lw->path_entry) gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
+	if (lw->path_entry) entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 
 	if (lw->vd) vd_set_fd(lw->vd, lw->dir_fd);
 	if (lw->vf) vf_set_fd(lw->vf, lw->dir_fd);
@@ -1584,8 +1584,8 @@ static gboolean layout_geometry_get(LayoutWindow *lw, GdkRectangle &rect)
 
 gboolean layout_geometry_get_dividers(LayoutWindow *lw, gint *h, gint *v)
 {
-	GtkAllocation h_allocation;
-	GtkAllocation v_allocation;
+	gint h_size = -1;
+	gint v_size = -1;
 
 	if (!layout_valid(&lw)) return FALSE;
 
@@ -1593,27 +1593,27 @@ gboolean layout_geometry_get_dividers(LayoutWindow *lw, gint *h, gint *v)
 		{
 		GtkWidget *child = gtk_paned_get_start_child(GTK_PANED(lw->h_pane));
 
-		gtk_widget_get_allocation(child, &h_allocation);
+		h_size = gtk_widget_get_width(child);
 		}
 
 	if (lw->v_pane)
 		{
 		GtkWidget *child = gtk_paned_get_start_child(GTK_PANED(lw->v_pane));
-		gtk_widget_get_allocation(child, &v_allocation);
+		v_size = gtk_widget_get_height(child);
 		}
 
-	if (lw->h_pane && h_allocation.x >= 0)
+	if (h_size >= 0)
 		{
-		*h = h_allocation.width;
+		*h = h_size;
 		}
 	else if (h != &lw->options.main_window.hdivider_pos)
 		{
 		*h = lw->options.main_window.hdivider_pos;
 		}
 
-	if (lw->v_pane && v_allocation.x >= 0)
+	if (v_size >= 0)
 		{
-		*v = v_allocation.height;
+		*v = v_size;
 		}
 	else if (v != &lw->options.main_window.vdivider_pos)
 		{
@@ -1712,7 +1712,6 @@ static void layout_location_compute(LayoutLocation l1, LayoutLocation l2,
 
 static gboolean layout_geometry_get_tools(LayoutWindow *lw, GdkRectangle &rect, gint &divider_pos)
 {
-	GtkAllocation allocation;
 	if (!layout_valid(&lw)) return FALSE;
 
 	if (!lw->tools || !gtk_widget_get_visible(lw->tools))
@@ -1725,15 +1724,15 @@ static gboolean layout_geometry_get_tools(LayoutWindow *lw, GdkRectangle &rect, 
 		}
 
 	rect = widget_get_root_origin_geometry(lw->tools);
-	gtk_widget_get_allocation(gtk_paned_get_start_child(GTK_PANED(lw->tools_pane)), &allocation);
+	GtkWidget *child = gtk_paned_get_start_child(GTK_PANED(lw->tools_pane));
 
 	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(lw->tools_pane)) == GTK_ORIENTATION_VERTICAL)
 		{
-		divider_pos = allocation.height;
+		divider_pos = gtk_widget_get_height(child);
 		}
 	else
 		{
-		divider_pos = allocation.width;
+		divider_pos = gtk_widget_get_width(child);
 		}
 
 	return TRUE;
@@ -1767,14 +1766,14 @@ static void layout_tools_hide(LayoutWindow *lw, gboolean hide)
 		if (gtk_widget_get_visible(lw->tools))
 			{
 			layout_tools_geometry_sync(lw);
-			gtk_widget_hide(lw->tools);
+			gtk_widget_set_visible(lw->tools, FALSE);
 			}
 		}
 	else
 		{
 		if (!gtk_widget_get_visible(lw->tools))
 			{
-			gtk_widget_show(lw->tools);
+			gtk_widget_set_visible(lw->tools, TRUE);
 			if (lw->vf) vf_refresh(lw->vf);
 			}
 		}
@@ -1818,7 +1817,10 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 		gtk_window_set_default_size(GTK_WINDOW(lw->tools), TOOLWINDOW_DEF_WIDTH, TOOLWINDOW_DEF_HEIGHT);
 
 		gtk_window_set_resizable(GTK_WINDOW(lw->tools), TRUE);
-		gq_gtk_widget_set_border_width(lw->tools, 0);
+		gtk_widget_set_margin_top(lw->tools, 0);
+		gtk_widget_set_margin_bottom(lw->tools, 0);
+		gtk_widget_set_margin_start(lw->tools, 0);
+		gtk_widget_set_margin_end(lw->tools, 0);
 
 		if (options->expand_menu_toolbar)
 			{
@@ -1832,39 +1834,36 @@ static void layout_tools_setup(LayoutWindow *lw, GtkWidget *tools, GtkWidget *fi
 		{
 		layout_tools_geometry_sync(lw);
 		/* dump the contents */
-		gq_gtk_widget_destroy(gtk_widget_get_first_child(lw->tools));
+		gtk_window_set_child(GTK_WINDOW(lw->tools), nullptr);
 		}
 
 	layout_actions_add_window(lw, lw->tools);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(vbox);
-	gq_gtk_container_add(lw->tools, vbox);
+	gtk_window_set_child(GTK_WINDOW(lw->tools), vbox);
 	if (options->expand_menu_toolbar)
 		{
 		if (!options->hamburger_menu)
 			{
 			widget_remove_from_parent(lw->menu_bar);
-			gq_gtk_box_pack_start(GTK_BOX(vbox), lw->menu_bar, FALSE, FALSE, 0);
+			gtk_box_append(GTK_BOX(vbox), lw->menu_bar);
 			}
 
 		widget_remove_from_parent(lw->scrolled_window);
-		gq_gtk_box_pack_start(GTK_BOX(vbox), lw->scrolled_window, FALSE, FALSE, 0);
+		gtk_box_append(GTK_BOX(vbox), lw->scrolled_window);
 		}
-	gtk_widget_show(vbox);
-
-	layout_status_setup(lw, vbox, TRUE);
 
 	lw->tools_pane = gtk_paned_new(vertical ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
 	DEBUG_NAME(lw->tools_pane);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), lw->tools_pane, TRUE, TRUE, 0);
-	gtk_widget_show(lw->tools_pane);
+	gtk_widget_set_hexpand(lw->tools_pane, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(lw->tools_pane, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), lw->tools_pane);
+	layout_status_setup(lw, vbox, TRUE);
 
 	gtk_paned_set_start_child(GTK_PANED(lw->tools_pane), w1);
 	gtk_paned_set_end_child(GTK_PANED(lw->tools_pane), w2);
 
-	gtk_widget_show(tools);
-	gtk_widget_show(files);
 
 	if (new_window)
 		{
@@ -1968,18 +1967,25 @@ if (!lw)
 		{
 		if (lw->split_images[i])
 			{
-			gtk_widget_hide(lw->split_images[i]->widget);
+			gtk_widget_set_visible(lw->split_images[i]->widget, FALSE);
 			if (gtk_widget_get_parent(lw->split_images[i]->widget) != lw->utility_paned)
 				widget_remove_from_parent(lw->split_images[i]->widget);
 			}
 		}
-	gq_gtk_container_remove(lw->utility_paned, lw->split_image_widget);
+	if (gtk_paned_get_start_child(GTK_PANED(lw->utility_paned)) == lw->split_image_widget)
+		{
+		gtk_paned_set_start_child(GTK_PANED(lw->utility_paned), nullptr);
+		}
+	else if (gtk_paned_get_end_child(GTK_PANED(lw->utility_paned)) == lw->split_image_widget)
+		{
+		gtk_paned_set_end_child(GTK_PANED(lw->utility_paned), nullptr);
+		}
 
 	image = layout_image_setup_split(lw, mode);
 
 	gtk_paned_set_start_child(GTK_PANED(lw->utility_paned), image);
+	gtk_widget_set_visible(image, TRUE);
 
-	gtk_widget_show(image);
 	layout_util_sync(lw);
 }
 
@@ -2002,13 +2008,16 @@ static void layout_grid_setup(LayoutWindow *lw)
 	DEBUG_NAME(lw->group_box);
 	if (options->expand_menu_toolbar)
 		{
-		gq_gtk_box_pack_end(GTK_BOX(lw->main_box), lw->group_box, TRUE, TRUE, 0);
+		gtk_widget_set_vexpand(lw->group_box, TRUE);
+		gtk_widget_set_valign(lw->group_box, GTK_ALIGN_FILL);
+		gtk_box_append(GTK_BOX(lw->main_box), lw->group_box);
 		}
 	else
 		{
-		gq_gtk_box_pack_start(GTK_BOX(lw->main_box), lw->group_box, TRUE, TRUE, 0);
+		gtk_widget_set_hexpand(lw->group_box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->main_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(lw->group_box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->main_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(lw->main_box), lw->group_box);
 		}
-	gtk_widget_show(lw->group_box);
 
 	priority_location = layout_grid_compass(lw);
 
@@ -2034,8 +2043,9 @@ static void layout_grid_setup(LayoutWindow *lw)
 
 	if (lw->options.tools_float || lw->options.tools_hidden)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(lw->group_box), image_sb, TRUE, TRUE, 0);
-		gtk_widget_show(image_sb);
+		gtk_widget_set_hexpand(image_sb, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->group_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(image_sb, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->group_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(lw->group_box), image_sb);
 
 		layout_tools_setup(lw, tools, files);
 
@@ -2054,28 +2064,27 @@ static void layout_grid_setup(LayoutWindow *lw)
 	if (lw->tools)
 		{
 		layout_tools_geometry_sync(lw);
-		gq_gtk_widget_destroy(lw->tools);
+		gtk_window_destroy(GTK_WINDOW(lw->tools));
 		lw->tools = nullptr;
 		lw->tools_pane = nullptr;
 		}
-
-	layout_status_setup(lw, lw->group_box, FALSE);
 
 	layout_grid_compute(lw, image_sb, tools, files, &w1, &w2, &w3);
 
 	v = lw->v_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
 	DEBUG_NAME(v);
-	gq_gtk_widget_show_all(v);
 	h = lw->h_pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 	DEBUG_NAME(h);
-	gq_gtk_widget_show_all(h);
 
 	if (!layout_location_vertical(static_cast<LayoutLocation>(priority_location)))
 		{
 		std::swap(v, h);
 		}
 
-	gq_gtk_box_pack_start(GTK_BOX(lw->group_box), v, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(v, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->group_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(v, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->group_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(lw->group_box), v);
+	layout_status_setup(lw, lw->group_box, FALSE);
 
 	if (!layout_location_first(static_cast<LayoutLocation>(priority_location)))
 		{
@@ -2094,12 +2103,7 @@ static void layout_grid_setup(LayoutWindow *lw)
 		gtk_paned_set_end_child(GTK_PANED(h), w3);
 		}
 
-	gtk_widget_show(image_sb);
-	gtk_widget_show(tools);
-	gtk_widget_show(files);
 
-	gtk_widget_show(v);
-	gtk_widget_show(h);
 
 	/* fix to have image pane visible when it is left and priority widget */
 	if (lw->options.main_window.hdivider_pos == -1 &&
@@ -2190,7 +2194,7 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 	lw->info_pixel = nullptr;
 	lw->info_zoom = nullptr;
 
-	gq_gtk_container_remove(lw->main_box, lw->group_box);
+	gtk_box_remove(GTK_BOX(lw->main_box), lw->group_box);
 	lw->group_box = nullptr;
 
 	/* re-fill */
@@ -2305,23 +2309,23 @@ gboolean layout_tools_float_get(LayoutWindow *lw, gboolean *popped, gboolean *hi
 	return TRUE;
 }
 
-void current_layout_selectable_toolbars_toggle()
+void layout_selectable_toolbars_toggle(LayoutWindow *lw)
 {
-	if (!layout_valid(&current_lw)) return;
-	if (!current_lw->toolbar[TOOLBAR_MAIN]) return;
-	if (!current_lw->menu_bar) return;
-	if (!current_lw->info_box) return;
+	if (!layout_valid(&lw)) return;
+	if (!lw->toolbar[TOOLBAR_MAIN]) return;
+	if (!lw->menu_bar) return;
+	if (!lw->info_box) return;
 
-	current_lw->options.selectable_toolbars_hidden = !current_lw->options.selectable_toolbars_hidden;
+	lw->options.selectable_toolbars_hidden = !lw->options.selectable_toolbars_hidden;
 
-	gtk_widget_set_visible(current_lw->toolbar[TOOLBAR_MAIN],
-	                       !options->selectable_bars.tool_bar || !current_lw->options.selectable_toolbars_hidden);
+	gtk_widget_set_visible(lw->toolbar[TOOLBAR_MAIN],
+	                       !options->selectable_bars.tool_bar || !lw->options.selectable_toolbars_hidden);
 
-	gtk_widget_set_visible(current_lw->menu_bar,
-	                       !options->selectable_bars.menu_bar || !current_lw->options.selectable_toolbars_hidden);
+	gtk_widget_set_visible(lw->menu_bar,
+	                       !options->selectable_bars.menu_bar || !lw->options.selectable_toolbars_hidden);
 
-	gtk_widget_set_visible(current_lw->info_box,
-	                       !options->selectable_bars.status_bar || !current_lw->options.selectable_toolbars_hidden);
+	gtk_widget_set_visible(lw->info_box,
+	                       !options->selectable_bars.status_bar || !lw->options.selectable_toolbars_hidden);
 }
 
 void layout_info_pixel_set(LayoutWindow *lw, gboolean show)
@@ -2351,7 +2355,7 @@ static void layout_config_close_cb(GtkWidget *, gpointer data)
 {
 	auto lc = static_cast<LayoutConfig *>(data);
 
-	gq_gtk_widget_destroy(lc->configwindow);
+	gtk_window_destroy(GTK_WINDOW(lc->configwindow));
 	free_layout_options_content(lc->options);
 	g_free(lc);
 }
@@ -2389,7 +2393,7 @@ static void layout_config_ok_cb(GtkWidget *widget, gpointer data)
 static void home_path_set_current_cb(GtkWidget *, gpointer data)
 {
 	auto lc = static_cast<LayoutConfig *>(data);
-	gq_gtk_entry_set_text(GTK_ENTRY(lc->home_path_entry), layout_get_path(lc->lw));
+	entry_set_text(GTK_ENTRY(lc->home_path_entry), layout_get_path(lc->lw));
 }
 
 template<StartUpPath startup_path>
@@ -2407,9 +2411,9 @@ void layout_show_config_window(LayoutWindow *lw)
 	GtkWidget *win_vbox;
 	GtkWidget *vbox;
 	GtkWidget *button;
-	GtkWidget *ct_button;
+	GtkWidget *button_box;
 	GtkWidget *group;
-	GtkWidget *frame;
+	GtkWidget *hbox;
 
 	lc = g_new0(LayoutConfig, 1);
 	lc->lw = lw;
@@ -2425,52 +2429,38 @@ void layout_show_config_window(LayoutWindow *lw)
 
 	gtk_window_set_default_size(GTK_WINDOW(lc->configwindow), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(lc->configwindow), TRUE);
-	gq_gtk_widget_set_border_width(lc->configwindow, PREF_PAD_BORDER);
+	gtk_widget_set_margin_top(lc->configwindow, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(lc->configwindow, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(lc->configwindow, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(lc->configwindow, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	DEBUG_NAME(win_vbox);
-	gq_gtk_container_add(lc->configwindow, win_vbox);
-	gtk_widget_show(win_vbox);
+	gtk_window_set_child(GTK_WINDOW(lc->configwindow), win_vbox);
 
-	GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
-	gtk_widget_set_halign(hbox, GTK_ALIGN_END);
-	gq_gtk_box_pack_end(GTK_BOX(win_vbox), hbox, FALSE, FALSE, 0);
-
-	button = pref_button_new(nullptr, GQ_ICON_OK, "OK",
-				 G_CALLBACK(layout_config_ok_cb), lc);
-	gq_gtk_container_add(hbox, button);
-	gtk_window_set_default_widget(GTK_WINDOW(lc->configwindow), button);
-	gtk_widget_show(button);
-
-	ct_button = button;
+	button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
+	gtk_widget_set_halign(button_box, GTK_ALIGN_END);
+	gtk_widget_set_valign(button_box, GTK_ALIGN_END);
 
 	button = pref_button_new(nullptr, GQ_ICON_HELP, _("Help"),
 				 G_CALLBACK(layout_config_help_cb), lc);
-	gq_gtk_container_add(hbox, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(button_box), button);
 
 	button = pref_button_new(nullptr, GQ_ICON_APPLY, _("Apply"),
 				 G_CALLBACK(layout_config_apply_cb), lc);
-	gq_gtk_container_add(hbox, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(button_box), button);
 
 	button = pref_button_new(nullptr, GQ_ICON_CANCEL, _("Cancel"),
 				 G_CALLBACK(layout_config_close_cb), lc);
-	gq_gtk_container_add(hbox, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(button_box), button);
 
-	if (!get_alternative_button_order(lc->configwindow))
-		{
-		gq_gtk_box_reorder_child(GTK_BOX(hbox), ct_button, -1);
-		}
+	button = pref_button_new(nullptr, GQ_ICON_OK, "OK",
+	                         G_CALLBACK(layout_config_ok_cb), lc);
+	gtk_box_append(GTK_BOX(button_box), button);
+	gtk_window_set_default_widget(GTK_WINDOW(lc->configwindow), button);
 
-	frame = pref_frame_new(win_vbox, TRUE, nullptr, GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
-	DEBUG_NAME(frame);
-
-	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
+	vbox = pref_frame_new(win_vbox, TRUE, nullptr, GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	DEBUG_NAME(vbox);
-	gq_gtk_container_add(frame, vbox);
-	gtk_widget_show(vbox);
 
 
 	group = pref_group_new(vbox, FALSE, _("General options"), GTK_ORIENTATION_VERTICAL);
@@ -2503,10 +2493,12 @@ void layout_show_config_window(LayoutWindow *lw)
 
 	lc->layout_widget = layout_config_new(lw->options.style, lw->options.order);
 	DEBUG_NAME(lc->layout_widget);
-	gq_gtk_box_pack_start(GTK_BOX(group), lc->layout_widget, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(lc->layout_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(group))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(lc->layout_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(group))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(group), lc->layout_widget);
+	gtk_box_append(GTK_BOX(win_vbox), button_box);
 
-	gtk_widget_show(lc->layout_widget);
-	gtk_widget_show(lc->configwindow);
+	gtk_window_present(GTK_WINDOW(lc->configwindow));
 }
 
 /*
@@ -2604,7 +2596,7 @@ void layout_free(LayoutWindow *lw)
 		}
 
 	g_object_set_data(G_OBJECT(lw->window), "layout-window", nullptr);
-	gq_gtk_widget_destroy(lw->window);
+	gtk_window_destroy(GTK_WINDOW(lw->window));
 
 	if (lw->split_image_sizegroup) g_object_unref(lw->split_image_sizegroup);
 
@@ -2734,7 +2726,10 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 	register_main_window_actions(GTK_APPLICATION(app), (lw));
 
 	gtk_window_set_resizable(GTK_WINDOW(lw->window), TRUE);
-	gq_gtk_widget_set_border_width(lw->window, 0);
+	gtk_widget_set_margin_top(lw->window, 0);
+	gtk_widget_set_margin_bottom(lw->window, 0);
+	gtk_widget_set_margin_start(lw->window, 0);
+	gtk_widget_set_margin_end(lw->window, 0);
 
 	gtk_widget_set_size_request(lw->window, 32, 32);
 
@@ -2768,8 +2763,7 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 
 	lw->main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(lw->main_box);
-	gq_gtk_container_add(lw->window, lw->main_box);
-	gtk_widget_show(lw->main_box);
+	gtk_window_set_child(GTK_WINDOW(lw->window), lw->main_box);
 
 	layout_grid_setup(lw);
 	layout_menu_new_window_update(lw);
@@ -2800,7 +2794,7 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 	/* Refer to the activate signal in main */
 	if (layout_window_count() == 1)
 		{
-		gtk_widget_hide(lw->window);
+		gtk_widget_set_visible(lw->window, FALSE);
 		}
 	else
 		{

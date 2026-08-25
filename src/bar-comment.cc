@@ -30,7 +30,6 @@
 #include <glib-object.h>
 
 #include "bar.h"
-#include "compat.h"
 #include "filedata.h"
 #include "intl.h"
 #include "layout.h"
@@ -41,7 +40,6 @@
 #if HAVE_SPELL
 #  include "spell.h"
 #endif
-#include "ui-menu.h"
 #include "ui-misc.h"
 
 static void bar_pane_comment_changed(GtkTextBuffer *buffer, gpointer data);
@@ -269,13 +267,11 @@ static GtkWidget *bar_pane_comment_new(const gchar *id, const gchar *title, cons
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 
 	gtk_widget_set_size_request(pcd->widget, -1, height);
-	gtk_widget_show(scrolled);
 
 	pcd->comment_view = gtk_text_view_new();
 	gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(pcd->comment_view), GTK_WRAP_WORD);
-	gq_gtk_container_add(scrolled, pcd->comment_view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), pcd->comment_view);
 	bar_pane_comment_set_extra_menu(pcd);
-	gtk_widget_show(pcd->comment_view);
 
 #if HAVE_SPELL
 	if (g_strcmp0(key, "Xmp.xmp.Rating") != 0)

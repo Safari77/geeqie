@@ -31,7 +31,6 @@ void delete_cb(gpointer data)
 	delete static_cast<T *>(data);
 }
 
-gint gq_gtk_dialog_run(GtkDialog *dialog);
 gchar *convert_rating_to_stars(gint rating);
 gchar *decode_geo_parameters(const gchar *input_text);
 gchar *expand_tilde(const gchar *filename);
@@ -40,13 +39,10 @@ gchar *utf8_validate_or_convert(const gchar *text);
 gdouble get_zoom_increment();
 gint get_cpu_cores();
 gint utf8_compare(const gchar *s1, const gchar *s2, gboolean case_sensitive);
-gint gq_gtk_tree_iter_utf8_collate(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b, gint sort_column_id);
 int runcmd(const gchar *cmd);
-void gq_gtk_entry_set_text(GtkEntry *entry, const gchar *text);
+void entry_set_text(GtkEntry *entry, const gchar *text);
 
 void shift_color(GdkRGBA &src, gshort val = -1, gint direction = 0);
-
-void cell_renderer_height_override(GtkCellRenderer *renderer); /**< cell max with/height hack utility */
 
 GtkWidget *widget_get_toplevel(GtkWidget *widget);
 

@@ -50,6 +50,7 @@
 #include "menu.h"
 #include "misc.h"
 #include "options.h"
+#include "pixbuf-renderer.h"
 #include "pixbuf-util.h"
 #include "print.h"
 #include "slideshow.h"
@@ -574,16 +575,13 @@ static void scroll_cb(ImageWindow *imd, const GqScrollEvent *event, gpointer dat
 		}
 	else
 		{
-		switch (event->direction)
+		const gint steps = image_scroll_navigation_steps(imd, event);
+		for (gint step = 0; step < std::abs(steps); step++)
 			{
-			case GDK_SCROLL_UP:
+			if (steps < 0)
 				view_step_prev(vw);
-				break;
-			case GDK_SCROLL_DOWN:
+			else
 				view_step_next(vw);
-				break;
-			default:
-				break;
 			}
 		}
 }
@@ -723,7 +721,7 @@ static void view_window_close(ViewWindow *vw)
 {
 	view_slideshow_stop(vw);
 	view_fullscreen_toggle(vw, TRUE);
-	gq_gtk_widget_destroy(vw->window);
+	gtk_window_destroy(GTK_WINDOW(vw->window));
 }
 
 static gboolean view_window_delete_cb(GtkWidget *, gpointer data)
@@ -801,6 +799,20 @@ static void view_copy_cb(GSimpleAction *, GVariant *, gpointer data)
 
 	imd = view_window_active_image(vw);
 	file_util_copy(image_get_fd(imd), nullptr, nullptr, imd->widget);
+}
+
+static void view_copy_image_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	auto vw = static_cast<ViewWindow *>(data);
+	ImageWindow *imd = view_window_active_image(vw);
+	GdkPixbuf *pixbuf = image_get_pixbuf(imd);
+	if (!pixbuf) return;
+
+	GdkClipboard *clipboard = gdk_display_get_clipboard(gtk_widget_get_display(imd->widget));
+	if (!clipboard) return;
+
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
+	gdk_clipboard_set_texture(clipboard, texture);
 }
 
 static void view_move_cb(GSimpleAction *, GVariant *, gpointer data)
@@ -991,7 +1003,10 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 	gtk_widget_set_size_request(vw->window, DEFAULT_MINIMAL_WINDOW_SIZE, DEFAULT_MINIMAL_WINDOW_SIZE);
 
 	gtk_window_set_resizable(GTK_WINDOW(vw->window), TRUE);
-	gq_gtk_widget_set_border_width(vw->window, 0);
+	gtk_widget_set_margin_top(vw->window, 0);
+	gtk_widget_set_margin_bottom(vw->window, 0);
+	gtk_widget_set_margin_start(vw->window, 0);
+	gtk_widget_set_margin_end(vw->window, 0);
 
 	vw->imd = image_new(FALSE);
 	image_color_profile_set(vw->imd,
@@ -1006,8 +1021,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 	image_auto_refresh_enable(vw->imd, TRUE);
 	image_top_window_set_sync(vw->imd, TRUE);
 
-	gq_gtk_container_add(vw->window, vw->imd->widget);
-	gtk_widget_show(vw->imd->widget);
+	gtk_window_set_child(GTK_WINDOW(vw->window), vw->imd->widget);
 
 	view_window_dnd_init(vw);
 
@@ -1077,7 +1091,7 @@ static ViewWindow *real_view_window_new(FileData *fd, GList *list, CollectionDat
 
 	gtk_window_set_default_size(GTK_WINDOW(vw->window), size.width, size.height);
 
-	gtk_widget_show(vw->window);
+	gtk_window_present(GTK_WINDOW(vw->window));
 
 	view_window_list.push_back(vw);
 
@@ -1221,7 +1235,7 @@ static void view_popup_menu(ViewWindow *vw, GtkWidget *parent, gdouble x, gdoubl
 	plugins_menu_populate(plugins_menu, "win.image-win-plugin-run", editmenu_fd_list);
 
 	GMenu *collections_menu = G_MENU(gtk_builder_get_object(builder, "collections-submenu"));
-	submenu_add_collections_new(collections_menu, TRUE, "win.image-win-collections", vw);
+	submenu_add_collections_new(collections_menu, "win.image-win-collections");
 
 	if (options->file_ops.confirm_move_to_trash)
 		{

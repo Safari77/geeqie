@@ -46,7 +46,6 @@
 #include "collect-io.h"
 #include "collect.h"
 #include "color-man.h"
-#include "compat.h"
 #include "desktop-file.h"
 #include "dupe.h"
 #include "editors.h"
@@ -208,7 +207,7 @@ static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModi
 		{
 		if (keyval == GDK_KEY_Escape && lw->dir_fd)
 			{
-			gq_gtk_entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
+			entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 			return TRUE;
 			}
 
@@ -262,21 +261,6 @@ static gboolean layout_key_press_common(GtkWidget *widget, guint keyval, GdkModi
 				break;
 			}
 
-		if (!stop_signal && !(state & GDK_CONTROL_MASK))
-			{
-			stop_signal = TRUE;
-
-			switch (keyval)
-				{
-				case GDK_KEY_Menu:
-					layout_image_menu_popup(lw);
-					break;
-
-				default:
-					stop_signal = FALSE;
-					break;
-				}
-			}
 		}
 
 	if (x != 0 || y != 0)
@@ -388,7 +372,7 @@ static void layout_menu_clear_marks_cb(GSimpleAction *, GVariant *, gpointer)
 	generic_dialog_add_button(gd, GQ_ICON_HELP, _("Help"),
 				clear_marks_help_cb, FALSE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void layout_menu_new_collection_cb(GSimpleAction *, GVariant *, gpointer)
@@ -475,7 +459,7 @@ static void layout_menu_copy_image_cb(GSimpleAction *, GVariant *, gpointer)
 		return;
 		}
 
-	GdkTexture *texture = gdk_texture_new_for_pixbuf(pixbuf);
+	GdkTexture *texture = pixbuf_to_texture(pixbuf);
 	gdk_clipboard_set_texture(clipboard, texture);
 	g_object_unref(texture);
 }
@@ -509,21 +493,6 @@ static void layout_menu_delete_cb(GSimpleAction *, GVariant *, gpointer)
 		file_util_delete(nullptr, layout_selection_list(lw), layout_window(lw), safe_delete);
 }
 
-static void layout_menu_return_cb(GSimpleAction *, GVariant *, gpointer)
-{
-
-}
-
-static void layout_menu_return_primary_cb(GSimpleAction *, GVariant *, gpointer)
-{
-
-}
-
-static void layout_menu_remove_cb(GSimpleAction *, GVariant *, gpointer)
-{
-
-}
-
 template<gboolean disable>
 static void layout_menu_disable_grouping_cb(GSimpleAction *, GVariant *, gpointer  )
 {
@@ -538,6 +507,13 @@ void layout_menu_close_cb(GSimpleAction *, GVariant *, gpointer)
 
 	layout_exit_fullscreen(lw);
 	layout_close(lw);
+}
+
+static void layout_menu_context_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	auto lw = static_cast<LayoutWindow *>(data);
+
+	layout_image_menu_popup(lw);
 }
 
 static void layout_menu_exit_cb(GSimpleAction *, GVariant *, gpointer)
@@ -561,20 +537,26 @@ static void layout_menu_rating_cb(GSimpleAction *, GVariant *, gpointer  )
 	layout_image_rating(lw, std::to_string(rating).c_str());
 }
 
-static void layout_menu_alter_desaturate_cb(GSimpleAction *action, GVariant  *, gpointer  )
+static void layout_menu_alter_desaturate_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean desaturate = g_variant_get_boolean(state);
 
-	layout_image_set_desaturate(lw, g_variant_get_boolean(g_action_get_state(G_ACTION(action))));
+	layout_image_set_desaturate(lw, desaturate);
+	g_simple_action_set_state(action, state);
 }
 
-static void layout_menu_alter_ignore_alpha_cb(GSimpleAction *action, GVariant   *, gpointer)
+static void layout_menu_alter_ignore_alpha_cb(GSimpleAction *action, GVariant *state, gpointer)
 {
-   auto lw = get_current_layout();
+	auto lw = get_current_layout();
+	const gboolean ignore_alpha = g_variant_get_boolean(state);
 
-	if (lw->options.ignore_alpha == g_variant_get_boolean(g_action_get_state(G_ACTION(action)))) return;
+	if (lw->options.ignore_alpha != ignore_alpha)
+		{
+		layout_image_set_ignore_alpha(lw, ignore_alpha);
+		}
 
-   layout_image_set_ignore_alpha(lw, g_variant_get_boolean(g_action_get_state(G_ACTION(action))));
+	g_simple_action_set_state(action, g_variant_new_boolean(lw->options.ignore_alpha));
 }
 
 static void layout_menu_exif_rotate_cb(GSimpleAction *action, GVariant *value, gpointer)
@@ -584,7 +566,7 @@ static void layout_menu_exif_rotate_cb(GSimpleAction *action, GVariant *value, g
 	gboolean active = g_variant_get_boolean(value);
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), value);
 
-	options->image.exif_rotate_enable = !active;
+	options->image.exif_rotate_enable = active;
 	layout_image_reset_orientation(lw);
 }
 
@@ -609,11 +591,13 @@ static void layout_menu_split_pane_sync_cb(GSimpleAction *action, GVariant *, gp
 	lw->options.split_pane_sync = active;
 }
 
-static void layout_menu_select_overunderexposed_cb(GSimpleAction *action, GVariant *, gpointer)
+static void layout_menu_select_overunderexposed_cb(GSimpleAction *action, GVariant *state, gpointer)
 {
 	auto lw = get_current_layout();
+	const gboolean enabled = g_variant_get_boolean(state);
 
-	layout_image_set_overunderexposed(lw, g_variant_get_boolean(g_action_get_state(G_ACTION(action))));
+	layout_image_set_overunderexposed(lw, enabled);
+	g_simple_action_set_state(action, g_variant_new_boolean(options->overunderexposed));
 }
 
 template<bool keep_date>
@@ -657,7 +641,7 @@ static void layout_menu_write_rotate_cb(GSimpleAction  *, GVariant *, gpointer)
 			generic_dialog_add_message(gd, GQ_ICON_DIALOG_ERROR, _("Image orientation"), message->str, TRUE);
 			generic_dialog_add_button(gd, GQ_ICON_OK, "OK", nullptr, TRUE);
 
-			gtk_widget_show(gd->dialog);
+			gtk_window_present(GTK_WINDOW(gd->dialog));
 			}
 	});
 }
@@ -808,9 +792,9 @@ static void layout_menu_list_cb(GSimpleAction *action, GVariant *state, gpointer
 		}
 }
 
-static void layout_menu_view_dir_as_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_menu_view_dir_as_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
 	if (!lw)
 		{
 		return;
@@ -822,11 +806,11 @@ static void layout_menu_view_dir_as_cb(GSimpleAction *action, GVariant *state, g
 
 	if (active)
 		{
-		layout_views_set(lw, DIRVIEW_LIST, lw->options.file_view_type);
+		layout_views_set(lw, DIRVIEW_TREE, lw->options.file_view_type);
 		}
 	else
 		{
-		layout_views_set(lw, DIRVIEW_TREE, lw->options.file_view_type);
+		layout_views_set(lw, DIRVIEW_LIST, lw->options.file_view_type);
 		}
 
 	g_simple_action_set_state((action), state);
@@ -855,7 +839,7 @@ static void open_with_data_free(OpenWithData *open_with_data)
 	g_object_unref(open_with_data->application);
 	g_object_unref(g_list_first(open_with_data->g_file_list)->data);
 	g_list_free(open_with_data->g_file_list);
-	gq_gtk_widget_destroy(open_with_data->app_chooser_dialog);
+	gtk_window_destroy(GTK_WINDOW(open_with_data->app_chooser_dialog));
 	g_free(open_with_data);
 }
 
@@ -936,18 +920,24 @@ static void layout_menu_open_with_cb(GSimpleAction *, GVariant *, gpointer)
 
 			open_with_data->g_file_list = g_list_append(nullptr, g_file_new_for_path(fd->path));
 
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+			G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 			open_with_data->app_chooser_dialog = gtk_app_chooser_dialog_new(nullptr, GTK_DIALOG_MODAL, G_FILE(g_list_first(open_with_data->g_file_list)->data));
 
 			widget = gtk_app_chooser_dialog_get_widget(GTK_APP_CHOOSER_DIALOG(open_with_data->app_chooser_dialog));
 
 			open_with_data->application = gtk_app_chooser_get_app_info(GTK_APP_CHOOSER(open_with_data->app_chooser_dialog));
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+			G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 
 			g_signal_connect(G_OBJECT(widget), "application-selected", G_CALLBACK(open_with_application_selected_cb), open_with_data);
 			g_signal_connect(G_OBJECT(widget), "application-activated", G_CALLBACK(open_with_application_activated_cb), open_with_data);
 			g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "response", G_CALLBACK(open_with_response_cb), open_with_data);
 			g_signal_connect(G_OBJECT(open_with_data->app_chooser_dialog), "close", G_CALLBACK(open_with_close), open_with_data);
 
-			gtk_widget_show(open_with_data->app_chooser_dialog);
+			gtk_window_present(GTK_WINDOW(open_with_data->app_chooser_dialog));
 			}
 		}
 }
@@ -1132,7 +1122,9 @@ static void layout_menu_open_recent_file_cb(GSimpleAction *, GVariant *, gpointe
 			 G_CALLBACK(open_recent_dialog_row_selected_cb), dialog_data);
 	g_signal_connect(dialog_data->list, "row-activated",
 			 G_CALLBACK(open_recent_dialog_row_activated_cb), dialog_data);
-	gq_gtk_box_pack_start(GTK_BOX(dialog_data->gd->vbox), dialog_data->list, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(dialog_data->list, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(dialog_data->gd->vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(dialog_data->list, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(dialog_data->gd->vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(dialog_data->gd->vbox), dialog_data->list);
 
 	HistoryList *recent_items = history_list_find_by_key("recent");
 
@@ -1162,7 +1154,10 @@ static void layout_menu_open_recent_file_cb(GSimpleAction *, GVariant *, gpointe
 			gtk_widget_add_css_class(path_label, "dim-label");
 			gtk_box_append(GTK_BOX(box), path_label);
 
-			gq_gtk_widget_set_border_width(box, 6);
+			gtk_widget_set_margin_top(box, 6);
+			gtk_widget_set_margin_bottom(box, 6);
+			gtk_widget_set_margin_start(box, 6);
+			gtk_widget_set_margin_end(box, 6);
 			gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
 			g_object_set_data_full(G_OBJECT(row), "recent-path", g_strdup(path.c_str()), g_free);
 			gtk_list_box_append(GTK_LIST_BOX(dialog_data->list), row);
@@ -1173,7 +1168,7 @@ static void layout_menu_open_recent_file_cb(GSimpleAction *, GVariant *, gpointe
 		{
 		GtkWidget *label = gtk_label_new(_("No recent files available."));
 		gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-		gq_gtk_box_pack_start(GTK_BOX(dialog_data->gd->vbox), label, FALSE, FALSE, 0);
+		gtk_box_append(GTK_BOX(dialog_data->gd->vbox), label);
 		}
 	else
 		{
@@ -1189,8 +1184,7 @@ static void layout_menu_open_recent_file_cb(GSimpleAction *, GVariant *, gpointe
 	gtk_widget_set_sensitive(dialog_data->open_button, FALSE);
 	open_recent_dialog_update(dialog_data);
 
-	gtk_widget_show(dialog_data->list);
-	gtk_widget_show(dialog_data->gd->dialog);
+	gtk_window_present(GTK_WINDOW(dialog_data->gd->dialog));
 }
 
 static void open_collection_cb(GFile *file, gpointer)
@@ -1280,10 +1274,9 @@ static void layout_menu_histogram_cb(GSimpleAction *action, GVariant *value , gp
 	gboolean active = g_variant_get_boolean(value);
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), value);
 
-	if (!active)
+	if (active)
 		{
 		image_osd_set(lw->image, static_cast<OsdShowFlags>(OSD_SHOW_INFO | OSD_SHOW_STATUS | OSD_SHOW_HISTOGRAM));
-		layout_util_sync_views(lw); /* show the overlay state, default channel and mode in the menu */
 		}
 	else
 		{
@@ -1291,15 +1284,21 @@ static void layout_menu_histogram_cb(GSimpleAction *action, GVariant *value , gp
 		if (flags & OSD_SHOW_HISTOGRAM)
 			image_osd_set(lw->image, static_cast<OsdShowFlags>(flags & ~OSD_SHOW_HISTOGRAM));
 		}
+
+	layout_util_sync_views(lw); /* show the overlay state, default channel and mode in the menu */
 }
 
-static void layout_menu_animate_cb(GSimpleAction *action, GVariant *value, gpointer)
+static void layout_menu_animate_cb(GSimpleAction *action, GVariant *value, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean enabled = g_variant_get_boolean(value);
 
-	layout_image_animate_toggle(lw);
+	if (lw->options.animate != enabled)
+		{
+		layout_image_animate_toggle(lw);
+		}
 
-	g_simple_action_set_state(action,  value);
+	g_simple_action_set_state(action, g_variant_new_boolean(lw->options.animate));
 }
 
 static void layout_menu_rectangular_selection_cb(GSimpleAction *action, GVariant *state, gpointer)
@@ -1435,13 +1434,14 @@ static void layout_menu_search_and_run_cb(GSimpleAction *, GVariant *, gpointer)
 }
 
 
-static void layout_menu_float_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_menu_float_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean floating = g_variant_get_boolean(state);
 	layout_exit_fullscreen(lw);
-	layout_tools_float_toggle(lw);
+	layout_tools_float_set(lw, floating, FALSE);
 
-	g_simple_action_set_state((action), state);
+	g_simple_action_set_state(action, g_variant_new_boolean(lw->options.tools_float));
 }
 
 static void layout_menu_hide_cb(GSimpleAction *, GVariant *, gpointer)
@@ -1452,16 +1452,18 @@ static void layout_menu_hide_cb(GSimpleAction *, GVariant *, gpointer)
 	layout_tools_hide_toggle(lw);
 }
 
-static void layout_menu_selectable_toolbars_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_menu_selectable_toolbars_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean hidden = g_variant_get_boolean(state);
 
-	if (lw->options.selectable_toolbars_hidden == g_variant_get_boolean(g_action_get_state(G_ACTION(action)))) return;
+	if (lw->options.selectable_toolbars_hidden != hidden)
+		{
+		layout_exit_fullscreen(lw);
+		layout_selectable_toolbars_toggle(lw);
+		}
 
-	layout_exit_fullscreen(lw);
-	current_layout_selectable_toolbars_toggle();
-
-	g_simple_action_set_state(action, state);
+	g_simple_action_set_state(action, g_variant_new_boolean(lw->options.selectable_toolbars_hidden));
 }
 
 static void layout_menu_info_pixel_cb(GSimpleAction *action, GVariant *state, gpointer)
@@ -1498,24 +1500,30 @@ static void layout_menu_bar_sort_cb(GSimpleAction *, GVariant *, gpointer)
 
 }
 
-static void layout_menu_hide_bars_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_menu_hide_bars_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean hidden = g_variant_get_boolean(state);
 
-	layout_bars_hide_toggle(lw);
+	if (lw->options.bars_state.hidden != hidden)
+		{
+		layout_bars_hide_toggle(lw);
+		}
 
-	bool enabled = g_variant_get_boolean(state);
-	g_simple_action_set_state(action, g_variant_new_boolean(!enabled));
+	g_simple_action_set_state(action, g_variant_new_boolean(lw->options.bars_state.hidden));
 }
 
-static void layout_menu_slideshow_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_menu_slideshow_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean enabled = g_variant_get_boolean(state);
 
-	layout_image_slideshow_toggle(lw);
+	if (layout_image_slideshow_active(lw) != enabled)
+		{
+		layout_image_slideshow_toggle(lw);
+		}
 
-	bool enabled = g_variant_get_boolean(state);
-	g_simple_action_set_state(action, g_variant_new_boolean(!enabled));
+	g_simple_action_set_state(action, g_variant_new_boolean(layout_image_slideshow_active(lw)));
 }
 
 static void layout_menu_slideshow_pause_cb(GSimpleAction *, GVariant *, gpointer)
@@ -1730,20 +1738,20 @@ static constexpr struct
 } keyboard_map_hardcoded[] = {
 	{"Scroll","Left"},
 	{"FastScroll", "&lt;Shift&gt;Left"},
-	{"Left Border", "&lt;Primary&gt;Left"},
-	{"Left Border", "&lt;Primary&gt;&lt;Shift&gt;Left"},
+	{"Left Border", "&lt;Control&gt;Left"},
+	{"Left Border", "&lt;Shift&gt;&lt;Control&gt;Left"},
 	{"Scroll", "Right"},
 	{"FastScroll", "&lt;Shift&gt;Right"},
-	{"Right Border", "&lt;Primary&gt;Right"},
-	{"Right Border", "&lt;Primary&gt;&lt;Shift&gt;Right"},
+	{"Right Border", "&lt;Control&gt;Right"},
+	{"Right Border", "&lt;Shift&gt;&lt;Control&gt;Right"},
 	{"Scroll", "Up"},
 	{"FastScroll", "&lt;Shift&gt;Up"},
-	{"Upper Border", "&lt;Primary&gt;Up"},
-	{"Upper Border", "&lt;Primary&gt;&lt;Shift&gt;Up"},
+	{"Upper Border", "&lt;Control&gt;Up"},
+	{"Upper Border", "&lt;Shift&gt;&lt;Control&gt;Up"},
 	{"Scroll", "Down"},
 	{"FastScroll", "&lt;Shift&gt;Down"},
-	{"Lower Border", "&lt;Primary&gt;Down"},
-	{"Lower Border", "&lt;Primary&gt;&lt;Shift&gt;Down"},
+	{"Lower Border", "&lt;Control&gt;Down"},
+	{"Lower Border", "&lt;Shift&gt;&lt;Control&gt;Down"},
 	{"Next/Drag", "M1"},
 	{"FastDrag", "&lt;Shift&gt;M1"},
 	{"DnD Start", "M2"},
@@ -1752,8 +1760,8 @@ static constexpr struct
 	{"NextImage", "MW5"},
 	{"ScrollUp", "&lt;Shift&gt;MW4"},
 	{"ScrollDown", "&lt;Shift&gt;MW5"},
-	{"ZoomIn", "&lt;Primary&gt;MW4"},
-	{"ZoomOut", "&lt;Primary&gt;MW5"},
+	{"ZoomIn", "&lt;Control&gt;MW4"},
+	{"ZoomOut", "&lt;Control&gt;MW5"},
 };
 
 static gchar *convert_template_line(const gchar *template_line, const GPtrArray *keyboard_map_array)
@@ -1792,6 +1800,7 @@ static gchar *convert_template_line(const gchar *template_line, const GPtrArray 
 static void convert_keymap_template_to_file(const gint fd, const GPtrArray *keyboard_map_array)
 {
 	g_autoptr(GIOChannel) channel = g_io_channel_unix_new(fd);
+	g_io_channel_set_close_on_unref(channel, TRUE);
 
 	g_autoptr(GInputStream) in_stream = g_resources_open_stream(GQ_RESOURCE_PATH_IMAGES "/keymap-template.svg", G_RESOURCE_LOOKUP_FLAGS_NONE, nullptr);
 	g_autoptr(GDataInputStream) data_stream = g_data_input_stream_new(in_stream);
@@ -1811,25 +1820,93 @@ static void convert_keymap_template_to_file(const gint fd, const GPtrArray *keyb
 	if (error) log_printf("Warning: Keyboard Map:%s\n", error->message);
 }
 
-static void layout_menu_kbd_map_cb(GSimpleAction *, GVariant *, gpointer)
+struct KeyboardMapScope
+{
+	const gchar *name;
+	const gchar *window_prefix;
+	const gchar *filename_type;
+};
+
+static constexpr KeyboardMapScope keyboard_map_scopes[] =
+{
+	{ N_("Main Window"), "win.main-win-", "main_window" },
+	{ N_("Image View Window"), "win.image-win-", "image_view_window" },
+	{ N_("Collection Window"), "win.collection-win-", "collection_window" },
+	{ N_("Duplicates Window"), "win.dupe-win-", "duplicates_window" },
+	{ N_("Pan View Window"), "win.pan-win-", "pan_view_window" },
+	{ N_("Search Window"), "win.search-win-", "search_window" },
+	{ N_("Advanced EXIF Window"), "win.advanced-exif-win-", "advanced_exif_window" },
+	{ N_("View File Window"), "win.view-file-", "view_file_window" },
+	{ N_("All Windows"), nullptr, "all_windows" },
+};
+
+struct KeyboardMapDialog
+{
+	GtkWidget *drop_down;
+};
+
+static void keyboard_map_show(const gchar *window_prefix, const gchar *filename_type)
 {
 	g_autofree gchar *tmp_file = nullptr;
+	g_autofree gchar *tmp_template = g_strdup_printf("geeqie_keymap_%s_XXXXXX.svg", filename_type);
 	g_autoptr(GError) error = nullptr;
 
 	g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func(g_free);
 
-	const gint fd = g_file_open_tmp("geeqie_keymap_XXXXXX.svg", &tmp_file, &error);
+	const gint fd = g_file_open_tmp(tmp_template, &tmp_file, &error);
 	if (error)
 		{
 		log_printf("Error: Keyboard Map - cannot create file:%s\n", error->message);
 		return;
 		}
 
-	get_actions_and_accelerators(get_keyfile_merged(), array);
+	get_actions_and_accelerators(get_keyfile_merged(), array, window_prefix);
 
 	convert_keymap_template_to_file(fd, array);
 
 	view_window_new(file_data_new_simple(tmp_file));
+}
+
+static void keyboard_map_dialog_close_cb(GenericDialog *, gpointer data)
+{
+	g_free(data);
+}
+
+static void keyboard_map_dialog_ok_cb(GenericDialog *, gpointer data)
+{
+	auto dialog_data = static_cast<KeyboardMapDialog *>(data);
+	const guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(dialog_data->drop_down));
+
+	if (selected < G_N_ELEMENTS(keyboard_map_scopes))
+		{
+		keyboard_map_show(keyboard_map_scopes[selected].window_prefix,
+		                  keyboard_map_scopes[selected].filename_type);
+		}
+
+	g_free(dialog_data);
+}
+
+static void layout_menu_kbd_map_cb(GSimpleAction *, GVariant *, gpointer)
+{
+	auto dialog_data = g_new0(KeyboardMapDialog, 1);
+	GenericDialog *gd = generic_dialog_new(_("Keyboard Map"), "keyboard_map", nullptr, TRUE,
+	                                       keyboard_map_dialog_close_cb, dialog_data);
+
+	generic_dialog_add_message(gd, GQ_ICON_DIALOG_INFO, _("Keyboard Map"),
+	                           _("Select the window whose shortcuts should be displayed."), FALSE);
+
+	const gchar *scope_names[G_N_ELEMENTS(keyboard_map_scopes) + 1] = {};
+	for (guint i = 0; i < G_N_ELEMENTS(keyboard_map_scopes); i++)
+		{
+		scope_names[i] = _(keyboard_map_scopes[i].name);
+		}
+
+	dialog_data->drop_down = gtk_drop_down_new_from_strings(scope_names);
+	gtk_drop_down_set_selected(GTK_DROP_DOWN(dialog_data->drop_down), 0);
+	gtk_box_append(GTK_BOX(gd->vbox), dialog_data->drop_down);
+	generic_dialog_add_button(gd, GQ_ICON_OK, _("View"), keyboard_map_dialog_ok_cb, TRUE);
+
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void layout_menu_about_cb(GSimpleAction *, GVariant *, gpointer)
@@ -1862,25 +1939,28 @@ static void layout_menu_log_window_cb(GSimpleAction *, GVariant *, gpointer)
  *-----------------------------------------------------------------------------
  */
 
-static void layout_menu_select_all_cb(GSimpleAction *, GVariant *, gpointer)
+static void layout_menu_select_all_cb(GSimpleAction *, GVariant *, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto *lw = static_cast<LayoutWindow *>(data);
 
 	layout_select_all(lw);
+	gtk_widget_grab_focus(lw->vf->listview);
 }
 
-static void layout_menu_unselect_all_cb(GSimpleAction *, GVariant *, gpointer)
+static void layout_menu_unselect_all_cb(GSimpleAction *, GVariant *, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto *lw = static_cast<LayoutWindow *>(data);
 
 	layout_select_none(lw);
+	gtk_widget_grab_focus(lw->vf->listview);
 }
 
-static void layout_menu_invert_selection_cb(GSimpleAction *, GVariant *, gpointer)
+static void layout_menu_invert_selection_cb(GSimpleAction *, GVariant *, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto *lw = static_cast<LayoutWindow *>(data);
 
 	layout_select_invert(lw);
+	gtk_widget_grab_focus(lw->vf->listview);
 }
 
 static void layout_menu_file_filter_cb(GSimpleAction *action, GVariant *state, gpointer)
@@ -1909,28 +1989,28 @@ template<SelectionToMarkMode mode, int mark>
 static void layout_menu_selection_to_mark_cb(GSimpleAction *, GVariant *, gpointer  )
 {
 	auto lw = get_current_layout();
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
+	g_assert(mark >= 0 && mark < FILEDATA_MARKS_SIZE);
 
-	layout_selection_to_mark(lw, mark, mode);
+	layout_selection_to_mark(lw, mark == 0 ? FILEDATA_MARKS_SIZE : mark, mode);
 }
 
 template<MarkToSelectionMode mode, int mark>
 static void layout_menu_mark_to_selection_cb(GSimpleAction  * , GVariant *, gpointer  )
 {
 	auto lw = get_current_layout();
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
+	g_assert(mark >= 0 && mark < FILEDATA_MARKS_SIZE);
 
-	layout_mark_to_selection(lw, mark, mode);
+	layout_mark_to_selection(lw, mark == 0 ? FILEDATA_MARKS_SIZE : mark, mode);
 }
 
 template<int mark>
 static void layout_menu_mark_filter_toggle_cb(GSimpleAction *, GVariant *, gpointer  )
 {
 	auto lw = get_current_layout();
-	g_assert(mark >= 1 && mark <= FILEDATA_MARKS_SIZE);
+	g_assert(mark >= 0 && mark < FILEDATA_MARKS_SIZE);
 
 	layout_marks_set(lw, TRUE);
-	layout_mark_filter_toggle(lw, mark);
+	layout_mark_filter_toggle(lw, mark == 0 ? FILEDATA_MARKS_SIZE : mark);
 }
 
 
@@ -2210,51 +2290,59 @@ static void layout_menu_keyword_autocomplete_cb(GSimpleAction *, GVariant *, gpo
  *-----------------------------------------------------------------------------
  */
 #if HAVE_LCMS
-static void layout_color_menu_enable_cb(GSimpleAction *action, GVariant *state, gpointer)
+static void layout_color_menu_enable_cb(GSimpleAction *action, GVariant *state, gpointer data)
 {
-	auto lw = get_current_layout();
+	auto lw = static_cast<LayoutWindow *>(data);
+	const gboolean enable = g_variant_get_boolean(state);
 
-
-	layout_util_sync_color(lw);
-	layout_image_refresh(lw);
-
+	layout_image_color_profile_set_use(lw, enable);
 	g_simple_action_set_state(action, state);
+	layout_image_refresh(lw);
+	layout_util_sync_color(lw);
 }
 
-static void layout_color_menu_use_image_cb(GSimpleAction *action, GVariant *parameter, gpointer)
+static void layout_color_menu_use_image_cb(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
-	auto lw = get_current_layout();
-	gint input;
-	gboolean use_image;
+	auto lw = static_cast<LayoutWindow *>(data);
+	gint input = 0;
+	gboolean use_image = FALSE;
 
-	gboolean active = g_variant_get_boolean(parameter);
+	if (!layout_valid(&lw)) return;
+
+	const gboolean active = g_variant_get_boolean(parameter);
 
 	if (!layout_image_color_profile_get(lw, input, use_image)) return;
 
-	if (use_image == active) return;
+	if (use_image != active)
+		{
+		layout_image_color_profile_set(lw, input, active);
+		layout_image_refresh(lw);
+		}
 
-	layout_image_color_profile_set(lw, input, active);
+	g_simple_action_set_state(action, parameter);
 	layout_util_sync_color(lw);
-	layout_image_refresh(lw);
-
-	g_simple_action_set_state(action, g_variant_new_boolean(active));
 }
 
-static void layout_color_menu_input_cb(GSimpleAction *, GVariant *parameter, gpointer data)
+static void layout_color_menu_input_cb(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
-	gint input;
-	gboolean use_image;
+	gint input = 0;
+	gboolean use_image = FALSE;
+
+	if (!layout_valid(&lw)) return;
 
 	gint32 type = g_variant_get_int32(parameter);
 
 	if (type < 0 || type >= COLOR_PROFILE_FILE + COLOR_PROFILE_INPUTS) return;
 
 	if (!layout_image_color_profile_get(lw, input, use_image)) return;
-	if (type == input) return;
+	if (type != input)
+		{
+		layout_image_color_profile_set(lw, type, use_image);
+		layout_image_refresh(lw);
+		}
 
-	layout_image_color_profile_set(lw, type, use_image);
-	layout_image_refresh(lw);
+	g_simple_action_set_state(action, parameter);
 }
 #else
 static void layout_color_menu_enable_cb(GSimpleAction *action, GVariant *parameter, gpointer)
@@ -2561,13 +2649,14 @@ static void layout_menu_window_rename_cb(GSimpleAction *, GVariant *, gpointer  
 	rw->window_name_entry = gtk_entry_new();
 	gtk_widget_set_can_focus(rw->window_name_entry, TRUE);
 	gtk_editable_set_editable(GTK_EDITABLE(rw->window_name_entry), TRUE);
-	gq_gtk_entry_set_text(GTK_ENTRY(rw->window_name_entry), lw->options.id);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), rw->window_name_entry, TRUE, TRUE, 0);
+	entry_set_text(GTK_ENTRY(rw->window_name_entry), lw->options.id);
+	gtk_widget_set_hexpand(rw->window_name_entry, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(rw->window_name_entry, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), rw->window_name_entry);
 	gtk_widget_grab_focus(rw->window_name_entry);
-	gtk_widget_show(rw->window_name_entry);
 	g_signal_connect_swapped(rw->window_name_entry, "activate", G_CALLBACK(window_rename_ok), rw);
 
-	gtk_widget_show(rw->gd->dialog);
+	gtk_window_present(GTK_WINDOW(rw->gd->dialog));
 }
 
 
@@ -2599,13 +2688,15 @@ static void layout_actions_setup_editors(LayoutWindow *lw)
 
 void create_toolbars(LayoutWindow *lw)
 {
-	// creates first group called only from one place
-	int i; 
-
-	for (i = 0; i < TOOLBAR_COUNT; i++)
+	for (gint i = 0; i < TOOLBAR_COUNT; i++)
 		{
-		layout_actions_toolbar(lw, static_cast<ToolbarType>(i)); // creates the box
-		layout_toolbar_add_default(lw, static_cast<ToolbarType>(i));
+		auto type = static_cast<ToolbarType>(i);
+
+		if (!lw->toolbar[type])
+			{
+			layout_actions_toolbar(lw, type);
+			layout_toolbar_add_default(lw, type);
+			}
 		}
 }
 
@@ -2630,7 +2721,7 @@ static void layout_menu_window_delete_cb(GSimpleAction *, GVariant *, gpointer  
 	hbox = pref_box_new(group, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 	pref_label_new(hbox, lw->options.id);
 
-	gtk_widget_show(dw->gd->dialog);
+	gtk_window_present(GTK_WINDOW(dw->gd->dialog));
 }
 
 static gboolean layout_editors_reload_idle_cb(gpointer user_data)
@@ -2739,7 +2830,6 @@ GtkWidget *layout_actions_toolbar(LayoutWindow *lw, ToolbarType type)
 
 	lw->toolbar[type] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-	gtk_widget_show(lw->toolbar[type]);
 	return g_object_ref(lw->toolbar[type]);
 }
 
@@ -2755,7 +2845,7 @@ GtkWidget *layout_actions_menu_tool_bar(LayoutWindow *lw)
 		if (gtk_widget_get_parent(toolbar) != lw->menu_tool_bar)
 			{
 			widget_remove_from_parent(toolbar);
-			gq_gtk_box_pack_start(GTK_BOX(lw->menu_tool_bar), toolbar, FALSE, FALSE, 0);
+			gtk_box_append(GTK_BOX(lw->menu_tool_bar), toolbar);
 			}
 
 		return lw->menu_tool_bar;
@@ -2763,14 +2853,14 @@ GtkWidget *layout_actions_menu_tool_bar(LayoutWindow *lw)
 
 	lw->menu_tool_bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-	gq_gtk_box_pack_start(GTK_BOX(lw->menu_tool_bar), toolbar, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(lw->menu_tool_bar), toolbar);
 
 	return g_object_ref(lw->menu_tool_bar);
 }
 
-void layout_actions_foreach(LayoutWindow *lw, GFunc func, gpointer data)
+void layout_actions_foreach(LayoutWindow *lw, const LayoutActionFunc &action_func)
 {
-	if (!lw || !lw->window || !func) return;
+	if (!lw || !lw->window || !action_func) return;
 
 	g_auto(GStrv) action_names = g_action_group_list_actions(G_ACTION_GROUP(lw->window));
 	for (guint i = 0; action_names && action_names[i]; i++)
@@ -2778,7 +2868,7 @@ void layout_actions_foreach(LayoutWindow *lw, GFunc func, gpointer data)
 		GAction *action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), action_names[i]);
 		if (!action) continue;
 
-		func(action, data);
+		action_func(action);
 		}
 }
 
@@ -2791,7 +2881,7 @@ void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type)
 		{
 		while (GtkWidget *child = gtk_widget_get_first_child(lw->toolbar[type]))
 			{
-			gq_gtk_widget_destroy(child);
+			gtk_box_remove(GTK_BOX(lw->toolbar[type]), child);
 			}
 		}
 }
@@ -2902,8 +2992,7 @@ void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action_
 			gtk_button_set_child(GTK_BUTTON(button), image);
 			}
 
-		gq_gtk_container_add(lw->toolbar[type], button);
-		gq_gtk_widget_show_all(button);
+		gtk_box_append(GTK_BOX(lw->toolbar[type]), button);
 
 		lw->toolbar_actions[type] = g_list_append(lw->toolbar_actions[type], g_strdup(action_name));
 		}
@@ -3076,6 +3165,10 @@ void layout_util_sync_color(LayoutWindow *lw)
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(use_image));
 	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), use_color);
 
+	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-color-profile");
+	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_int32(input));
+	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), use_color && !use_image);
+
 	color_profiles_menu_populate(lw, "win.main-win-color-profile");
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-grayscale");
@@ -3238,7 +3331,9 @@ static void layout_util_sync_views(LayoutWindow *lw)
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(osd_flags != OSD_SHOW_NOTHING));
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-image-histogram");
-	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(osd_flags != OSD_SHOW_HISTOGRAM));
+	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(osd_flags & OSD_SHOW_HISTOGRAM));
+	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-show-histogram");
+	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(osd_flags & OSD_SHOW_HISTOGRAM));
 
 	action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-exif-rotate");
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(options->image.exif_rotate_enable));
@@ -3379,7 +3474,7 @@ void layout_bar_toggle(LayoutWindow *lw)
 {
 	if (layout_bar_enabled(lw))
 		{
-		gtk_widget_hide(lw->bar);
+		gtk_widget_set_visible(lw->bar, FALSE);
 		}
 	else
 		{
@@ -3387,7 +3482,7 @@ void layout_bar_toggle(LayoutWindow *lw)
 			{
 			layout_bar_set_default(lw);
 			}
-		gtk_widget_show(lw->bar);
+		gtk_widget_set_visible(lw->bar, TRUE);
 		bar_set_fd(lw->bar, layout_image_get_fd(lw));
 		}
 	layout_util_sync_views(lw);
@@ -3459,14 +3554,15 @@ void layout_bar_sort_set(LayoutWindow *lw, GtkWidget *bar)
 	g_signal_connect(G_OBJECT(lw->bar_sort), "destroy",
 			 G_CALLBACK(layout_bar_sort_destroyed), lw);
 
-	gq_gtk_box_pack_end(GTK_BOX(lw->utility_box), lw->bar_sort, FALSE, FALSE, 0);
+	gtk_widget_set_halign(lw->bar_sort, GTK_ALIGN_START);
+	gtk_box_append(GTK_BOX(lw->utility_box), lw->bar_sort);
 }
 
 void layout_bar_sort_toggle(LayoutWindow *lw)
 {
 	if (layout_bar_sort_enabled(lw))
 		{
-		gtk_widget_hide(lw->bar_sort);
+		gtk_widget_set_visible(lw->bar_sort, FALSE);
 		}
 	else
 		{
@@ -3474,7 +3570,7 @@ void layout_bar_sort_toggle(LayoutWindow *lw)
 			{
 			layout_bar_sort_set_default(lw);
 			}
-		gtk_widget_show(lw->bar_sort);
+		gtk_widget_set_visible(lw->bar_sort, TRUE);
 		}
 	layout_util_sync_views(lw);
 }
@@ -3488,7 +3584,7 @@ static void layout_bars_hide_toggle(LayoutWindow *lw)
 			{
 			if (lw->bar_sort)
 				{
-				gtk_widget_show(lw->bar_sort);
+				gtk_widget_set_visible(lw->bar_sort, TRUE);
 				}
 			else
 				{
@@ -3497,7 +3593,7 @@ static void layout_bars_hide_toggle(LayoutWindow *lw)
 			}
 		if (lw->options.bars_state.info)
 			{
-			gtk_widget_show(lw->bar);
+			gtk_widget_set_visible(lw->bar, TRUE);
 			}
 		layout_tools_float_set(lw, lw->options.tools_float,
 									lw->options.bars_state.tools_hidden);
@@ -3512,11 +3608,11 @@ static void layout_bars_hide_toggle(LayoutWindow *lw)
 
 		if (lw->bar)
 			{
-			gtk_widget_hide(lw->bar);
+			gtk_widget_set_visible(lw->bar, FALSE);
 			}
 
 		if (lw->bar_sort)
-			gtk_widget_hide(lw->bar_sort);
+			gtk_widget_set_visible(lw->bar_sort, FALSE);
 		layout_tools_float_set(lw, lw->options.tools_float, TRUE);
 		}
 
@@ -3545,7 +3641,9 @@ GtkWidget *layout_bars_prepare(LayoutWindow *lw, GtkWidget *image)
 	lw->utility_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
 	lw->utility_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 	DEBUG_NAME(lw->utility_paned);
-	gq_gtk_box_pack_start(GTK_BOX(lw->utility_box), lw->utility_paned, TRUE, TRUE, 0);
+	gtk_widget_set_hexpand(lw->utility_paned, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->utility_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(lw->utility_paned, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(lw->utility_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(lw->utility_box), lw->utility_paned);
 
 	/* Prevent the info sidebar being minimized to invisible
 	 */
@@ -3553,9 +3651,7 @@ GtkWidget *layout_bars_prepare(LayoutWindow *lw, GtkWidget *image)
 
 	gtk_paned_set_start_child(GTK_PANED(lw->utility_paned), image);
 
-	gtk_widget_show(lw->utility_paned);
 
-	gtk_widget_show(image);
 
 	return g_object_ref(lw->utility_box);
 }

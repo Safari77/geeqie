@@ -18,13 +18,14 @@
 #endif
 
 #include "cache.h"
-#include "compat.h"
 #include "history-list.h"
 #include "intl.h"
 #include "layout.h"
 #include "main-defines.h"
 #include "options.h"
+#include "pixbuf-util.h"
 #include "ui-fileops.h"
+#include "ui-tabcomp.h"
 
 namespace {
 
@@ -42,6 +43,22 @@ struct PendingFileDialog
 };
 
 void finish_file_dialog(PendingFileDialog *pending, gint response_id);
+
+gboolean file_dialog_key_pressed_cb(GtkEventControllerKey *controller, guint keyval, guint,
+	                                GdkModifierType state, gpointer)
+{
+	if (keyval != GDK_KEY_Tab || state & GDK_CONTROL_MASK) return FALSE;
+
+	GtkWidget *dialog = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+	GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(dialog));
+	if (!GTK_IS_ENTRY(focus)) return FALSE;
+
+	const gchar *text = gtk_editable_get_text(GTK_EDITABLE(focus));
+	if (text[0] != G_DIR_SEPARATOR && text[0] != '~') return FALSE;
+
+	tab_completion_complete(focus, TRUE);
+	return TRUE;
+}
 
 gboolean is_image_file(const gchar *path)
 {
@@ -306,7 +323,7 @@ GtkWidget *create_pdf_preview(const gchar *filename)
 
 	cairo_destroy(cr);
 
-	g_autoptr(GdkPixbuf) pixbuf = gdk_pixbuf_get_from_surface(surface, 0, 0, target_width, target_height);
+	g_autoptr(GdkPixbuf) pixbuf = pixbuf_from_cairo_surface(surface);
 	cairo_surface_destroy(surface);
 	g_object_unref(page);
 	g_object_unref(doc);
@@ -316,7 +333,7 @@ GtkWidget *create_pdf_preview(const gchar *filename)
 		return nullptr;
 		}
 
-	g_autoptr(GdkTexture) texture = gdk_texture_new_for_pixbuf(pixbuf);
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
 	GtkWidget *picture = gtk_picture_new_for_paintable(GDK_PAINTABLE(texture));
 	gtk_picture_set_content_fit(GTK_PICTURE(picture), GTK_CONTENT_FIT_CONTAIN);
 	gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
@@ -403,7 +420,7 @@ GtkWidget *create_image_preview(const gchar *file_path)
 		return nullptr;
 		}
 
-	g_autoptr(GdkTexture) texture = gdk_texture_new_for_pixbuf(pixbuf);
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
 	GtkWidget *picture = gtk_picture_new_for_paintable(GDK_PAINTABLE(texture));
 	gtk_picture_set_content_fit(GTK_PICTURE(picture), GTK_CONTENT_FIT_CONTAIN);
 	gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
@@ -459,7 +476,13 @@ GtkWidget *create_preview_for_file(const gchar *file_name)
 
 void update_preview(PendingFileDialog *pending)
 {
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	g_autoptr(GFile) file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(pending->chooser));
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 	g_autofree gchar *file_name = file ? g_file_get_path(file) : nullptr;
 
 	if (g_strcmp0(file_name, pending->preview_path) == 0)
@@ -509,6 +532,9 @@ GtkFileChooserAction to_gtk_file_chooser_action(FileDialogAction action)
 
 GFile *get_selected_file(PendingFileDialog *pending)
 {
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(pending->chooser));
 	if (file)
 		{
@@ -517,6 +543,9 @@ GFile *get_selected_file(PendingFileDialog *pending)
 
 	g_autoptr(GFile) folder = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(pending->chooser));
 	g_autofree gchar *name = gtk_file_chooser_get_current_name(GTK_FILE_CHOOSER(pending->chooser));
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 
 	if (!name || name[0] == '\0')
 		{
@@ -539,6 +568,9 @@ GFile *get_selected_file(PendingFileDialog *pending)
 gboolean set_chooser_folder(PendingFileDialog *pending, GFile *folder)
 {
 	g_autoptr(GError) error = nullptr;
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	if (!gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(pending->chooser), folder, &error))
 		{
 		if (error)
@@ -547,6 +579,9 @@ gboolean set_chooser_folder(PendingFileDialog *pending, GFile *folder)
 			}
 		return FALSE;
 		}
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 
 	update_preview(pending);
 
@@ -577,31 +612,28 @@ void finish_file_dialog(PendingFileDialog *pending, gint response_id)
 	gtk_window_destroy(GTK_WINDOW(pending->dialog));
 }
 
-void overwrite_confirm_response_cb(GtkDialog *dialog, gint response_id, gpointer data)
+void overwrite_confirm_response_cb(GObject *source_object, GAsyncResult *result, gpointer data)
 {
 	auto *pending = static_cast<PendingFileDialog *>(data);
+	g_autoptr(GError) error = nullptr;
+	const gint response_id = gtk_alert_dialog_choose_finish(GTK_ALERT_DIALOG(source_object), result, &error);
 
-	if (response_id == GTK_RESPONSE_ACCEPT)
+	if (response_id == 1)
 		{
 		finish_file_dialog(pending, GTK_RESPONSE_ACCEPT);
 		}
-
-	gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
 void show_overwrite_confirmation(PendingFileDialog *pending, const gchar *path)
 {
-	GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(pending->dialog),
-	                                           GTK_DIALOG_MODAL,
-	                                           GTK_MESSAGE_QUESTION,
-	                                           GTK_BUTTONS_NONE,
-	                                           _("A file named \"%s\" already exists. Do you want to replace it?"),
-	                                           path);
+	g_autoptr(GtkAlertDialog) dialog = gtk_alert_dialog_new(_("A file named \"%s\" already exists. Do you want to replace it?"), path);
+	const char *buttons[] = {_("_Cancel"), _("_Replace"), nullptr};
 
-	gtk_dialog_add_buttons(GTK_DIALOG(dialog), _("_Cancel"), GTK_RESPONSE_CANCEL, _("_Replace"), GTK_RESPONSE_ACCEPT, nullptr);
-	gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-	g_signal_connect(dialog, "response", G_CALLBACK(overwrite_confirm_response_cb), pending);
-	gtk_widget_show(dialog);
+	gtk_alert_dialog_set_buttons(dialog, buttons);
+	gtk_alert_dialog_set_cancel_button(dialog, 0);
+	gtk_alert_dialog_set_default_button(dialog, 1);
+	gtk_alert_dialog_set_modal(dialog, TRUE);
+	gtk_alert_dialog_choose(dialog, GTK_WINDOW(pending->dialog), nullptr, overwrite_confirm_response_cb, pending);
 }
 
 void file_dialog_response_cb(GtkDialog *, gint response_id, gpointer data)
@@ -656,6 +688,9 @@ void file_dialog_destroy_cb(GtkWidget *, gpointer data)
 
 void add_filters(GtkFileChooser *chooser, const FileDialogData &fdd)
 {
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	GtkFileFilter *all_filter = gtk_file_filter_new();
 	gtk_file_filter_set_name(all_filter, _("All files"));
 	gtk_file_filter_add_pattern(all_filter, "*");
@@ -679,10 +714,16 @@ void add_filters(GtkFileChooser *chooser, const FileDialogData &fdd)
 
 	gtk_file_chooser_add_filter(chooser, sub_filter);
 	gtk_file_chooser_set_filter(chooser, sub_filter);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 }
 
 void set_initial_location(GtkFileChooser *chooser, const FileDialogData &fdd)
 {
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	const gchar *initial_folder = nullptr;
 	if (fdd.history_key)
 		{
@@ -714,6 +755,9 @@ void set_initial_location(GtkFileChooser *chooser, const FileDialogData &fdd)
 		{
 		gtk_file_chooser_set_current_name(chooser, fdd.suggested_name);
 		}
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 }
 
 void add_shortcut_folder(GtkFileChooser *chooser, const gchar *path)
@@ -724,7 +768,13 @@ void add_shortcut_folder(GtkFileChooser *chooser, const gchar *path)
 		}
 
 	g_autoptr(GFile) folder = g_file_new_for_path(path);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	gtk_file_chooser_add_shortcut_folder(chooser, folder, nullptr);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 }
 
 GtkWidget *create_dialog_content(PendingFileDialog *pending)
@@ -773,9 +823,23 @@ void file_dialog_show(const FileDialogData &fdd)
 	pending->callback = fdd.callback;
 	pending->data = fdd.data;
 
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	pending->dialog = gtk_dialog_new_with_buttons(title, parent, GTK_DIALOG_MODAL, _("_Cancel"), GTK_RESPONSE_CANCEL, accept_text, GTK_RESPONSE_ACCEPT, nullptr);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 	gtk_window_set_default_size(GTK_WINDOW(pending->dialog), 1040, 640);
 
+	GtkEventController *key_controller = gtk_event_controller_key_new();
+	gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
+	g_signal_connect(key_controller, "key-pressed", G_CALLBACK(file_dialog_key_pressed_cb), nullptr);
+	gtk_widget_add_controller(pending->dialog, key_controller);
+
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	pending->chooser = gtk_file_chooser_widget_new(to_gtk_file_chooser_action(fdd.action));
 	gtk_widget_set_size_request(pending->chooser, 720, 520);
 	gtk_widget_set_hexpand(pending->chooser, TRUE);
@@ -787,8 +851,17 @@ void file_dialog_show(const FileDialogData &fdd)
 	add_shortcut_folder(chooser, layout_get_path(get_current_layout()));
 
 	set_initial_location(chooser, fdd);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
 	GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(pending->dialog));
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
 	gtk_widget_set_margin_top(content, 6);
 	gtk_widget_set_margin_bottom(content, 6);
 	gtk_widget_set_margin_start(content, 6);
@@ -801,7 +874,7 @@ void file_dialog_show(const FileDialogData &fdd)
 	update_preview(pending);
 	pending->preview_timer_id = g_timeout_add(250, preview_timer_cb, pending);
 
-	gtk_widget_show(pending->dialog);
+	gtk_window_present(GTK_WINDOW(pending->dialog));
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

@@ -27,6 +27,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib-object.h>
 
+#include "cellrenderericon.h"
 #include "collect.h"
 #include "dnd.h"
 #include "filedata.h"
@@ -38,6 +39,7 @@
 #include "metadata.h"
 #include "misc.h"
 #include "options.h"
+#include "pixbuf-util.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
 #include "ui-tree-edit.h"
@@ -63,6 +65,26 @@ enum {
 	FILE_COLUMN_COUNT = 22
 };
 
+static GdkPixbuf *vflist_scale_thumb(GdkPixbuf *pixbuf)
+{
+	if (!pixbuf) return nullptr;
+
+	gint width;
+	gint height;
+	pixbuf_scale_aspect(options->thumbnails.size.width,
+	                    options->thumbnails.size.height,
+	                    gdk_pixbuf_get_width(pixbuf),
+	                    gdk_pixbuf_get_height(pixbuf),
+	                    width, height);
+
+	if (width == gdk_pixbuf_get_width(pixbuf) && height == gdk_pixbuf_get_height(pixbuf))
+		{
+		return GDK_PIXBUF(g_object_ref(pixbuf));
+		}
+
+	return gdk_pixbuf_scale_simple(pixbuf, width, height, options->thumbnails.quality);
+}
+
 
 /* Index to tree view */
 enum {
@@ -82,6 +104,24 @@ enum {
 static gboolean vflist_row_rename_cb(TreeEditData *td, const gchar *old_name, const gchar *new_name, gpointer data);
 static void vflist_populate_view(ViewFile *vf, gboolean force);
 static gboolean vflist_is_multiline(ViewFile *vf);
+
+static gboolean vflist_thumb_size_changed(ViewFile *vf)
+{
+	GtkTreeViewColumn *column = gtk_tree_view_get_column(GTK_TREE_VIEW(vf->listview), FILE_VIEW_COLUMN_THUMB);
+	if (!column) return FALSE;
+
+	g_autoptr(GList) cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));
+	if (!cells) return FALSE;
+
+	auto *renderer = static_cast<GtkCellRenderer *>(cells->data);
+	const gint old_width = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(renderer), "thumbnail-width"));
+	const gint old_height = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(renderer), "thumbnail-height"));
+
+	g_object_set_data(G_OBJECT(renderer), "thumbnail-width", GINT_TO_POINTER(options->thumbnails.size.width));
+	g_object_set_data(G_OBJECT(renderer), "thumbnail-height", GINT_TO_POINTER(options->thumbnails.size.height));
+
+	return old_width != options->thumbnails.size.width || old_height != options->thumbnails.size.height;
+}
 static gchar *vflist_get_formatted(ViewFile *vf, const gchar *name, const gchar *sidecars, const gchar *size, const gchar *time, gboolean expanded, const gchar *star_rating);
 static void vflist_listview_mark_toggled_cb(GtkCellRendererToggle *cell, gchar *path_str, gpointer data);
 
@@ -399,30 +439,29 @@ gboolean vflist_press_key_cb(ViewFile *vf, GtkWidget *widget, guint keyval, GdkM
 	return TRUE;
 }
 
-gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event)
+void vflist_press_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
-	GtkTreeIter iter;
 	FileData *fd = nullptr;
 	GtkTreeViewColumn *column;
+	g_autoptr(GtkTreePath) tpath = nullptr;
 
 	vf->clicked_mark = 0;
 
-	if (g_autoptr(GtkTreePath) tpath = nullptr;
-	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+	if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(event.widget), event.x, event.y,
 	                                  &tpath, &column, nullptr, nullptr))
 		{
-		GtkTreeModel *store;
 		gint col_idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "column_store_idx"));
 
 		if (col_idx >= FILE_COLUMN_MARKS && col_idx <= FILE_COLUMN_MARKS_LAST)
 			vf->clicked_mark = 1 + (col_idx - FILE_COLUMN_MARKS);
 
-		store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
+		GtkTreeModel *store = gtk_tree_view_get_model(GTK_TREE_VIEW(event.widget));
 
+		GtkTreeIter iter;
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &fd, -1);
 
-		if (event->button == GDK_BUTTON_PRIMARY &&
+		if (event.button == GDK_BUTTON_PRIMARY &&
 		    col_idx >= FILE_COLUMN_MARKS && col_idx <= FILE_COLUMN_MARKS_LAST)
 			{
 			/* GtkCellRendererToggle's GTK4 activation region can be much
@@ -435,49 +474,47 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEve
 				vflist_listview_mark_toggled_cb(GTK_CELL_RENDERER_TOGGLE(renderers->data), path_str, vf);
 				}
 			g_list_free(renderers);
-			return TRUE;
+			return;
 			}
 		}
 
 	vf->click_fd = fd;
 
-	if (event->button == GDK_BUTTON_SECONDARY)
+	if (event.button == GDK_BUTTON_SECONDARY)
 		{
-		vf->popup = vf_pop_menu(vf, widget, event->x, event->y);
-		return TRUE;
+		if (fd && !vflist_is_selected(vf, fd))
+			{
+			GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(event.widget));
+			gtk_tree_selection_unselect_all(selection);
+			gtk_tree_selection_select_path(selection, tpath);
+			gtk_tree_view_set_cursor(GTK_TREE_VIEW(event.widget), tpath, nullptr, FALSE);
+			}
+
+		vf->popup = vf_pop_menu(vf, event.widget, event.x, event.y);
+		return;
 		}
 
-	if (!fd) return FALSE;
+	if (!fd) return;
 
-	if (event->button == GDK_BUTTON_MIDDLE)
+	if (event.button == GDK_BUTTON_MIDDLE)
 		{
 		if (!vflist_is_selected(vf, fd))
 			{
 			vflist_color_set(vf, fd, TRUE);
 			}
-		return TRUE;
+		return;
 		}
 
-
-	if (event->button == GDK_BUTTON_PRIMARY && event->press_count == 1 &&
-	    !(event->state & GDK_SHIFT_MASK ) &&
-	    !(event->state & GDK_CONTROL_MASK ) &&
+	if (event.button == GDK_BUTTON_PRIMARY && event.n_press == 1 &&
+	    !(event.state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK)) &&
 	    vflist_is_selected(vf, fd))
 		{
-		GtkTreeSelection *selection;
-
-		gtk_widget_grab_focus(widget);
-
-
-		/* returning FALSE and further processing of the event is needed for
-		   correct operation of the expander, to show the sidecar files.
-		   It however resets the selection of multiple files. With this condition
-		   it should work for both cases */
-		selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
-		return (gtk_tree_selection_count_selected_rows(selection) > 1);
+		vf->preserve_selection = TRUE;
+		gtk_widget_grab_focus(event.widget);
+		return;
 		}
 
-	if (event->button == GDK_BUTTON_PRIMARY && event->press_count == 2)
+	if (event.button == GDK_BUTTON_PRIMARY && event.n_press == 2)
 		{
 		if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
 			{
@@ -488,49 +525,53 @@ gboolean vflist_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEve
 			if (vf->layout) layout_image_full_screen_start(vf->layout);
 			}
 		}
-
-	return FALSE;
 }
 
-gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event)
+void vflist_release_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
+	vf->preserve_selection = FALSE;
 
-	if (layout_handle_user_defined_mouse_buttons(vf->layout, event->button))
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, event.button))
 		{
-		return TRUE;
+		return;
 		}
 
-	if (event->button == GDK_BUTTON_MIDDLE)
+	if (event.button == GDK_BUTTON_MIDDLE)
 		{
 		vflist_color_set(vf, vf->click_fd, FALSE);
 		}
 
-	if (event->button != GDK_BUTTON_PRIMARY && event->button != GDK_BUTTON_MIDDLE)
+	if (event.button != GDK_BUTTON_PRIMARY && event.button != GDK_BUTTON_MIDDLE)
 		{
-		return TRUE;
+		return;
+		}
+
+	if (event.button == GDK_BUTTON_PRIMARY && vf->drag_started)
+		{
+		return;
 		}
 
 	if (g_autoptr(GtkTreePath) tpath = nullptr;
-	    (event->x != 0 || event->y != 0) &&
-	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), event->x, event->y,
+	    (event.x != 0 || event.y != 0) &&
+	    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(event.widget), event.x, event.y,
 					  &tpath, nullptr, nullptr, nullptr))
 		{
 		GtkTreeModel *store;
 
-		store = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
+		store = gtk_tree_view_get_model(GTK_TREE_VIEW(event.widget));
 		gtk_tree_model_get_iter(store, &iter, tpath);
 		gtk_tree_model_get(store, &iter, FILE_COLUMN_POINTER, &fd, -1);
 		}
 
-	if (event->button == GDK_BUTTON_MIDDLE)
+	if (event.button == GDK_BUTTON_MIDDLE)
 		{
 		if (fd && vf->click_fd == fd)
 			{
 			GtkTreeSelection *selection;
 
-			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
+			selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(event.widget));
 			if (vflist_is_selected(vf, fd))
 				{
 				gtk_tree_selection_unselect_iter(selection, &iter);
@@ -540,23 +581,20 @@ gboolean vflist_release_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonE
 				gtk_tree_selection_select_iter(selection, &iter);
 				}
 			}
-		return TRUE;
+		return;
 		}
 
 	if (fd && vf->click_fd == fd &&
-	    !(event->state & GDK_SHIFT_MASK ) &&
-	    !(event->state & GDK_CONTROL_MASK ) &&
+	    !(event.state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK)) &&
 	    vflist_is_selected(vf, fd))
 		{
 		GtkTreeSelection *selection;
 
-		selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
+		selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(event.widget));
 		gtk_tree_selection_unselect_all(selection);
 		gtk_tree_selection_select_iter(selection, &iter);
 		vflist_move_cursor(vf, &iter);
 		}
-
-	return FALSE;
 }
 
 static void vflist_select_image(ViewFile *vf, FileData *sel_fd)
@@ -612,6 +650,8 @@ static gboolean vflist_select_cb(GtkTreeSelection *, GtkTreeModel *store, GtkTre
 {
 	auto vf = static_cast<ViewFile *>(data);
 	GtkTreeIter iter;
+
+	if (vf->preserve_selection && path_currently_selected) return FALSE;
 
 	if (!path_currently_selected && gtk_tree_model_get_iter(store, &iter, tpath))
 		{
@@ -708,10 +748,11 @@ static void vflist_setup_iter(ViewFile *vf, GtkTreeStore *store, GtkTreeIter *it
 
 	g_autofree gchar *formatted = vflist_get_formatted(vf, name, sidecars, size, time, expanded, nullptr);
 	g_autofree gchar *formatted_with_stars = vflist_get_formatted(vf, name, sidecars, size, time, expanded, star_rating);
+	g_autoptr(GdkPixbuf) thumb = VFLIST(vf)->thumbs_enabled ? vflist_scale_thumb(fd->thumb_pixbuf) : nullptr;
 
 	gtk_tree_store_set(store, iter, FILE_COLUMN_POINTER, fd,
 					FILE_COLUMN_VERSION, fd->version,
-					FILE_COLUMN_THUMB, fd->thumb_pixbuf,
+					FILE_COLUMN_THUMB, thumb,
 					FILE_COLUMN_FORMATTED, formatted,
 					FILE_COLUMN_FORMATTED_WITH_STARS, formatted_with_stars,
 					FILE_COLUMN_SIDECARS, sidecars,
@@ -964,7 +1005,8 @@ void vflist_set_thumb_fd(ViewFile *vf, FileData *fd)
 	if (!fd || !vflist_find_row(vf, fd, &iter)) return;
 
 	store = GTK_TREE_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(vf->listview)));
-	gtk_tree_store_set(store, &iter, FILE_COLUMN_THUMB, fd->thumb_pixbuf, -1);
+	g_autoptr(GdkPixbuf) thumb = vflist_scale_thumb(fd->thumb_pixbuf);
+	gtk_tree_store_set(store, &iter, FILE_COLUMN_THUMB, thumb, -1);
 }
 
 FileData *vflist_thumb_next_fd(ViewFile *vf)
@@ -1476,7 +1518,10 @@ static void vflist_listview_set_columns(ViewFile *vf)
 	g_autoptr(GList) list = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));
 	if (!list) return;
 
-	g_object_set(list->data, "height", options->thumbnails.size.height, NULL);
+	g_object_set(list->data,
+	             "fixed_width", options->thumbnails.size.width,
+	             "fixed_height", options->thumbnails.size.height,
+	             NULL);
 
 	gtk_tree_view_column_set_visible(column, VFLIST(vf)->thumbs_enabled);
 
@@ -1521,6 +1566,7 @@ static void vflist_populate_view(ViewFile *vf, gboolean force)
 {
 	GtkTreeStore *store;
 	GList *selected;
+	const gboolean thumb_size_changed = vflist_thumb_size_changed(vf);
 
 	store = GTK_TREE_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(vf->listview)));
 
@@ -1538,7 +1584,7 @@ static void vflist_populate_view(ViewFile *vf, gboolean force)
 
 	selected = vflist_selection_get_list(vf);
 
-	vflist_setup_iter_recursive(vf, store, nullptr, vf->list, selected, force);
+	vflist_setup_iter_recursive(vf, store, nullptr, vf->list, selected, force || thumb_size_changed);
 
 	if (selected && vflist_selection_count(vf) == 0)
 		{
@@ -1637,8 +1683,7 @@ static void vflist_listview_add_column(ViewFile *vf, gint n, const gchar *title,
 	else
 		{
 		gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
-		renderer = gtk_cell_renderer_pixbuf_new();
-		cell_renderer_height_override(renderer);
+		renderer = gqv_cell_renderer_icon_new();
 		gtk_tree_view_column_pack_start(column, renderer, TRUE);
 		gtk_tree_view_column_add_attribute(column, renderer, "pixbuf", n);
 		}

@@ -22,7 +22,6 @@
 #include "bar-keywords.h"
 
 #include <algorithm>
-#include <array>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -32,7 +31,6 @@
 #include <glib-object.h>
 
 #include "bar.h"
-#include "compat.h"
 #include "dnd.h"
 #include "filedata.h"
 #include "intl.h"
@@ -441,6 +439,23 @@ void bar_pane_keywords_set_selection_cb(GSimpleAction *, GVariant *, gpointer da
 	g_list_free_full(keywords, g_free);
 }
 
+void bar_pane_keywords_remove_selection_cb(GSimpleAction *, GVariant *, gpointer data)
+{
+	auto *pkd = static_cast<PaneKeywordsData *>(data);
+	GList *keywords = keyword_list_pull_selected(pkd->keyword_view);
+
+	g_autoptr(FileDataList) list = layout_selection_list(pkd->pane.lw);
+	list = file_data_process_groups_in_selection(list, FALSE, nullptr);
+
+	for (GList *work = list; work; work = work->next)
+		{
+		auto *fd = static_cast<FileData *>(work->data);
+		metadata_remove_list(fd, KEYWORD_KEY, keywords);
+		}
+
+	g_list_free_full(keywords, g_free);
+}
+
 
 void bar_pane_keywords_notify_cb(FileData *fd, NotifyType type, gpointer data)
 {
@@ -475,6 +490,7 @@ void bar_pane_keywords_set_extra_menu(PaneKeywordsData *pkd)
 {
 	static const GActionEntry keyword_actions[] = {
 		{ "append-to-selection",  bar_pane_keywords_set_selection_cb<TRUE>,  nullptr, nullptr, nullptr, {} },
+		{ "remove-from-selection", bar_pane_keywords_remove_selection_cb,    nullptr, nullptr, nullptr, {} },
 		{ "replace-in-selection", bar_pane_keywords_set_selection_cb<FALSE>, nullptr, nullptr, nullptr, {} },
 	};
 
@@ -487,6 +503,10 @@ void bar_pane_keywords_set_extra_menu(PaneKeywordsData *pkd)
 	g_autoptr(GMenuItem) append_item = g_menu_item_new(_("Add selected keywords to selected files"), "keywords.append-to-selection");
 	g_menu_item_set_attribute(append_item, "verb-icon", "s", GQ_ICON_ADD);
 	g_menu_append_item(menu, append_item);
+
+	g_autoptr(GMenuItem) remove_item = g_menu_item_new(_("Remove selected keywords from selected files"), "keywords.remove-from-selection");
+	g_menu_item_set_attribute(remove_item, "verb-icon", "s", GQ_ICON_REMOVE);
+	g_menu_append_item(menu, remove_item);
 
 	g_autoptr(GMenuItem) replace_item = g_menu_item_new(_("Replace existing keywords in selected files with selected keywords"), "keywords.replace-in-selection");
 	g_menu_item_set_attribute(replace_item, "verb-icon", "s", GQ_ICON_REPLACE);
@@ -756,11 +776,10 @@ void bar_pane_keywords_edit_dialog_cb(GtkWidget *, gpointer data)
 	pref_table_label(table, 0, 0, _("Keyword:"), GTK_ALIGN_END);
 	cdd->edit_widget = gtk_entry_new();
 	gtk_widget_set_size_request(cdd->edit_widget, 300, -1);
-	if (name) gq_gtk_entry_set_text(GTK_ENTRY(cdd->edit_widget), name);
+	if (name) entry_set_text(GTK_ENTRY(cdd->edit_widget), name);
 	gtk_grid_attach(GTK_GRID(table), cdd->edit_widget, 1, 0, 1, 1);
 	/* here could eventually be a text view instead of entry */
 	generic_dialog_attach_default(gd, cdd->edit_widget);
-	gtk_widget_show(cdd->edit_widget);
 
 	group = pref_group_new(gd->vbox, FALSE, _("Keyword type:"), GTK_ORIENTATION_VERTICAL);
 
@@ -773,7 +792,7 @@ void bar_pane_keywords_edit_dialog_cb(GtkWidget *, gpointer data)
 
 	gtk_widget_grab_focus(cdd->edit_widget);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 void bar_pane_keywords_connect_mark_cb(GtkWidget *menu_widget, gpointer data)
@@ -813,7 +832,7 @@ void bar_pane_keywords_disconnect_marks_cb(GtkWidget *menu_widget, gpointer data
 				_("Disconnect all Marks Keywords connections?"), _("This will disconnect all Marks Keywords connections"), TRUE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", bar_pane_keywords_disconnect_marks_ok_cb, TRUE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 void bar_pane_keywords_delete_cb(GtkWidget *, gpointer data)
@@ -1040,6 +1059,41 @@ void bar_pane_keywords_add_to_selected_cb(GtkWidget *, gpointer data)
 	g_list_free_full(keywords, g_free);
 }
 
+/**
+ * @brief Callback for removing the selected keyword from all selected images.
+ */
+void bar_pane_keywords_remove_from_selected_cb(GtkWidget *, gpointer data)
+{
+	auto pkd = static_cast<PaneKeywordsData *>(data);
+	if (!pkd->click_tpath) return;
+
+	GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(pkd->keyword_treeview));
+	GtkTreeIter iter;
+	if (!gtk_tree_model_get_iter(model, &iter, pkd->click_tpath)) return;
+
+	gboolean is_keyword = TRUE;
+	gtk_tree_model_get(model, &iter, FILTER_KEYWORD_COLUMN_IS_KEYWORD, &is_keyword, -1);
+	if (!is_keyword) return;
+
+	GtkTreeModel *keyword_tree = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
+	GtkTreeIter child_iter;
+	gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model), &child_iter, &iter);
+
+	g_autoptr(FileDataList) list = layout_selection_list(pkd->pane.lw);
+	list = file_data_process_groups_in_selection(list, FALSE, nullptr);
+	for (GList *work = list; work; work = work->next)
+		{
+		auto fd = static_cast<FileData *>(work->data);
+		GList *keywords = metadata_read_list(fd, KEYWORD_KEY, METADATA_PLAIN);
+		if (keyword_tree_is_set(keyword_tree, &child_iter, keywords))
+			{
+			keyword_tree_reset(keyword_tree, &child_iter, &keywords);
+			metadata_write_list(fd, KEYWORD_KEY, keywords);
+			}
+		g_list_free_full(keywords, g_free);
+		}
+}
+
 void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint x, gint y)
 {
 	GtkWidget *menu;
@@ -1052,7 +1106,7 @@ void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint
 	gtk_tree_view_get_dest_row_at_pos(GTK_TREE_VIEW(pkd->keyword_treeview), x, y, &pkd->click_tpath, &pos);
 
 	GtkWidget *popover_parent = widget;
-#if HAVE_GTK4_22
+#if GTK_CHECK_VERSION(4, 22, 0)
 	if (GtkWidget *ancestor = gtk_widget_get_ancestor(widget, GTK_TYPE_POPOVER_BIN))
 		{
 		popover_parent = ancestor;
@@ -1086,6 +1140,9 @@ void bar_pane_keywords_menu_popup(GtkWidget *widget, PaneKeywordsData *pkd, gint
 			{
 			g_autofree gchar *text = g_strdup_printf(_("Add \"%s\" to all selected images"), name);
 			popover_item_add_icon(menu, text, GQ_ICON_ADD, G_CALLBACK(bar_pane_keywords_add_to_selected_cb), pkd);
+
+			g_autofree gchar *remove_text = g_strdup_printf(_("Remove \"%s\" from all selected images"), name);
+			popover_item_add_icon(menu, remove_text, GQ_ICON_REMOVE, G_CALLBACK(bar_pane_keywords_remove_from_selected_cb), pkd);
 			}
 		popover_item_add_divider(menu);
 
@@ -1206,7 +1263,7 @@ void autocomplete_selected_cb(GtkListBox *, GtkListBoxRow *row, gpointer data)
 	if (!keyword) return;
 
 	pkd->autocomplete_changing = TRUE;
-	gq_gtk_entry_set_text(GTK_ENTRY(pkd->autocomplete), keyword);
+	entry_set_text(GTK_ENTRY(pkd->autocomplete), keyword);
 	gtk_editable_set_position(GTK_EDITABLE(pkd->autocomplete), -1);
 	pkd->autocomplete_changing = FALSE;
 	if (pkd->autocomplete_popover) gtk_popover_popdown(GTK_POPOVER(pkd->autocomplete_popover));
@@ -1342,7 +1399,7 @@ gboolean autocomplete_keypress_cb(GtkEventControllerKey *, guint keyval, guint, 
 GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gchar *key, gboolean expanded, gint height)
 {
 	PaneKeywordsData *pkd;
-	GtkWidget *hbox;
+	GtkWidget *keyword_box;
 	GtkWidget *vbox;
 	GtkTextBuffer *buffer;
 	GtkTreeModel *store;
@@ -1368,25 +1425,26 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	pkd->expanded_rows = nullptr;
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
-	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
+	keyword_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_GAP);
+	gtk_widget_set_hexpand(keyword_box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(keyword_box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), keyword_box);
 
 	pkd->widget = vbox;
 	g_object_set_data_full(G_OBJECT(pkd->widget), "pane_data", pkd, bar_pane_keywords_destroy);
 	gtk_widget_set_size_request(pkd->widget, -1, height);
-	gtk_widget_show(hbox);
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(keyword_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(keyword_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(keyword_box), scrolled);
 
 	pkd->keyword_view = gtk_text_view_new();
-	gq_gtk_container_add(scrolled, pkd->keyword_view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), pkd->keyword_view);
 	bar_pane_keywords_set_extra_menu(pkd);
-	gtk_widget_show(pkd->keyword_view);
 
 	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(pkd->keyword_view));
 	g_signal_connect(G_OBJECT(buffer), "changed",
@@ -1398,14 +1456,18 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 		gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 		gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 						GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-		gq_gtk_box_pack_start(GTK_BOX(hbox), scrolled, TRUE, TRUE, 0);
-		gtk_widget_show(scrolled);
+		gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(keyword_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(keyword_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(keyword_box), scrolled);
 		}
 
+	GtkWidget *autocomplete_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_widget_set_valign(autocomplete_box, GTK_ALIGN_START);
+	gtk_box_append(GTK_BOX(vbox), autocomplete_box);
+
 	pkd->autocomplete = gtk_entry_new();
-	gq_gtk_box_pack_end(GTK_BOX(vbox), pkd->autocomplete, FALSE, FALSE, 0);
-	gtk_widget_show(pkd->autocomplete);
-	gtk_widget_show(vbox);
+	gtk_widget_set_hexpand(pkd->autocomplete, TRUE);
+	gtk_box_append(GTK_BOX(autocomplete_box), pkd->autocomplete);
 	gtk_widget_set_tooltip_text(pkd->autocomplete, _("Keyword autocomplete"));
 
 	g_autofree gchar *path = g_build_filename(get_rc_dir(), "keywords", NULL);
@@ -1501,9 +1563,7 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	if (options->show_predefined_keyword_tree)
 		{
 		GtkWidget *popover_parent = popover_parent_new(pkd->keyword_treeview);
-		gq_gtk_container_add(scrolled, popover_parent);
-		gtk_widget_show(pkd->keyword_treeview);
-		gtk_widget_show(popover_parent);
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), popover_parent);
 		}
 
 	file_data_register_notify_func(bar_pane_keywords_notify_cb, pkd, NOTIFY_PRIORITY_LOW);
@@ -1541,7 +1601,7 @@ gboolean autocomplete_activate_cb(GtkWidget *, gpointer data)
 	g_free(entry_text);
 	entry_text = g_strdup(gtk_editable_get_text(GTK_EDITABLE(pkd->autocomplete)));
 
-	gq_gtk_entry_set_text(GTK_ENTRY(pkd->autocomplete), "");
+	entry_set_text(GTK_ENTRY(pkd->autocomplete), "");
 
 	if (entry_text[0] != '\0' &&
 	    std::find(keyword_store.begin(), keyword_store.end(), entry_text) == keyword_store.end())

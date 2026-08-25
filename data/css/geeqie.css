@@ -27,3 +27,40 @@ modelbutton check
 	margin: 0;
 	padding: 0;
 }
+
+button.tab-completion-selected {
+	background-color: @theme_selected_bg_color;
+	color: @theme_selected_fg_color;
+}
+
+.bar-pane-expander > title > expander {
+	-gtk-icon-source: none;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.view-dir-list button.vdlist-row-button {
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.view-dir-list button.vdlist-row-button.vdlist-selected {
+	background-color: @theme_selected_bg_color;
+	color: @theme_selected_fg_color;
+}
+
+.collection-grid-item.collection-grid-selected {
+	background-color: @theme_selected_bg_color;
+	color: @theme_selected_fg_color;
+}
+
+.collection-grid-item.collection-grid-prelight {
+	background-color: alpha(@theme_selected_bg_color, 0.35);
+}
+
+.collection-grid-item.collection-grid-focus {
+	outline: 1px solid @theme_selected_bg_color;
+}

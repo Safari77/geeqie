@@ -6,6 +6,7 @@
 /src/tags
 
 # /subprojects
+/subprojects/.wraplock
 /subprojects/packagecache
 /subprojects/googletest-release-*
 

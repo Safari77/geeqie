@@ -400,6 +400,7 @@ static void write_global_attributes(GString *outstr, gint indent)
 	WRITE_NL(); WRITE_BOOL(*options, show_icon_names);
 	WRITE_NL(); WRITE_BOOL(*options, show_star_rating);
 	WRITE_NL(); WRITE_BOOL(*options, show_collection_infotext);
+	WRITE_NL(); WRITE_BOOL(*options, show_collection_marks);
 	WRITE_NL(); WRITE_BOOL(*options, show_predefined_keyword_tree);
 	WRITE_SEPARATOR();
 
@@ -422,6 +423,7 @@ static void write_global_attributes(GString *outstr, gint indent)
 	WRITE_SEPARATOR();
 
 	WRITE_NL(); WRITE_BOOL(*options, mousewheel_scrolls);
+	WRITE_NL(); WRITE_BOOL(*options, show_birdseye);
 	WRITE_NL(); WRITE_BOOL(*options, image_lm_click_nav);
 	WRITE_NL(); WRITE_BOOL(*options, image_l_click_archive);
 	WRITE_NL(); WRITE_BOOL(*options, image_l_click_video);
@@ -876,6 +878,7 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 		if (READ_BOOL(*options, show_icon_names)) continue;
 		if (READ_BOOL(*options, show_star_rating)) continue;
 		if (READ_BOOL(*options, show_collection_infotext)) continue;
+		if (READ_BOOL(*options, show_collection_marks)) continue;
 		if (READ_BOOL(*options, show_predefined_keyword_tree)) continue;
 
 		if (READ_BOOL(*options, tree_descend_subdirs)) continue;
@@ -895,6 +898,7 @@ static gboolean load_global_params(const gchar **attribute_names, const gchar **
 		if (READ_UINT_CLAMP(*options, keyboard_scroll_step, 1, 32)) continue;
 
 		if (READ_BOOL(*options, mousewheel_scrolls)) continue;
+		if (READ_BOOL(*options, show_birdseye)) continue;
 		if (READ_BOOL(*options, image_lm_click_nav)) continue;
 		if (READ_BOOL(*options, image_l_click_archive)) continue;
 		if (READ_BOOL(*options, image_l_click_video)) continue;
@@ -1672,16 +1676,18 @@ static void options_parse_layout(GQParserData *parser_data, const gchar *element
 			{
 			GtkWidget *bar = bar_sort_new_from_config(lw, attribute_names, attribute_values);
 			layout_bar_sort_set(lw, bar);
-			gtk_widget_show(lw->bar_sort);
+			gtk_widget_set_visible(lw->bar_sort, TRUE);
 			}
 		parser_data->func_push(options_parse_leaf, nullptr, nullptr);
 		}
 	else if (g_ascii_strcasecmp(element_name, "toolbar") == 0)
 		{
+		layout_toolbar_clear(lw, TOOLBAR_MAIN);
 		parser_data->func_push(options_parse_toolbar<TOOLBAR_MAIN>, nullptr, lw);
 		}
 	else if (g_ascii_strcasecmp(element_name, "statusbar") == 0)
 		{
+		layout_toolbar_clear(lw, TOOLBAR_STATUS);
 		parser_data->func_push(options_parse_toolbar<TOOLBAR_STATUS>, nullptr, lw);
 		}
 	else if (g_ascii_strcasecmp(element_name, "dialogs") == 0)

@@ -30,7 +30,6 @@
 #include "collect-table.h"
 #include "collect.h"
 #include "color-man.h"
-#include "compat.h"
 #include "exif.h"
 #include "filecache.h"
 #include "filedata.h"
@@ -47,6 +46,7 @@
 #include "pixbuf-renderer.h"
 #include "pixbuf-util.h"
 #include "ui-fileops.h"
+#include "ui-utildlg.h"
 
 struct ExifData;
 class FileCache;
@@ -942,7 +942,21 @@ static void image_load_size_prepared_cb(ImageLoader *, const GqSize *size, gpoin
 
 static void image_load_error_cb(ImageLoader *il, gpointer data)
 {
+	auto imd = static_cast<ImageWindow *>(data);
+	g_autoptr(GError) error = image_loader_dup_error(il);
+
 	DEBUG_1("%s image error", get_exec_time());
+	image_state_set(imd, IMAGE_STATE_ERROR);
+
+	if (error)
+		{
+		log_printf("%s: %s\n", _("Image load failed"), error->message);
+		if (error->domain == GDK_PIXBUF_ERROR && error->code == GDK_PIXBUF_ERROR_INSUFFICIENT_MEMORY)
+			{
+			warning_dialog(_("Image is too large"), error->message,
+			               GQ_ICON_DIALOG_WARNING, imd->top_window);
+			}
+		}
 
 	/* even on error handle it like it was done,
 	 * since we have a pixbuf with _something_ */
@@ -1235,6 +1249,7 @@ static gboolean image_scroll_cb(GtkEventControllerScroll *controller, gdouble dx
 		dy,
 		gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(controller)),
 		direction,
+		gdk_scroll_event_get_unit(event),
 		gdk_event_get_time(event)
 	};
 
@@ -1680,6 +1695,33 @@ void image_mousewheel_scroll(ImageWindow *imd, GdkScrollDirection direction)
 		default:
 			break;
 		}
+	}
+
+gint image_scroll_navigation_steps(ImageWindow *imd, const GqScrollEvent *event)
+{
+	gdouble delta = event->dy;
+
+	if (event->unit != GDK_SCROLL_UNIT_WHEEL || delta == 0.0)
+		{
+		switch (event->direction)
+			{
+			case GDK_SCROLL_UP: delta = -1.0; break;
+			case GDK_SCROLL_DOWN: delta = 1.0; break;
+			default: return 0;
+			}
+		}
+
+	if ((delta < 0.0 && imd->wheel_navigation_accumulator > 0.0) ||
+	    (delta > 0.0 && imd->wheel_navigation_accumulator < 0.0))
+		{
+		imd->wheel_navigation_accumulator = 0.0;
+		}
+
+	imd->wheel_navigation_accumulator += delta;
+	const gint steps = static_cast<gint>(imd->wheel_navigation_accumulator);
+	imd->wheel_navigation_accumulator -= steps;
+
+	return steps;
 }
 
 gdouble image_smooth_scroll_zoom_delta(ImageWindow *imd, gdouble delta, gdouble increment)
@@ -2056,7 +2098,10 @@ void image_set_selectable(ImageWindow *imd, gboolean selectable)
 	if (!imd->has_frame) return;
 
 	gtk_widget_remove_css_class(imd->frame, "frame");
-	gq_gtk_widget_set_border_width(imd->frame, selectable ? 4 : 0);
+	gtk_widget_set_margin_top(imd->frame, selectable ? 4 : 0);
+	gtk_widget_set_margin_bottom(imd->frame, selectable ? 4 : 0);
+	gtk_widget_set_margin_start(imd->frame, selectable ? 4 : 0);
+	gtk_widget_set_margin_end(imd->frame, selectable ? 4 : 0);
 }
 
 void image_grab_focus(ImageWindow *imd)
@@ -2146,15 +2191,13 @@ void image_set_frame(ImageWindow *imd, gboolean frame)
 
 	if (frame == imd->has_frame) return;
 
-	gtk_widget_hide(imd->pr);
-
 	if (frame)
 		{
 		imd->frame = gtk_frame_new(nullptr);
 		DEBUG_NAME(imd->frame);
 		g_object_ref(imd->pr);
-		if (imd->has_frame != -1) gq_gtk_container_remove(imd->widget, imd->pr);
-		gq_gtk_container_add(imd->frame, imd->pr);
+		if (imd->has_frame != -1) gtk_box_remove(GTK_BOX(imd->widget), imd->pr);
+		gtk_frame_set_child(GTK_FRAME(imd->frame), imd->pr);
 
 		g_object_unref(imd->pr);
 		gtk_widget_set_can_focus(imd->frame, TRUE);
@@ -2163,24 +2206,25 @@ void image_set_frame(ImageWindow *imd, gboolean frame)
 		g_signal_connect(controller, "enter", G_CALLBACK(image_focus_in_cb), imd);
 		gtk_widget_add_controller(imd->frame, controller);
 
-		gq_gtk_box_pack_start(GTK_BOX(imd->widget), imd->frame, TRUE, TRUE, 0);
-		gtk_widget_show(imd->frame);
+		gtk_widget_set_hexpand(imd->frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(imd->widget))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(imd->frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(imd->widget))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(imd->widget), imd->frame);
 		}
 	else
 		{
 		g_object_ref(imd->pr);
 		if (imd->frame)
 			{
-			gq_gtk_container_remove(imd->frame, imd->pr);
-			gq_gtk_container_remove(imd->widget, imd->frame);
+			gtk_frame_set_child(GTK_FRAME(imd->frame), nullptr);
+			gtk_box_remove(GTK_BOX(imd->widget), imd->frame);
 			imd->frame = nullptr;
 			}
-		gq_gtk_box_pack_start(GTK_BOX(imd->widget), imd->pr, TRUE, TRUE, 0);
+		gtk_widget_set_hexpand(imd->pr, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(imd->widget))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(imd->pr, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(imd->widget))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(imd->widget), imd->pr);
 
 		g_object_unref(imd->pr);
 		}
-
-	gtk_widget_show(imd->pr);
 
 	imd->has_frame = frame;
 }

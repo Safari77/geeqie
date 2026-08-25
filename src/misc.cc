@@ -48,8 +48,6 @@ constexpr int BUFSIZE = 128;
  */
 constexpr gshort STYLE_SHIFT_STANDARD = 10;
 
-constexpr gint CELL_HEIGHT_OVERRIDE = 512;
-
 } // namespace
 
 gdouble get_zoom_increment()
@@ -102,25 +100,6 @@ gint utf8_compare(const gchar *s1, const gchar *s2, gboolean case_sensitive)
 		}
 
 	return ret;
-}
-
-gint gq_gtk_tree_iter_utf8_collate(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b, gint sort_column_id)
-{
-	g_autofree gchar *str_a = nullptr;
-	gtk_tree_model_get(model, a,
-	                   sort_column_id, &str_a,
-	                   -1);
-
-	g_autofree gchar *str_b = nullptr;
-	gtk_tree_model_get(model, b,
-	                   sort_column_id, &str_b,
-	                   -1);
-
-	if (str_a && str_b) return g_utf8_collate(str_a, str_b);
-
-	if (!str_a && !str_b) return 0;
-
-	return (!str_a) ? -1 : 1;
 }
 
 /* Borrowed from gtkfilesystemunix.c */
@@ -352,63 +331,12 @@ void shift_color(GdkRGBA &src, gshort val, gint direction)
 		}
 }
 
-void gq_gtk_entry_set_text(GtkEntry *entry, const gchar *text)
+void entry_set_text(GtkEntry *entry, const gchar *text)
 {
 	GtkEntryBuffer *buffer;
 
 	buffer = gtk_entry_get_buffer(entry);
 	gtk_entry_buffer_set_text(buffer, text, static_cast<gint>(g_utf8_strlen(text, -1)));
-}
-
-namespace
-{
-
-struct DialogRunData
-{
-	GMainLoop *loop;
-	gint response_id;
-};
-
-void dialog_run_response_cb(GtkDialog *, gint response_id, gpointer data)
-{
-	auto *run_data = static_cast<DialogRunData *>(data);
-	run_data->response_id = response_id;
-	g_main_loop_quit(run_data->loop);
-}
-
-} // namespace
-
-gint gq_gtk_dialog_run(GtkDialog *dialog)
-{
-	DialogRunData run_data{};
-	run_data.loop = g_main_loop_new(nullptr, FALSE);
-	run_data.response_id = GTK_RESPONSE_NONE;
-
-	gulong handler_id = g_signal_connect(dialog, "response",
-					     G_CALLBACK(dialog_run_response_cb), &run_data);
-	gtk_widget_show(GTK_WIDGET(dialog));
-	g_main_loop_run(run_data.loop);
-	g_signal_handler_disconnect(dialog, handler_id);
-	g_main_loop_unref(run_data.loop);
-
-	return run_data.response_id;
-}
-
-/**
- * @brief This overrides the low default of a GtkCellRenderer from 100 to CELL_HEIGHT_OVERRIDE, something sane for our purposes
- */
-void cell_renderer_height_override(GtkCellRenderer *renderer)
-{
-	GParamSpec *spec;
-
-	spec = g_object_class_find_property(G_OBJECT_GET_CLASS(G_OBJECT(renderer)), "height");
-	if (spec && G_IS_PARAM_SPEC_INT(spec))
-		{
-		GParamSpecInt *spec_int;
-
-		spec_int = G_PARAM_SPEC_INT(spec);
-		spec_int->maximum = std::max(spec_int->maximum, CELL_HEIGHT_OVERRIDE);
-		}
 }
 
 GtkWidget *widget_get_toplevel(GtkWidget *widget)

@@ -27,7 +27,6 @@
 #include <gdk/gdk.h>
 #include <glib-object.h>
 
-#include "compat.h"
 #include "intl.h"
 #include "main-defines.h"
 #include "ui-fileops.h"
@@ -141,14 +140,14 @@ void help_window_load_text(GtkWidget *text, const gchar *path)
 
 gboolean help_window_delete_cb(GtkWidget *widget, gpointer)
 {
-	gq_gtk_widget_destroy(widget);
+	gtk_window_destroy(GTK_WINDOW(widget));
 	return TRUE;
 }
 
 void help_window_close(GtkWidget *, gpointer data)
 {
 	auto window = static_cast<GtkWidget *>(data);
-	gq_gtk_widget_destroy(window);
+	gtk_window_destroy(GTK_WINDOW(window));
 }
 
 } // namespace
@@ -189,28 +188,28 @@ GtkWidget *help_window_new(const gchar *title,
 			 G_CALLBACK(help_window_delete_cb), NULL);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(window, vbox);
-	gtk_widget_show(vbox);
+	gtk_window_set_child(GTK_WINDOW(window), vbox);
 
 	g_object_set_data(G_OBJECT(window), "text_vbox", vbox);
 
 	/* text window */
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
-	gtk_widget_show(hbox);
+	gtk_widget_set_hexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), hbox);
 
 	scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), scrolled);
 
 	text = gtk_text_view_new();
 	gtk_text_view_set_editable(GTK_TEXT_VIEW(text), FALSE);
-	gq_gtk_container_add(scrolled, text);
-	gtk_widget_show(text);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), text);
 
 	buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text));
 	gtk_text_buffer_create_tag(buffer, "monospace",
@@ -223,15 +222,14 @@ GtkWidget *help_window_new(const gchar *title,
 	button = gtk_button_new_from_icon_name(GQ_ICON_CLOSE);
 	g_signal_connect(G_OBJECT(button), "clicked",
 			 G_CALLBACK(help_window_close), window);
-	gq_gtk_container_add(hbox, button);
+	gtk_box_append(GTK_BOX(hbox), button);
 	gtk_window_set_default_widget(GTK_WINDOW(window), button);
-	gtk_widget_show(button);
 
 	g_object_set_data(G_OBJECT(window), "text_widget", text);
 
 	help_window_load_text(text, path);
 
-	gtk_widget_show(window);
+	gtk_window_present(GTK_WINDOW(window));
 
 	help_window_scroll(text, key);
 

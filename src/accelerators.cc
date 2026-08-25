@@ -128,7 +128,7 @@ bool accelerator_string_is_valid(const char *shortcuts)
 		if (!**accelerator) continue;
 
 		guint key = 0;
-		auto modifiers = static_cast<GdkModifierType>(0);
+		GdkModifierType modifiers = GDK_NO_MODIFIER_MASK;
 		gtk_accelerator_parse(*accelerator, &key, &modifiers);
 		if (!key) return false;
 		}
@@ -256,9 +256,12 @@ bool clear_modified_shortcuts()
  * Result layout:
  *   [ action1, accel1, action2, accel2, ..., nullptr ]
  *
+ * Duplicate accelerators prefer app actions, then main window actions, then
+ * the first remaining action in key file order.
+ *
  * used to create keyboard map image
  */
-void get_actions_and_accelerators(GKeyFile *key_file, GPtrArray *array)
+void get_actions_and_accelerators(GKeyFile *key_file, GPtrArray *array, const gchar *window_prefix)
 {
 	if (!key_file || !array)
 		{
@@ -267,65 +270,93 @@ void get_actions_and_accelerators(GKeyFile *key_file, GPtrArray *array)
 
 	size_t n_actions = 0;
 	g_auto(GStrv) actions = g_key_file_get_groups(key_file, &n_actions);
+	g_autoptr(GHashTable) used_accels = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, nullptr);
 
-	for (size_t i = 0; i < n_actions; i++)
+	for (guint priority = 0; priority < 3; priority++)
 		{
-		const char *action = actions[i];
-		if (!action || !*action)
+		for (size_t i = 0; i < n_actions; i++)
 			{
-			continue;
-			}
-
-		size_t n_accels = 0;
-		g_auto(GStrv) accels = g_key_file_get_string_list(key_file, action, "accels", &n_accels, nullptr);
-
-		if (!accels || n_accels == 0)
-			{
-			continue;
-			}
-
-		for (size_t j = 0; j < n_accels; j++)
-			{
-			if (!accels[j] || !*accels[j])
+			const char *action = actions[i];
+			if (!action || !*action)
 				{
 				continue;
 				}
 
-			unsigned int key = 0;
-			auto mods = static_cast<GdkModifierType>(0);
-
-			gtk_accelerator_parse(accels[j], &key, &mods);
-			if (key == 0)
+			if (window_prefix && !g_str_has_prefix(action, "app.") && !g_str_has_prefix(action, window_prefix))
 				{
 				continue;
 				}
 
-			g_autofree char *normalized = gtk_accelerator_name(key, mods);
-			if (!normalized)
+			guint action_priority = 2;
+			if (g_str_has_prefix(action, "app."))
+				{
+				action_priority = 0;
+				}
+			else if (g_str_has_prefix(action, "win.main-win-"))
+				{
+				action_priority = 1;
+				}
+
+			if (action_priority != priority)
 				{
 				continue;
 				}
 
-			char *escaped = g_markup_escape_text(normalized, -1);
-			if (!escaped)
+			size_t n_accels = 0;
+			g_auto(GStrv) accels = g_key_file_get_string_list(key_file, action, "accels", &n_accels, nullptr);
+
+			if (!accels || n_accels == 0)
 				{
 				continue;
 				}
 
-			/* Do not display the "app." or "win." prefix */
-			const char *display_action = action;
-
-			if (g_str_has_prefix(action, "app.") || g_str_has_prefix(action, "win."))
+			for (size_t j = 0; j < n_accels; j++)
 				{
-				display_action = action + 4;
+				if (!accels[j] || !*accels[j])
+					{
+					continue;
+					}
+
+				unsigned int key = 0;
+				GdkModifierType mods = GDK_NO_MODIFIER_MASK;
+
+				gtk_accelerator_parse(accels[j], &key, &mods);
+				if (key == 0)
+					{
+					continue;
+					}
+
+				g_autofree char *normalized = gtk_accelerator_name(key, mods);
+				if (!normalized || g_hash_table_contains(used_accels, normalized))
+					{
+					continue;
+					}
+
+				char *escaped = g_markup_escape_text(normalized, -1);
+				if (!escaped)
+					{
+					continue;
+					}
+
+				g_hash_table_add(used_accels, g_strdup(normalized));
+
+				/* Do not display the application or window-type prefix */
+				const char *display_action = action;
+
+				if (g_str_has_prefix(action, "app.") || g_str_has_prefix(action, "win."))
+					{
+					display_action = action + 4;
+					}
+
+				const gchar *window_separator = g_strstr_len(display_action, -1, "-win-");
+				if (window_separator)
+					{
+					display_action = window_separator + sizeof("-win-") - 1;
+					}
+
+				g_ptr_array_add(array, g_strdup(display_action));
+				g_ptr_array_add(array, escaped);
 				}
-
-			g_auto(GStrv) parts = g_strsplit(display_action, "-win-", -1);
-
-			g_autofree gchar *split_action = g_strjoinv(" ", parts);
-
-			g_ptr_array_add(array, g_steal_pointer(&split_action));
-			g_ptr_array_add(array, escaped);
 			}
 		}
 

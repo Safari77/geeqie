@@ -237,6 +237,14 @@ static const gchar *image_loader_get_error(ImageLoader *il)
 }
 #endif
 
+GError *image_loader_dup_error(ImageLoader *il)
+{
+	if (!il) return nullptr;
+
+	g_autoptr(GMutexLocker) locker = g_mutex_locker_new(il->data_mutex);
+	return il->error ? g_error_copy(il->error) : nullptr;
+}
+
 static void image_loader_finalize(GObject *object)
 {
 	auto il = reinterpret_cast<ImageLoader *>(object);

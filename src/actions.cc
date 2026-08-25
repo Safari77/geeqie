@@ -71,6 +71,38 @@ const char *get_description_for_action_name(const char *action_name)
 	return nullptr;
 }
 
+namespace
+{
+
+gchar *accelerator_label_from_list(GStrv accels)
+{
+	if (!accels || !accels[0]) return nullptr;
+
+	guint accelerator_key = 0;
+	GdkModifierType accelerator_mods = GDK_NO_MODIFIER_MASK;
+	gtk_accelerator_parse(accels[0], &accelerator_key, &accelerator_mods);
+	if (accelerator_key == 0) return nullptr;
+
+	return gtk_accelerator_get_label(accelerator_key, accelerator_mods);
+}
+
+} // namespace
+
+gchar *action_accelerator_label(const gchar *action_name)
+{
+	auto *app = GTK_APPLICATION(g_application_get_default());
+
+	if (app)
+		{
+		g_auto(GStrv) registered_accels = gtk_application_get_accels_for_action(app, action_name);
+		g_autofree gchar *registered_label = accelerator_label_from_list(registered_accels);
+		if (registered_label) return g_steal_pointer(&registered_label);
+		}
+
+	g_auto(GStrv) configured_accels = g_key_file_get_string_list(get_keyfile_merged(), action_name, "accels", nullptr, nullptr);
+	return accelerator_label_from_list(configured_accels);
+}
+
 static GStrv get_targets(const char *action)
 {
 	g_autofree char *prefix = g_strconcat(action, "::", nullptr);
@@ -92,11 +124,6 @@ static GStrv get_targets(const char *action)
 	g_ptr_array_add(targets, nullptr);
 
 	return reinterpret_cast<GStrv>(g_ptr_array_free(targets, FALSE));
-}
-
-static inline bool is_app_action(const char *name)
-{
-	return g_str_has_prefix(name, "app.");
 }
 
 namespace
@@ -157,8 +184,18 @@ void registered_accels_apply(GtkApplication *app, bool suppress)
 
 void window_focus_widget_notify_cb(GtkWindow *window, GParamSpec *, gpointer data)
 {
+	if (!gtk_window_is_active(window)) return;
+
 	auto app = GTK_APPLICATION(data);
 
+	registered_accels_apply(app, focus_is_editable(window));
+}
+
+void window_is_active_notify_cb(GtkWindow *window, GParamSpec *, gpointer data)
+{
+	if (!gtk_window_is_active(window)) return;
+
+	auto app = GTK_APPLICATION(data);
 	registered_accels_apply(app, focus_is_editable(window));
 }
 
@@ -171,6 +208,7 @@ void attach_accel_focus_handler(GtkApplication *app, GtkWidget *window)
 		}
 
 	g_signal_connect(window, "notify::focus-widget", G_CALLBACK(window_focus_widget_notify_cb), app);
+	g_signal_connect(window, "notify::is-active", G_CALLBACK(window_is_active_notify_cb), app);
 	g_object_set_data(G_OBJECT(window), ACCEL_FOCUS_HANDLER_ATTACHED, GINT_TO_POINTER(TRUE));
 }
 
@@ -196,7 +234,6 @@ void reload_registered_accels(GtkApplication *app, GKeyFile *accels_keyfile)
 		const auto *detailed_action = static_cast<const char *>(key);
 		g_auto(GStrv) accels = g_key_file_get_string_list(accels_keyfile, detailed_action, "accels", nullptr, nullptr);
 		if (!accels) accels = g_new0(gchar *, 1);
-
 		gtk_application_set_accels_for_action(app, detailed_action,
 		                                      registered_accels_suppressed ? empty_accels : const_cast<const char * const *>(accels));
 		g_hash_table_iter_replace(&iter, g_steal_pointer(&accels));

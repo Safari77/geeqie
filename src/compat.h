@@ -21,7 +21,6 @@
 #ifndef COMPAT_H
 #define COMPAT_H
 
-#include <glib.h>
 #include <gtk/gtk.h>
 
 #include <config.h>
@@ -33,63 +32,9 @@
 #define	MAP_ANON	MAP_ANONYMOUS
 #endif
 
-#ifndef GDK_ACTION_NONE
+#if !GTK_CHECK_VERSION(4, 20, 0)
 #define GDK_ACTION_NONE static_cast<GdkDragAction>(0)
 #endif
-
-struct GqMouseButtonEvent
-{
-	guint button;
-	gdouble x;
-	gdouble y;
-	GdkModifierType state;
-	guint press_count;
-};
-
-struct GqKeyEvent
-{
-	guint keyval;
-	guint keycode;
-	GdkModifierType state;
-	guint32 time;
-};
-
-struct GqScrollEvent
-{
-	gdouble x;
-	gdouble y;
-	gdouble dx;
-	gdouble dy;
-	GdkModifierType state;
-	GdkScrollDirection direction;
-	guint32 time;
-};
-
-struct GqPointerMotionEvent
-{
-	gdouble x;
-	gdouble y;
-	gdouble dx;
-	gdouble dy;
-	GdkModifierType state;
-};
-
-#define gq_icon_theme_get_default() gtk_icon_theme_get_for_display(gdk_display_get_default())
-
-void gq_gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
-void gq_gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
-
-gint gq_gtk_box_get_child_position(GtkBox *box, GtkWidget *child);
-void gq_gtk_box_reorder_child(GtkBox *box, GtkWidget *child, gint position);
-
-void gq_gtk_container_add(GtkWidget *container, GtkWidget *widget);
-void gq_gtk_container_remove(GtkWidget *container, GtkWidget *widget);
-void gq_gtk_widget_show_all(GtkWidget *widget);
-void gq_gtk_widget_destroy(GtkWidget *widget);
-void gq_gtk_widget_set_border_width(GtkWidget *widget, guint width);
-const gchar *stock_id_to_icon_name(const gchar *stock_id);
-GtkWidget *gq_gtk_image_new_from_stock(const gchar *stock_id, gint size);
-GtkWidget *gq_gtk_widget_get_focus_child(GtkWidget *widget);
 
 #endif /* COMPAT_H */
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

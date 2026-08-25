@@ -30,22 +30,18 @@
 
 #include <glib-object.h>
 
-#include "actions.h"
 #include "collect-dlg.h"
 #include "collect-io.h"
 #include "collect-table.h"
-#include "compat.h"
 #include "filedata.h"
 #include "img-view.h"
 #include "intl.h"
 #include "layout-image.h"
 #include "layout-util.h"
-#include "layout.h"
 #include "main-defines.h"
 #include "misc.h"
 #include "options.h"
 #include "pixbuf-util.h"
-#include "print.h"
 #include "ui-fileops.h"
 #include "ui-misc.h"
 #include "ui-utildlg.h"
@@ -870,144 +866,15 @@ static void collection_notify_cb(FileData *fd, NotifyType type, gpointer data)
  *-------------------------------------------------------------------
  */
 
-static gboolean collection_window_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
+static gboolean collection_window_keypress(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer)
 {
-	auto cw = static_cast<CollectWindow *>(data);
-	gboolean stop_signal = TRUE;
-
-	if (state & GDK_CONTROL_MASK)
-		{
-		switch (keyval)
-			{
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-			case '8':
-			case '9':
-			case '0':
-				break;
-			case 'A': case 'a':
-				if (state & GDK_SHIFT_MASK)
-					{
-					collection_table_unselect_all(cw->table);
-					}
-				else
-					{
-					collection_table_select_all(cw->table);
-					}
-				break;
-			case 'L': case 'l':
-				{
-				g_autoptr(FileDataList) list = layout_list(nullptr);
-				if (list)
-					{
-					collection_table_add_filelist(cw->table, list);
-					}
-				}
-				break;
-			case 'C': case 'c':
-				file_util_copy(nullptr, collection_table_selection_get_list(cw->table), nullptr, cw->window);
-				break;
-			case 'M': case 'm':
-				file_util_move(nullptr, collection_table_selection_get_list(cw->table), nullptr, cw->window);
-				break;
-			case 'R': case 'r':
-				file_util_rename(nullptr, collection_table_selection_get_list(cw->table), cw->window);
-				break;
-			case 'D': case 'd':
-				file_util_delete(nullptr, collection_table_selection_get_list(cw->table), cw->window, TRUE);
-				break;
-			case 'S': case 's':
-				collection_dialog_save(cw->cd);
-				break;
-			case 'W': case 'w':
-				collection_window_close(cw);
-				break;
-			default:
-				stop_signal = FALSE;
-				break;
-			}
-		}
-	else
-		{
-		switch (keyval)
-			{
-			case GDK_KEY_Return: case GDK_KEY_KP_Enter:
-				layout_image_set_collection(nullptr, cw->cd,
-					collection_table_get_focus_info(cw->table));
-				break;
-			case 'V': case 'v':
-				view_window_new_from_collection(cw->cd,
-					collection_table_get_focus_info(cw->table));
-				break;
-			case 'S': case 's':
-				if (!cw->cd->path)
-					{
-					collection_dialog_save(cw->cd);
-					}
-				else if (!collection_save(cw->cd, cw->cd->path))
-					{
-					log_printf("failed saving to collection path: %s\n", cw->cd->path);
-					}
-				break;
-			case 'A': case 'a':
-				collection_dialog_append(cw->cd);
-				break;
-			case 'N': case 'n':
-				collection_set_sort_method(cw->cd, SORT_NAME);
-				break;
-			case 'D': case 'd':
-				collection_set_sort_method(cw->cd, SORT_TIME);
-				break;
-			case 'B': case 'b':
-				collection_set_sort_method(cw->cd, SORT_SIZE);
-				break;
-			case 'P': case 'p':
-				if (state & GDK_SHIFT_MASK)
-					{
-					print_window_new(collection_table_selection_get_list(cw->table), cw->window);
-					}
-				else
-					{
-					collection_set_sort_method(cw->cd, SORT_PATH);
-					}
-				break;
-			case 'R': case 'r':
-				if (state & GDK_ALT_MASK)
-					{
-						options->collections.rectangular_selection = !(options->collections.rectangular_selection);
-					}
-				break;
-			case GDK_KEY_Delete: case GDK_KEY_KP_Delete:
-				{
-				g_autoptr(GList) list = g_list_copy(cw->table->selection);
-				if (list)
-					{
-					collection_remove_by_info_list(cw->cd, list);
-					collection_table_refresh(cw->table);
-					}
-				else
-					{
-					collection_remove_by_info(cw->cd, collection_table_get_focus_info(cw->table));
-					}
-				}
-				break;
-			default:
-				stop_signal = FALSE;
-				break;
-			}
-		}
-	if (!stop_signal && is_help_key(keyval, state))
+	if (is_help_key(keyval, state))
 		{
 		help_window_show("GuideCollections.html");
-		stop_signal = TRUE;
+		return TRUE;
 		}
 
-	return stop_signal;
+	return FALSE;
 }
 
 /*
@@ -1093,7 +960,7 @@ static void collection_window_close_final(CollectWindow *cw)
 	collection_window_list = g_list_remove(collection_window_list, cw);
 	collection_window_get_geometry(cw);
 
-	gq_gtk_widget_destroy(cw->window);
+	gtk_window_destroy(GTK_WINDOW(cw->window));
 
 	collection_set_update_info_func(cw->cd, nullptr);
 	collection_unref(cw->cd);
@@ -1164,7 +1031,7 @@ static void collection_close_dlg_show(CollectWindow *cw)
 
 	cw->close_dialog = gd->dialog;
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static void collection_window_close(CollectWindow *cw)
@@ -1265,7 +1132,10 @@ CollectWindow *collection_window_new(const gchar *path)
 
 	gtk_window_set_resizable(GTK_WINDOW(cw->window), TRUE);
 	collection_window_update_title(cw);
-	gq_gtk_widget_set_border_width(cw->window, 0);
+	gtk_widget_set_margin_top(cw->window, 0);
+	gtk_widget_set_margin_bottom(cw->window, 0);
+	gtk_widget_set_margin_start(cw->window, 0);
+	gtk_widget_set_margin_end(cw->window, 0);
 
 	g_signal_connect(G_OBJECT(cw->window), "close-request",
 			 G_CALLBACK(collection_window_delete), cw);
@@ -1275,38 +1145,38 @@ CollectWindow *collection_window_new(const gchar *path)
 	gtk_widget_add_controller(cw->window, controller);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(cw->window, vbox);
-	gtk_widget_show(vbox);
+	gtk_window_set_child(GTK_WINDOW(cw->window), vbox);
 
 	cw->table = collection_table_new(cw->cd);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), cw->table->scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(cw->table->scrolled);
+	gtk_widget_set_hexpand(cw->table->scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(cw->table->scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), cw->table->scrolled);
 
 	cw->status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), cw->status_box, FALSE, FALSE, 0);
-	gtk_widget_show(cw->status_box);
+	gtk_box_append(GTK_BOX(vbox), cw->status_box);
 
 	GtkWidget *frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
 	gtk_widget_add_css_class(frame, "frame");
-	gq_gtk_box_pack_start(GTK_BOX(cw->status_box), frame, TRUE, TRUE, 0);
-	gtk_widget_show(frame);
+	gtk_widget_set_hexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cw->status_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cw->status_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(cw->status_box), frame);
 
 	status_label = gtk_label_new("");
-	gq_gtk_container_add(frame, status_label);
-	gtk_widget_show(status_label);
+	gtk_frame_set_child(GTK_FRAME(frame), status_label);
 
 	extra_label = gtk_progress_bar_new();
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(extra_label), 0.0);
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(extra_label), "");
 	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(extra_label), TRUE);
 
-	gq_gtk_box_pack_start(GTK_BOX(cw->status_box), extra_label, TRUE, TRUE, 0);
-	gtk_widget_show(extra_label);
+	gtk_widget_set_hexpand(extra_label, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cw->status_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(extra_label, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(cw->status_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(cw->status_box), extra_label);
 
 	collection_table_set_labels(cw->table, status_label, extra_label);
 
-	gtk_widget_show(cw->window);
+	gtk_window_present(GTK_WINDOW(cw->window));
 	gtk_widget_grab_focus(cw->table->listview);
 
 	const auto collection_window_update_info = [cw](CollectionData *, CollectInfo *ci)

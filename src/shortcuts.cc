@@ -25,7 +25,6 @@
 #include <glib.h>
 
 #include "collect.h"
-#include "compat.h"
 #include "intl.h"
 #include "layout.h"
 #include "main-defines.h"
@@ -65,8 +64,9 @@ GtkWidget *shortcuts_new(LayoutWindow *lw)
 			}
 	};
 	GtkWidget *bookmarks = bookmark_list_new(SHORTCUTS, shortcuts_bookmark_select);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), bookmarks, TRUE, TRUE, 0);
-	gtk_widget_show(bookmarks);
+	gtk_widget_set_hexpand(bookmarks, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(bookmarks, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), bookmarks);
 
 	GtkWidget *tbar = pref_toolbar_new(vbox);
 
@@ -74,7 +74,6 @@ GtkWidget *shortcuts_new(LayoutWindow *lw)
 	                    _("Add Shortcut"),
 	                    G_CALLBACK(shortcuts_add_cb), bookmarks);
 
-	gtk_widget_show(vbox);
 	return vbox;
 }
 

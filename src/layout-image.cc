@@ -58,6 +58,7 @@
 #include "misc.h"
 #include "options.h"
 #include "pixbuf-renderer.h"
+#include "pixbuf-util.h"
 #include "rcfile.h"
 #include "slideshow.h"
 #include "ui-fileops.h"
@@ -691,7 +692,7 @@ static void layout_image_pop_menu_copy_image_cb(GSimpleAction *, GVariant *, gpo
 		return;
 		}
 
-	GdkTexture *texture = gdk_texture_new_for_pixbuf(pixbuf);
+	GdkTexture *texture = pixbuf_to_texture(pixbuf);
 
 	gdk_clipboard_set_texture(clipboard, texture);
 	g_object_unref(texture);
@@ -762,7 +763,7 @@ static void layout_image_pop_menu_hide_selectable_toolbars_cb(GSimpleAction *act
 
 	if (lw->options.selectable_toolbars_hidden != enabled)
 		{
-		current_layout_selectable_toolbars_toggle();
+		layout_selectable_toolbars_toggle(lw);
 		}
 
 	g_simple_action_set_state(action, state);
@@ -849,7 +850,7 @@ static GtkWidget *layout_image_pop_menu(LayoutWindow *lw, GtkWidget *parent, gdo
 	layout_image_pop_menu_populate_orientation(orientation_menu);
 
 	GMenu *collections_menu = G_MENU(gtk_builder_get_object(builder, "collections-submenu"));
-	submenu_add_collections_new(collections_menu, has_path, "win.layout-image-collections", lw);
+	submenu_add_collections_new(collections_menu, "win.layout-image-collections");
 
 	layout_image_pop_menu_set_enabled(lw, "layout-image-plugin-run", has_path);
 	layout_image_pop_menu_set_enabled(lw, "layout-image-alter", has_path);
@@ -1334,6 +1335,7 @@ void layout_image_set_overunderexposed(LayoutWindow *lw, gboolean overunderexpos
 {
 	if (!layout_valid(&lw)) return;
 
+	options->overunderexposed = overunderexposed;
 	image_set_overunderexposed(lw->image, overunderexposed);
 }
 
@@ -1898,16 +1900,13 @@ static void layout_image_scroll_cb(ImageWindow *imd, const GqScrollEvent *event,
 		}
 	else
 		{
-		switch (event->direction)
+		const gint steps = image_scroll_navigation_steps(imd, event);
+		for (gint step = 0; step < std::abs(steps); step++)
 			{
-			case GDK_SCROLL_UP:
+			if (steps < 0)
 				layout_image_prev(lw);
-				break;
-			case GDK_SCROLL_DOWN:
+			else
 				layout_image_next(lw);
-				break;
-			default:
-				break;
 			}
 		}
 }
@@ -2275,8 +2274,6 @@ static GtkWidget *layout_image_setup_split_hv(LayoutWindow *lw, ImageSplitMode m
 	gtk_paned_set_start_child(GTK_PANED(paned), lw->split_images[0]->widget);
 	gtk_paned_set_end_child(GTK_PANED(paned), lw->split_images[1]->widget);
 
-	gtk_widget_show(lw->split_images[0]->widget);
-	gtk_widget_show(lw->split_images[1]->widget);
 
 	return paned;
 }
@@ -2303,10 +2300,7 @@ static GtkWidget *layout_image_setup_split_triple(LayoutWindow *lw)
 		}
 	else
 		{
-		GtkAllocation allocation;
-		gtk_widget_get_allocation(lw->utility_paned, &allocation);
-
-		pane_pos = allocation.width / 3;
+		pane_pos = gtk_widget_get_width(lw->utility_paned) / 3;
 		}
 
 	gtk_paned_set_position(GTK_PANED(hpaned1), pane_pos);
@@ -2319,11 +2313,9 @@ static GtkWidget *layout_image_setup_split_triple(LayoutWindow *lw)
 
 	for (i = 0; i < 3; i++)
 		{
-		gtk_widget_show(lw->split_images[i]->widget);
+		gtk_widget_set_visible(lw->split_images[i]->widget, TRUE);
 		}
 
-	gtk_widget_show(hpaned1);
-	gtk_widget_show(hpaned2);
 
 	return hpaned1;
 }
@@ -2354,10 +2346,8 @@ static GtkWidget *layout_image_setup_split_quad(LayoutWindow *lw)
 	gtk_paned_set_end_child(GTK_PANED(hpaned), vpaned2);
 
 	for (i = 0; i < 4; i++)
-		gtk_widget_show(lw->split_images[i]->widget);
+		gtk_widget_set_visible(lw->split_images[i]->widget, TRUE);
 
-	gtk_widget_show(vpaned1);
-	gtk_widget_show(vpaned2);
 
 	return hpaned;
 }

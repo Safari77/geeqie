@@ -29,7 +29,6 @@
 
 #include "cellrenderericon.h"
 #include "collect.h"
-#include "compat.h"
 #include "dnd.h"
 #include "filedata.h"
 #include "intl.h"
@@ -112,10 +111,7 @@ void vficon_pop_menu_add_items(ViewFile *vf, GtkWidget *menu)
 
 void vficon_pop_menu_show_star_rating_cb(ViewFile *vf)
 {
-	GtkAllocation allocation;
-
-	gtk_widget_get_allocation(vf->listview, &allocation);
-	vficon_populate_at_new_size(vf, allocation.width, allocation.height, TRUE);
+	vficon_populate_at_new_size(vf, gtk_widget_get_width(vf->listview), gtk_widget_get_height(vf->listview), TRUE);
 }
 
 void vficon_pop_menu_refresh_cb(ViewFile *vf)
@@ -168,12 +164,10 @@ static void vficon_send_layout_select(ViewFile *vf, FileData *fd)
 
 static void vficon_toggle_filenames(ViewFile *vf)
 {
-	GtkAllocation allocation;
 	VFICON(vf)->show_text = !VFICON(vf)->show_text;
 	options->show_icon_names = VFICON(vf)->show_text;
 
-	gtk_widget_get_allocation(vf->listview, &allocation);
-	vficon_populate_at_new_size(vf, allocation.width, allocation.height, TRUE);
+	vficon_populate_at_new_size(vf, gtk_widget_get_width(vf->listview), gtk_widget_get_height(vf->listview), TRUE);
 }
 
 static gint vficon_get_icon_width(ViewFile *vf)
@@ -326,19 +320,11 @@ static gint vficon_mark_at_coord(ViewFile *vf, gint x, gint y)
 
 static void tip_show(ViewFile *vf)
 {
-	GtkWidget *label;
-	gint x;
-	gint y;
-	GdkDisplay *display;
-	GdkSeat *seat;
-	GdkDevice *device;
-
 	if (VFICON(vf)->tip_window) return;
 
-	seat = gdk_display_get_default_seat(gtk_widget_get_display(GTK_WIDGET(vf->listview)));
-
-	device = gdk_seat_get_pointer(seat);
-	get_pointer_position(vf->listview, device, &x, &y, nullptr);
+	gint x;
+	gint y;
+	get_pointer_position(vf->listview, x, y);
 
 	VFICON(vf)->tip_fd = vficon_find_data_by_coord(vf, x, y, nullptr);
 	if (!VFICON(vf)->tip_fd) return;
@@ -346,26 +332,21 @@ static void tip_show(ViewFile *vf)
 	VFICON(vf)->tip_window = gtk_window_new();
 	gtk_window_set_transient_for(GTK_WINDOW(VFICON(vf)->tip_window), GTK_WINDOW(widget_get_toplevel(vf->listview)));
 	gtk_window_set_resizable(GTK_WINDOW(VFICON(vf)->tip_window), FALSE);
-	gq_gtk_widget_set_border_width(VFICON(vf)->tip_window, 2);
+	gtk_widget_set_margin_top(VFICON(vf)->tip_window, 2);
+	gtk_widget_set_margin_bottom(VFICON(vf)->tip_window, 2);
+	gtk_widget_set_margin_start(VFICON(vf)->tip_window, 2);
+	gtk_widget_set_margin_end(VFICON(vf)->tip_window, 2);
 
-	label = gtk_label_new(VFICON(vf)->tip_fd->name);
-
-	g_object_set_data(G_OBJECT(VFICON(vf)->tip_window), "tip_label", label);
-	gq_gtk_container_add(VFICON(vf)->tip_window, label);
-	gtk_widget_show(label);
-
-	display = gdk_display_get_default();
-	seat = gdk_display_get_default_seat(display);
-	device = gdk_seat_get_pointer(seat);
-	get_device_position(device, x, y);
+	VFICON(vf)->tip_label = gtk_label_new(VFICON(vf)->tip_fd->name);
+	gtk_window_set_child(GTK_WINDOW(VFICON(vf)->tip_window), VFICON(vf)->tip_label);
 
 	if (!gtk_widget_get_realized(VFICON(vf)->tip_window)) gtk_widget_realize(VFICON(vf)->tip_window);
-	gtk_widget_show(VFICON(vf)->tip_window);
+	gtk_window_present(GTK_WINDOW(VFICON(vf)->tip_window));
 }
 
 static void tip_hide(ViewFile *vf)
 {
-	if (VFICON(vf)->tip_window) gq_gtk_widget_destroy(VFICON(vf)->tip_window);
+	if (VFICON(vf)->tip_window) gtk_window_destroy(GTK_WINDOW(VFICON(vf)->tip_window));
 	VFICON(vf)->tip_window = nullptr;
 }
 
@@ -412,39 +393,24 @@ static void tip_schedule(ViewFile *vf)
 
 static void tip_update(ViewFile *vf, FileData *fd)
 {
-	GdkDisplay *display = gdk_display_get_default();
-	GdkSeat *seat = gdk_display_get_default_seat(display);
-	GdkDevice *device = gdk_seat_get_pointer(seat);
-
-	if (VFICON(vf)->tip_window)
-		{
-		gint x;
-		gint y;
-
-		get_device_position(device, x, y);
-
-
-		if (fd != VFICON(vf)->tip_fd)
-			{
-			GtkWidget *label;
-
-			VFICON(vf)->tip_fd = fd;
-
-			if (!VFICON(vf)->tip_fd)
-				{
-				tip_hide(vf);
-				tip_schedule(vf);
-				return;
-				}
-
-			label = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(VFICON(vf)->tip_window), "tip_label"));
-			gtk_label_set_text(GTK_LABEL(label), VFICON(vf)->tip_fd->name);
-			}
-		}
-	else
+	if (!VFICON(vf)->tip_window)
 		{
 		tip_schedule(vf);
+		return;
 		}
+
+	if (VFICON(vf)->tip_fd == fd) return;
+
+	VFICON(vf)->tip_fd = fd;
+
+	if (!VFICON(vf)->tip_fd)
+		{
+		tip_hide(vf);
+		tip_schedule(vf);
+		return;
+		}
+
+	gtk_label_set_text(GTK_LABEL(VFICON(vf)->tip_label), VFICON(vf)->tip_fd->name);
 }
 
 /*
@@ -503,9 +469,7 @@ static void vficon_selection_remove(ViewFile *vf, FileData *fd, SelectionType ma
 
 void vficon_marks_set(ViewFile *vf, gint)
 {
-	GtkAllocation allocation;
-	gtk_widget_get_allocation(vf->listview, &allocation);
-	vficon_populate_at_new_size(vf, allocation.width, allocation.height, TRUE);
+	vficon_populate_at_new_size(vf, gtk_widget_get_width(vf->listview), gtk_widget_get_height(vf->listview), TRUE);
 }
 
 /*
@@ -1148,57 +1112,59 @@ static gboolean vficon_motion_cb(GtkEventControllerMotion *, double x, double y,
 	return FALSE;
 }
 
-gboolean vficon_press_cb(ViewFile *vf, GtkWidget *widget, const GqMouseButtonEvent *event)
+void vficon_press_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
-	GtkTreeIter iter;
-	FileData *fd;
-
 	tip_unschedule(vf);
 
-	fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+	GtkTreeIter iter;
+	FileData *fd = vficon_find_data_by_coord(vf, static_cast<gint>(event.x), static_cast<gint>(event.y), &iter);
+	if (!fd) return;
 
-	if (fd)
+	vf->click_fd = fd;
+	vficon_selection_add(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
+
+	switch (event.button)
 		{
-		vf->click_fd = fd;
-		vficon_selection_add(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
-
-		switch (event->button)
-			{
-			case GDK_BUTTON_PRIMARY:
-				if (!gtk_widget_has_focus(vf->listview))
-					{
-					gtk_widget_grab_focus(vf->listview);
-					}
-
-				if (event->press_count == 2 && vf->layout)
-					{
-					if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
-						{
-						collection_window_new(vf->click_fd->path);
-						}
-					else
-						{
-						vficon_selection_remove(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
-						layout_image_full_screen_start(vf->layout);
-						}
-					}
-				break;
-			case GDK_BUTTON_SECONDARY:
+		case GDK_BUTTON_PRIMARY:
+			if (!gtk_widget_has_focus(vf->listview))
 				{
-				gint mark = vficon_mark_at_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y));
-				vf->clicked_mark = mark >= 0 ? mark + 1 : 0;
-				vf->popup = vf_pop_menu(vf, widget, event->x, event->y);
+				gtk_widget_grab_focus(vf->listview);
 				}
-				break;
-			default:
-				break;
-			}
-		}
 
-	return FALSE;
+			if (event.n_press == 2 && vf->layout)
+				{
+				if (vf->click_fd->format_class == FORMAT_CLASS_COLLECTION)
+					{
+					collection_window_new(vf->click_fd->path);
+					}
+				else
+					{
+					vficon_selection_remove(vf, vf->click_fd, SELECTION_PRELIGHT, &iter);
+					layout_image_full_screen_start(vf->layout);
+					}
+				}
+			break;
+		case GDK_BUTTON_SECONDARY:
+			{
+			if (!vficon_is_selected(vf, fd))
+				{
+				vficon_select_none(vf);
+				vficon_select_util(vf, fd, TRUE);
+				vficon_set_focus(vf, fd);
+				vficon_send_layout_select(vf, fd);
+				}
+
+			gint mark = vficon_mark_at_coord(vf, static_cast<gint>(event.x), static_cast<gint>(event.y));
+			vf->clicked_mark = mark >= 0 ? mark + 1 : 0;
+			vf->popup = vf_pop_menu(vf, event.widget, event.x, event.y);
+			}
+			break;
+		default:
+			break;
+		}
 }
 
-gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *event)
+void vficon_release_cb(ViewFile *vf, const ViewFileMouseButtonEvent &event)
 {
 	GtkTreeIter iter;
 	FileData *fd = nullptr;
@@ -1206,14 +1172,14 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *
 
 	tip_schedule(vf);
 
-	if (layout_handle_user_defined_mouse_buttons(vf->layout, event->button))
+	if (layout_handle_user_defined_mouse_buttons(vf->layout, event.button))
 		{
-		return TRUE;
+		return;
 		}
 
-	if (static_cast<gint>(event->x) != 0 || static_cast<gint>(event->y) != 0)
+	if (static_cast<gint>(event.x) != 0 || static_cast<gint>(event.y) != 0)
 		{
-		fd = vficon_find_data_by_coord(vf, static_cast<gint>(event->x), static_cast<gint>(event->y), &iter);
+		fd = vficon_find_data_by_coord(vf, static_cast<gint>(event.x), static_cast<gint>(event.y), &iter);
 		}
 
 	if (vf->click_fd)
@@ -1221,22 +1187,24 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *
 		vficon_selection_remove(vf, vf->click_fd, SELECTION_PRELIGHT, nullptr);
 		}
 
-	if (!fd || vf->click_fd != fd) return TRUE;
+	if (event.button == GDK_BUTTON_PRIMARY && vf->drag_started) return;
+
+	if (!fd || vf->click_fd != fd) return;
 
 	was_selected = !!(fd->selected & SELECTION_SELECTED);
 
-	switch (event->button)
+	switch (event.button)
 		{
 		case GDK_BUTTON_PRIMARY:
 			{
 			vficon_set_focus(vf, fd);
 
-			if (event->state & GDK_CONTROL_MASK)
+			if (event.state & GDK_CONTROL_MASK)
 				{
 				gboolean select;
 
 				select = !(fd->selected & SELECTION_SELECTED);
-				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+				if ((event.state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, select);
 					}
@@ -1249,7 +1217,7 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *
 				{
 				vficon_select_none(vf);
 
-				if ((event->state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
+				if ((event.state & GDK_SHIFT_MASK) && VFICON(vf)->prev_selection)
 					{
 					vficon_select_region_util(vf, VFICON(vf)->prev_selection, fd, TRUE);
 					}
@@ -1274,8 +1242,6 @@ gboolean vficon_release_cb(ViewFile *vf, GtkWidget *, const GqMouseButtonEvent *
 		{
 		vficon_send_layout_select(vf, fd);
 		}
-
-	return TRUE;
 }
 
 static void vficon_leave_cb(GtkEventControllerMotion *, gpointer data)

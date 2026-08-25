@@ -31,7 +31,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
 #include <shumate/shumate.h>
+#pragma GCC diagnostic pop
 #ifdef __cplusplus
 }
 #endif
@@ -47,11 +50,11 @@ extern "C" {
 #include "main-defines.h"
 #include "metadata.h"
 #include "misc.h"
+#include "pixbuf-util.h"
 #include "rcfile.h"
 #include "thumb.h"
 #include "ui-menu.h"
 #include "ui-utildlg.h"
-#include "uri-utils.h"
 
 namespace
 {
@@ -224,7 +227,7 @@ void bar_pane_gps_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
 		generic_dialog_add_message(gd, GQ_ICON_DIALOG_QUESTION, _("Write lat/long to meta-data?"), message->str, TRUE);
 		generic_dialog_add_button(gd, GQ_ICON_SAVE, _("Save"), bar_pane_gps_close_save_cb, TRUE);
 
-		gtk_widget_show(gd->dialog);
+		gtk_window_present(GTK_WINDOW(gd->dialog));
 		action = GDK_ACTION_COPY;
 		}
 
@@ -311,7 +314,7 @@ void gps_marker_set_pixbuf(GPSMarkerData *marker_data, GdkPixbuf *pixbuf)
 {
 	if (!pixbuf) return;
 
-	g_autoptr(GdkTexture) texture = gdk_texture_new_for_pixbuf(pixbuf);
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
 	gtk_picture_set_paintable(GTK_PICTURE(marker_data->picture), GDK_PAINTABLE(texture));
 }
 
@@ -897,7 +900,7 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 
 	gtk_box_append(GTK_BOX(vbox), pgd->map_popover_parent);
 
-	gq_gtk_container_add(frame, vbox);
+	gtk_frame_set_child(GTK_FRAME(frame), vbox);
 
 	status = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 

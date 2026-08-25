@@ -25,7 +25,6 @@
 #include <pango/pango.h>
 
 #include "actions.h"
-#include "compat.h"
 #include "editors.h"
 #include "layout-util.h"
 #include "layout.h"
@@ -125,7 +124,6 @@ static void menu_item_finish(GtkWidget *menu, GtkWidget *item, GCallback func, g
 		{
 		gtk_box_append(GTK_BOX(menu), item);
 		}
-	gtk_widget_show(item);
 }
 
 GtkWidget *popover_item_add(GtkWidget *menu, const gchar *label,
@@ -134,18 +132,6 @@ GtkWidget *popover_item_add(GtkWidget *menu, const gchar *label,
 	GtkWidget *item;
 
 	item = menu_item_button_new(label, TRUE);
-
-	menu_item_finish(menu, item, func, data);
-
-	return item;
-}
-
-GtkWidget *popover_item_add_stock(GtkWidget *menu, const gchar *label, const gchar *stock_id,
-			       GCallback func, gpointer data)
-{
-	GtkWidget *item;
-
-	item = menu_item_icon_button_new(label, stock_id_to_icon_name(stock_id), TRUE);
 
 	menu_item_finish(menu, item, func, data);
 
@@ -294,7 +280,7 @@ void popover_box_popup(GtkWidget *menu)
 
 GtkWidget *popover_parent_new(GtkWidget *child)
 {
-#if HAVE_GTK4_22
+#if GTK_CHECK_VERSION(4, 22, 0)
 	GtkWidget *popover_parent = gtk_popover_bin_new();
 	gtk_popover_bin_set_child(GTK_POPOVER_BIN(popover_parent), child);
 
@@ -310,7 +296,7 @@ static gboolean popover_detach_cb(gpointer data)
 	GtkWidget *parent = gtk_widget_get_parent(popover);
 	if (!parent) return G_SOURCE_REMOVE;
 
-#if HAVE_GTK4_22
+#if GTK_CHECK_VERSION(4, 22, 0)
 	if (GTK_IS_POPOVER_BIN(parent))
 		{
 		gtk_popover_bin_set_popover(GTK_POPOVER_BIN(parent), nullptr);
@@ -332,7 +318,7 @@ void popover_set_parent(GtkWidget *popover, GtkWidget *parent)
 {
 	g_signal_connect(popover, "closed", G_CALLBACK(popover_closed_cb), nullptr);
 
-#if HAVE_GTK4_22
+#if GTK_CHECK_VERSION(4, 22, 0)
 	if (GTK_IS_POPOVER_BIN(parent))
 		{
 		gtk_popover_bin_set_popover(GTK_POPOVER_BIN(parent), popover);
@@ -345,7 +331,7 @@ void popover_set_parent(GtkWidget *popover, GtkWidget *parent)
 
 void popover_popup(GtkWidget *popover)
 {
-#if HAVE_GTK4_22
+#if GTK_CHECK_VERSION(4, 22, 0)
 	GtkWidget *parent = gtk_widget_get_parent(popover);
 	if (parent && GTK_IS_POPOVER_BIN(parent))
 		{
@@ -541,9 +527,6 @@ void color_profiles_menu_populate(LayoutWindow *lw, const gchar *action)
 	GMenu *color_profiles_menu = G_MENU(gtk_builder_get_object(lw->builder, "color-profiles-menu"));
 	g_menu_remove_all(color_profiles_menu);
 
-	GAction *image_profile_action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), "main-win-use-image-profile");
-	gboolean use_image_profile = g_variant_get_boolean(g_action_get_state(G_ACTION(image_profile_action)));
-
 	for (const auto &profile : builtin_profiles)
 		{
 		g_autoptr(GMenuItem) item = g_menu_item_new(profile.label, nullptr);
@@ -577,9 +560,6 @@ void color_profiles_menu_populate(LayoutWindow *lw, const gchar *action)
 		g_autoptr(GMenuItem) item = g_menu_item_new(label, nullptr);
 
 		g_menu_item_set_action_and_target_value(item, action, g_variant_new_int32(i + 2));
-
-		GAction *menu_action = g_action_map_lookup_action(G_ACTION_MAP(lw->window), action + 4);
-		g_simple_action_set_enabled(G_SIMPLE_ACTION(menu_action), !use_image_profile);
 
 		g_menu_append_item(color_profiles_menu, item);
 		}

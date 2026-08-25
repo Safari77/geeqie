@@ -28,7 +28,6 @@
 
 #include "collect-io.h"
 #include "collect.h"
-#include "compat.h"
 #include "editors.h"
 #include "filedata.h"
 #include "history-list.h"
@@ -125,14 +124,14 @@ static void bar_sort_mode_sync(SortData *sd, BarSort::Mode mode)
 
 	if (folder_mode)
 		{
-		gtk_widget_hide(sd->collection_group);
-		gtk_widget_show(sd->folder_group);
+		gtk_widget_set_visible(sd->collection_group, FALSE);
+		gtk_widget_set_visible(sd->folder_group, TRUE);
 		bookmark_list_set_key(sd->bookmarks, SORT_KEY_FOLDERS);
 		}
 	else
 		{
-		gtk_widget_hide(sd->folder_group);
-		gtk_widget_show(sd->collection_group);
+		gtk_widget_set_visible(sd->folder_group, FALSE);
+		gtk_widget_set_visible(sd->collection_group, TRUE);
 		bar_sort_collection_list_build(sd->bookmarks);
 		}
 
@@ -418,7 +417,7 @@ static void bar_filter_help_dialog()
 	generic_dialog_add_button(gd, GQ_ICON_HELP, _("Help"), bar_filter_help_cb, TRUE);
 	generic_dialog_add_button(gd, GQ_ICON_OK, "OK", nullptr, TRUE);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 }
 
 static gboolean bar_filter_message_common(guint button)
@@ -449,11 +448,6 @@ static void bar_sort_set_selection_cb(GtkWidget *button, gpointer data)
 	sd->selection = selection;
 }
 
-static void new_collection_file_save_failed_cb(GtkDialog *dialog, gint, gpointer)
-{
-	gq_gtk_widget_destroy(GTK_WIDGET(dialog));
-}
-
 static gboolean save_new_collection(GFile *file, gpointer data)
 {
 	auto sd = static_cast<SortData *>(data);
@@ -470,12 +464,11 @@ static gboolean save_new_collection(GFile *file, gpointer data)
 		}
 	else
 		{
-		GtkWidget *new_collection_file_save_failed = gtk_message_dialog_new_with_markup(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_OK, _("<b>File save failed.</b>\n\nFile \"%s\" was not saved."), path);
-		gtk_window_set_modal(GTK_WINDOW(new_collection_file_save_failed), TRUE);
-
-		g_signal_connect(new_collection_file_save_failed, "response", G_CALLBACK(new_collection_file_save_failed_cb), nullptr);
-
-		gtk_widget_show(new_collection_file_save_failed);
+		g_autoptr(GtkAlertDialog) dialog = gtk_alert_dialog_new("%s", _("File save failed."));
+		g_autofree gchar *detail = g_strdup_printf(_("File \"%s\" was not saved."), path);
+		gtk_alert_dialog_set_detail(dialog, detail);
+		gtk_alert_dialog_set_modal(dialog, TRUE);
+		gtk_alert_dialog_show(dialog, GTK_WINDOW(sd->lw->window));
 
 		ret = FALSE;
 		}
@@ -538,7 +531,7 @@ void bar_sort_close(GtkWidget *bar)
 	sd = static_cast<SortData *>(g_object_get_data(G_OBJECT(bar), "bar_sort_data"));
 	if (!sd) return;
 
-	gq_gtk_widget_destroy(sd->vbox);
+	gtk_box_remove(GTK_BOX(gtk_widget_get_parent(sd->vbox)), sd->vbox);
 }
 
 static void bar_sort_destroy(gpointer data)
@@ -585,12 +578,11 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 
 	label = gtk_label_new(_("Sort Manager"));
 	pref_label_bold(label, TRUE, FALSE);
-	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), label, FALSE, FALSE, 0);
-	gtk_widget_show(label);
+	gtk_box_append(GTK_BOX(sd->vbox), label);
 
 	static const char *sort_mode_items[] = { _("Folders"), _("Collections"), nullptr };
 	GtkWidget *drop_down = gtk_drop_down_new_from_strings(sort_mode_items);
-	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), drop_down, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(sd->vbox), drop_down);
 
 	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
 	                 G_CALLBACK(bar_sort_mode_cb), sd);
@@ -668,8 +660,9 @@ static GtkWidget *bar_sort_new(LayoutWindow *lw, const BarSort &bar_sort)
 		bar_sort_bookmark_drop(sd, path, list);
 	});
 	DEBUG_NAME(sd->bookmarks);
-	gq_gtk_box_pack_start(GTK_BOX(sd->vbox), sd->bookmarks, TRUE, TRUE, 0);
-	gtk_widget_show(sd->bookmarks);
+	gtk_widget_set_hexpand(sd->bookmarks, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(sd->vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(sd->bookmarks, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(sd->vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(sd->vbox), sd->bookmarks);
 
 	tbar = pref_toolbar_new(sd->vbox);
 	DEBUG_NAME(tbar);
@@ -697,7 +690,7 @@ GtkWidget *bar_sort_new_from_config(LayoutWindow *lw, const gchar **, const gcha
 
 	bar = bar_sort_new(lw, lw->options.bar_sort);
 
-	if (lw->bar_sort_enabled) gtk_widget_show(bar);
+	gtk_widget_set_visible(bar, lw->bar_sort_enabled);
 	return bar;
 }
 

@@ -88,6 +88,7 @@ struct ConfOptions
 	guint keyboard_scroll_step;
 	gboolean place_dialogs_under_mouse;
 	gboolean mousewheel_scrolls;
+	gboolean show_birdseye;
 	gboolean image_lm_click_nav;
 	gboolean image_l_click_archive;
 	gboolean image_l_click_video;
@@ -95,6 +96,7 @@ struct ConfOptions
 	gboolean show_icon_names;
 	gboolean show_star_rating;
 	gboolean show_collection_infotext;
+	gboolean show_collection_marks;
 	gboolean draw_rectangle;
 	gboolean show_predefined_keyword_tree;
 	gboolean overunderexposed;

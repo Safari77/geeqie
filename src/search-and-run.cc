@@ -23,7 +23,6 @@
 #include <config.h>
 
 #include <algorithm>
-#include <cstring>
 #include <vector>
 
 #include <gdk/gdk.h>
@@ -33,11 +32,9 @@
 #include <pango/pango.h>
 
 #include "actions.h"
-#include "compat.h"
 #include "intl.h"
 #include "layout.h"
 #include "main-defines.h"
-#include "misc.h"
 
 namespace
 {
@@ -80,22 +77,6 @@ gchar *action_label_from_description(const gchar *description, const gchar *targ
 		}
 
 	return target ? g_strdup_printf("%s %s", description, target) : g_strdup(description);
-}
-
-gchar *action_accelerator_label(const gchar *action_name)
-{
-	auto *app = GTK_APPLICATION(g_application_get_default());
-	if (!app) return nullptr;
-
-	g_auto(GStrv) accels = gtk_application_get_accels_for_action(app, action_name);
-	if (!accels || !accels[0]) return nullptr;
-
-	guint accelerator_key = 0;
-	auto accelerator_mods = static_cast<GdkModifierType>(0);
-	gtk_accelerator_parse(accels[0], &accelerator_key, &accelerator_mods);
-	if (accelerator_key == 0) return nullptr;
-
-	return gtk_accelerator_get_label(accelerator_key, accelerator_mods);
 }
 
 void append_action_to_list(std::vector<SearchAndRunAction *> &actions, const gchar *action_name, const gchar *description, const gchar *target)
@@ -184,7 +165,7 @@ void search_and_run_destroy(SarData *sar)
 
 	GtkWidget *window = sar->window;
 	delete sar;
-	gq_gtk_widget_destroy(window);
+	gtk_window_destroy(GTK_WINDOW(window));
 }
 
 GAction *lookup_action_for_detailed_name(SarData *sar, const gchar *detailed_action_name, GVariant **target)
@@ -447,8 +428,7 @@ GtkWidget *search_and_run_new(LayoutWindow *lw)
 	g_signal_connect(sar->entry, "activate", G_CALLBACK(entry_activate_cb), sar);
 	g_signal_connect(sar->entry, "changed", G_CALLBACK(entry_changed_cb), sar);
 
-	gtk_widget_show(sar->entry);
-	gtk_widget_show(sar->window);
+	gtk_window_present(GTK_WINDOW(sar->window));
 	gtk_widget_grab_focus(sar->entry);
 
 	return sar->window;

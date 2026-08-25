@@ -34,13 +34,13 @@
 
 #include "accelerators.h"
 #include "actions.h"
-#include "compat.h"
 #include "editors.h"
 #include "intl.h"
 #include "layout-util.h"
 #include "layout.h"
 #include "main-defines.h"
 #include "menu.h"
+#include "pixbuf-util.h"
 #include "preferences.h"
 #include "ui-fileops.h"
 #include "ui-menu.h"
@@ -57,31 +57,27 @@ const gchar *action_name_key = "action_name";
 
 GtkWidget *toolbarlist[TOOLBAR_COUNT];
 
-} // namespace
-
-static gboolean toolbar_press_cb(GtkGesture *, int, double, double, gpointer data)
+gboolean toolbar_press_cb(GtkGesture *, int, double, double, gpointer data)
 {
-	popup_menu_bar(static_cast<GtkWidget *>(data), nullptr, nullptr);
+	popup_menu_bar(static_cast<GtkWidget *>(data), false);
 
 	return TRUE;
 }
 
-static void toolbarlist_add_button(const gchar *name, const gchar *label,
-									const gchar *stock_id, GtkBox *box)
+void toolbarlist_add_button(const gchar *name, const gchar *label,
+                            const gchar *stock_id, GtkBox *box)
 {
 	GtkWidget *hbox;
 	GtkGesture *gesture;
 
 	GtkWidget *button = gtk_button_new();
 	gtk_widget_add_css_class(button, "flat");
-	gq_gtk_box_pack_start(box, button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	gtk_box_append(box, button);
 
 	g_object_set_data_full(G_OBJECT(button), action_name_key, g_strdup(name), g_free);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
-	gq_gtk_container_add(button, hbox);
-	gtk_widget_show(hbox);
+	gtk_button_set_child(GTK_BUTTON(button), hbox);
 
 	gesture = gtk_gesture_click_new();
 	gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(gesture));
@@ -99,7 +95,8 @@ static void toolbarlist_add_button(const gchar *name, const gchar *label,
 			constexpr gint h = 16;
 
 			g_autoptr(GdkPixbuf) scaled = gdk_pixbuf_scale_simple(pixbuf, w, h, GDK_INTERP_BILINEAR);
-			image = gtk_image_new_from_pixbuf(scaled);
+			g_autoptr(GdkTexture) texture = pixbuf_to_texture(scaled);
+			image = gtk_picture_new_for_paintable(GDK_PAINTABLE(texture));
 
 			g_object_unref(pixbuf);
 			}
@@ -112,15 +109,13 @@ static void toolbarlist_add_button(const gchar *name, const gchar *label,
 		{
 		image = gtk_image_new_from_icon_name(GQ_ICON_GO_JUMP);
 		}
-	gq_gtk_box_pack_start(GTK_BOX(hbox), image, FALSE, FALSE, 0);
-	gtk_widget_show(image);
+	gtk_box_append(GTK_BOX(hbox), image);
 
 	GtkWidget *button_label = gtk_label_new(label);
-	gq_gtk_box_pack_start(GTK_BOX(hbox), button_label, FALSE, FALSE, 0);
-	gtk_widget_show(button_label);
+	gtk_box_append(GTK_BOX(hbox), button_label);
 }
 
-static void toolbarlist_add_button_main_cb(GSimpleAction *, GVariant *parameter, gpointer data)
+void toolbarlist_add_button_main_cb(GSimpleAction *, GVariant *parameter, gpointer data)
 {
 	const gchar *action_name = g_variant_get_string(parameter, nullptr);
 
@@ -132,7 +127,7 @@ static void toolbarlist_add_button_main_cb(GSimpleAction *, GVariant *parameter,
 
 }
 
-static void toolbarlist_add_button_status_cb(GSimpleAction *, GVariant *parameter, gpointer data)
+void toolbarlist_add_button_status_cb(GSimpleAction *, GVariant *parameter, gpointer data)
 {
 	const gchar *action_name = g_variant_get_string(parameter, nullptr);
 
@@ -144,7 +139,7 @@ static void toolbarlist_add_button_status_cb(GSimpleAction *, GVariant *paramete
 
 }
 
-static void toolbar_menu_add_actions(GMenu *menu, const ActionDef *actions, ToolbarType bar)
+void toolbar_menu_add_actions(GMenu *menu, const ActionDef *actions, ToolbarType bar)
 {
 	for (guint i = 0; actions[i].action_name != nullptr; i++)
 		{
@@ -192,7 +187,7 @@ static void toolbar_menu_add_actions(GMenu *menu, const ActionDef *actions, Tool
 		}
 }
 
-static gboolean toolbar_menu_add_cb(GtkWidget *, gpointer data)
+gboolean toolbar_menu_add_cb(GtkWidget *, gpointer data)
 {
 	auto bar = static_cast<ToolbarType>(GPOINTER_TO_INT(data));
 	GMenu *menu_model;
@@ -218,6 +213,8 @@ static gboolean toolbar_menu_add_cb(GtkWidget *, gpointer data)
 
 	return TRUE;
 }
+
+} // namespace
 
 /**
  * @brief For each layoutwindow, clear toolbar and reload with current selection
@@ -320,26 +317,24 @@ GtkWidget *toolbar_select_new(LayoutWindow *lw, GtkWidget *window, ToolbarType b
 	if (!lw) return nullptr;
 
 	GtkWidget *widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
-	gtk_widget_show(widget);
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
-	gq_gtk_box_pack_start(GTK_BOX(widget), scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(widget))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(widget))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(widget), scrolled);
 
 	toolbarlist[bar] = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_show(toolbarlist[bar]);
-	gq_gtk_container_add(scrolled, toolbarlist[bar]);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), toolbarlist[bar]);
 	gtk_widget_remove_css_class(gtk_widget_get_first_child(scrolled), "frame");
 
 	add_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_show(add_box);
-	gq_gtk_box_pack_end(GTK_BOX(widget), add_box, FALSE, FALSE, 0);
+	gtk_widget_set_valign(add_box, GTK_ALIGN_START);
+	gtk_box_append(GTK_BOX(widget), add_box);
 	tbar = pref_toolbar_new(add_box);
 
-	GtkWidget *add_button = pref_toolbar_button(tbar, GQ_ICON_ADD, _("Add"), FALSE, _("Add Toolbar Item"), G_CALLBACK(toolbar_menu_add_cb), GINT_TO_POINTER(bar));
-	gtk_widget_show(add_button);
+	pref_toolbar_button(tbar, GQ_ICON_ADD, _("Add"), FALSE, _("Add Toolbar Item"), G_CALLBACK(toolbar_menu_add_cb), GINT_TO_POINTER(bar));
 
 	GApplication *app = g_application_get_default();
 	if (bar == TOOLBAR_MAIN)

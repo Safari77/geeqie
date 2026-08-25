@@ -128,20 +128,19 @@ struct RendererTiles
 	RendererFuncs f;
 	PixbufRenderer *pr;
 
-	gint tile_cache_max;		/* max MiB to use for offscreen buffer */
-
 	gint tile_width;
 	gint tile_height;
 	GList *tiles;		/* list of buffer tiles */
 	gint tile_cache_size;	/* allocated size of pixmaps/pixbufs */
-	GList *draw_queue;	/* list of areas to redraw */
-	GList *draw_queue_2pass;/* list when 2 pass is enabled */
+	GQueue draw_queue;	/* queue of areas to redraw */
+	GQueue draw_queue_2pass;/* queue when 2 pass is enabled */
 
 	GList *overlay_list;
 	cairo_surface_t *overlay_buffer;
 	cairo_surface_t *surface;
 
 	guint draw_idle_id; /* event source id */
+	gboolean draw_pending;
 
 	GdkPixbuf *spare_tile;
 
@@ -175,6 +174,15 @@ void rt_queue(RendererTiles *rt, gint x, gint y, gint w, gint h,
 
 gboolean rt_queue_draw_idle_cb(gpointer data);
 void rt_redraw(RendererTiles *rt, GdkRectangle rect, bool clamp, gboolean new_data);
+
+
+void rt_present_pending(RendererTiles *rt)
+{
+	if (!rt->draw_pending) return;
+
+	rt->draw_pending = FALSE;
+	gtk_widget_queue_draw(GTK_WIDGET(rt->pr));
+}
 
 
 void rt_sync_scroll(RendererTiles *rt)
@@ -321,7 +329,7 @@ void rt_tile_remove(RendererTiles *rt, ImageTile *it)
 		QueueData *qd = it->qd;
 
 		it->qd = nullptr;
-		rt->draw_queue = g_list_remove(rt->draw_queue, qd);
+		g_queue_remove(&rt->draw_queue, qd);
 		g_free(qd);
 		}
 
@@ -330,7 +338,7 @@ void rt_tile_remove(RendererTiles *rt, ImageTile *it)
 		QueueData *qd = it->qd2;
 
 		it->qd2 = nullptr;
-		rt->draw_queue_2pass = g_list_remove(rt->draw_queue_2pass, qd);
+		g_queue_remove(&rt->draw_queue_2pass, qd);
 		g_free(qd);
 		}
 
@@ -338,6 +346,11 @@ void rt_tile_remove(RendererTiles *rt, ImageTile *it)
 	rt->tile_cache_size -= it->size;
 
 	rt_tile_free(it);
+}
+
+gint surface_calc_size(gint width, gint height)
+{
+	return cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width) * height;
 }
 
 void rt_tile_free_space(RendererTiles *rt, guint space, ImageTile *it)
@@ -353,12 +366,14 @@ void rt_tile_free_space(RendererTiles *rt, guint space, ImageTile *it)
 		gint tiles;
 
 		tiles = (pr->vis_width / rt->tile_width + 1) * (pr->vis_height / rt->tile_height + 1);
-		tile_max = std::max<gint>(tiles * rt->tile_width * rt->tile_height * 3,
-		                          rt->tile_cache_max * 1048576.0 * pr->scale);
+		const gint tile_memory = surface_calc_size(rt->tile_width, rt->tile_height) +
+		                         (rt->tile_width * rt->tile_height * COLOR_BYTES);
+		tile_max = std::max<gint>(tiles * tile_memory,
+		                          pr->tile_cache_max * 1048576.0 * pr->scale);
 		}
 	else
 		{
-		tile_max = rt->tile_cache_max * 1048576;
+		tile_max = pr->tile_cache_max * 1048576;
 		}
 
 	while (work && rt->tile_cache_size + space > tile_max)
@@ -419,16 +434,11 @@ ImageTile *rt_tile_get(RendererTiles *rt, gint x, gint y, gboolean only_existing
 	return rt_tile_add(rt, x, y);
 }
 
-gint pixmap_calc_size()
-{
-	return options->image.tile_size * options->image.tile_size * 4 / 8;
-}
-
 void rt_tile_prepare(RendererTiles *rt, ImageTile *it)
 {
 	if (!it->surface)
 		{
-		const guint size = pixmap_calc_size();
+		const guint size = surface_calc_size(rt->tile_width, rt->tile_height);
 
 		rt_tile_free_space(rt, size, it);
 
@@ -1052,10 +1062,58 @@ gboolean rt_source_tile_render(RendererTiles *rt, ImageTile *it,
  * @param interp_type
  * @param check_x
  * @param check_y
- * @param wide_image Used as a work-around for a GdkPixbuf problem. Set when image width is > 32767.
- *        Problem exhibited with gdk_pixbuf_copy_area() and GDK_INTERP_NEAREST.
+ * @param wide_image Use the bounds-checked scaler when image width is > 32767.
  *        See https://github.com/BestImageViewer/geeqie/issues/772
  */
+void rt_tile_get_region_wide(gboolean ignore_alpha,
+                             const GdkPixbuf *src, GdkPixbuf *dest,
+                             GdkRectangle pb_rect,
+                             double offset_x, double offset_y, double scale_x, double scale_y,
+                             int check_x, int check_y)
+{
+	const gint src_width = gdk_pixbuf_get_width(src);
+	const gint src_height = gdk_pixbuf_get_height(src);
+	const gint src_channels = gdk_pixbuf_get_n_channels(src);
+	const gint src_rowstride = gdk_pixbuf_get_rowstride(src);
+	const guchar *src_pixels = gdk_pixbuf_get_pixels(src);
+
+	const gint dest_channels = gdk_pixbuf_get_n_channels(dest);
+	const gint dest_rowstride = gdk_pixbuf_get_rowstride(dest);
+	guchar *dest_pixels = gdk_pixbuf_get_pixels(dest);
+
+	const auto color_component = [](gdouble value) { return static_cast<guchar>(std::clamp(value * 255.0, 0.0, 255.0)); };
+	const guchar checker[][COLOR_BYTES] = {
+		{color_component(options->image.alpha_color_1.red), color_component(options->image.alpha_color_1.green), color_component(options->image.alpha_color_1.blue)},
+		{color_component(options->image.alpha_color_2.red), color_component(options->image.alpha_color_2.green), color_component(options->image.alpha_color_2.blue)}
+	};
+
+	for (gint y = pb_rect.y; y < pb_rect.y + pb_rect.height; y++)
+		{
+		const gint src_y = std::clamp(static_cast<gint>(floor((y - offset_y) / scale_y)), 0, src_height - 1);
+		for (gint x = pb_rect.x; x < pb_rect.x + pb_rect.width; x++)
+			{
+			const gint src_x = std::clamp(static_cast<gint>(floor((x - offset_x) / scale_x)), 0, src_width - 1);
+			const guchar *src_pixel = src_pixels + (src_y * src_rowstride) + (src_x * src_channels);
+			guchar *dest_pixel = dest_pixels + (y * dest_rowstride) + (x * dest_channels);
+
+			if (src_channels == 4 && !ignore_alpha)
+				{
+				const gint checker_index = (((check_x + x - pb_rect.x) / PR_ALPHA_CHECK_SIZE) +
+				                            ((check_y + y - pb_rect.y) / PR_ALPHA_CHECK_SIZE)) & 1;
+				const guint alpha = src_pixel[3];
+				for (std::size_t channel = 0; channel < COLOR_BYTES; channel++)
+					{
+					dest_pixel[channel] = (src_pixel[channel] * alpha + checker[checker_index][channel] * (255 - alpha) + 127) / 255;
+					}
+				}
+			else
+				{
+				memcpy(dest_pixel, src_pixel, COLOR_BYTES);
+				}
+			}
+		}
+}
+
 void rt_tile_get_region(gboolean has_alpha, gboolean ignore_alpha,
                         const GdkPixbuf *src, GdkPixbuf *dest,
                         GdkRectangle pb_rect,
@@ -1063,38 +1121,22 @@ void rt_tile_get_region(gboolean has_alpha, gboolean ignore_alpha,
                         GdkInterpType interp_type,
                         int check_x, int check_y, gboolean wide_image)
 {
+	if (wide_image)
+		{
+		rt_tile_get_region_wide(ignore_alpha, src, dest, pb_rect,
+		                        offset_x, offset_y, scale_x, scale_y, check_x, check_y);
+		return;
+		}
+
 	if (!has_alpha)
 		{
 		if (scale_x == 1.0 && scale_y == 1.0)
 			{
-			if (wide_image)
-				{
-				const gint srs = gdk_pixbuf_get_rowstride(src);
-				const gint drs = gdk_pixbuf_get_rowstride(dest);
-				const guchar *s_pix = gdk_pixbuf_get_pixels(src);
-				guchar *d_pix = gdk_pixbuf_get_pixels(dest);
-
-				for (gint y = 0; y < pb_rect.height; y++)
-					{
-					const gint sy = -static_cast<int>(offset_y) + pb_rect.y + y;
-					for (gint x = 0; x < pb_rect.width; x++)
-						{
-						const gint sx = -static_cast<int>(offset_x) + pb_rect.x + x;
-						const guchar *sp = s_pix + (sy * srs) + (sx * COLOR_BYTES);
-						guchar *dp = d_pix + (y * drs) + (x * COLOR_BYTES);
-
-						memcpy(dp, sp, COLOR_BYTES);
-						}
-					}
-				}
-			else
-				{
-				gdk_pixbuf_copy_area(src,
-				                     -offset_x + pb_rect.x, -offset_y + pb_rect.y,
-				                     pb_rect.width, pb_rect.height,
-				                     dest,
-				                     pb_rect.x, pb_rect.y);
-				}
+			gdk_pixbuf_copy_area(src,
+			                     -offset_x + pb_rect.x, -offset_y + pb_rect.y,
+			                     pb_rect.width, pb_rect.height,
+			                     dest,
+			                     pb_rect.x, pb_rect.y);
 			}
 		else
 			{
@@ -1102,7 +1144,7 @@ void rt_tile_get_region(gboolean has_alpha, gboolean ignore_alpha,
 			                 pb_rect.x, pb_rect.y, pb_rect.width, pb_rect.height,
 			                 offset_x, offset_y,
 			                 scale_x, scale_y,
-			                 (wide_image && interp_type == GDK_INTERP_NEAREST) ? GDK_INTERP_TILES : interp_type);
+			                 interp_type);
 			}
 		}
 	else
@@ -1131,7 +1173,7 @@ void rt_tile_get_region(gboolean has_alpha, gboolean ignore_alpha,
 		                           pb_rect.x, pb_rect.y, pb_rect.width, pb_rect.height,
 		                           offset_x, offset_y,
 		                           scale_x, scale_y,
-		                           (wide_image && interp_type == GDK_INTERP_NEAREST) ? GDK_INTERP_TILES : interp_type,
+		                           interp_type,
 		                           255, check_x, check_y,
 		                           PR_ALPHA_CHECK_SIZE,
 		                           convert_alpha_color(options->image.alpha_color_1),
@@ -1243,7 +1285,8 @@ void rt_tile_render(RendererTiles *rt, ImageTile *it,
 		 * small sizes for anything but GDK_INTERP_NEAREST
 		 */
 		if (pr->width < PR_MIN_SCALE_SIZE || pr->height < PR_MIN_SCALE_SIZE) fast = TRUE;
-		if (pr->image_width > 32767) wide_image = TRUE;
+		if (gdk_pixbuf_get_width(pr->pixbuf) > 32767 ||
+		    gdk_pixbuf_get_height(pr->pixbuf) > 32767) wide_image = TRUE;
 
 		rt_tile_get_region(has_alpha, pr->ignore_alpha,
 		                   pr->pixbuf, it->pixbuf, pb_rect,
@@ -1322,7 +1365,7 @@ void rt_tile_expose(RendererTiles *rt, ImageTile *it,
 	cairo_fill (cr);
 	cairo_destroy (cr);
 
-	gtk_widget_queue_draw(GTK_WIDGET(rt->pr));
+	rt->draw_pending = TRUE;
 }
 
 
@@ -1343,7 +1386,7 @@ gint rt_get_queued_area(const RendererTiles *rt)
 {
 	gint area = 0;
 
-	for (GList *work = rt->draw_queue; work; work = work->next)
+	for (GList *work = rt->draw_queue.head; work; work = work->next)
 		{
 		auto *qd = static_cast<QueueData *>(work->data);
 		area += qd->w * qd->h;
@@ -1421,32 +1464,35 @@ gboolean rt_queue_draw_idle_cb(gpointer data)
 	PixbufRenderer *pr = rt->pr;
 	QueueData *qd;
 	gboolean fast;
+	const gboolean first_pass = !g_queue_is_empty(&rt->draw_queue);
 
 	if ((!pr->pixbuf && !pr->source_tiles_enabled) ||
-	    (!rt->draw_queue && !rt->draw_queue_2pass) ||
+	    (g_queue_is_empty(&rt->draw_queue) && g_queue_is_empty(&rt->draw_queue_2pass)) ||
 	    !rt->draw_idle_id)
 		{
+		rt_present_pending(rt);
 		pr_render_complete_signal(pr);
 
 		rt->draw_idle_id = 0;
 		return G_SOURCE_REMOVE;
 		}
 
-	if (rt->draw_queue)
+	if (first_pass)
 		{
-		qd = static_cast<QueueData *>(rt->draw_queue->data);
+		qd = static_cast<QueueData *>(g_queue_peek_head(&rt->draw_queue));
 		fast = (pr->zoom_2pass && ((pr->zoom_quality != GDK_INTERP_NEAREST && pr->scale != 1.0) || pr->post_process_slow));
 		}
 	else
 		{
 		if (pr->loading)
 			{
-			/* still loading, wait till done (also drops the higher priority) */
+			/* Present the completed first pass before waiting for more data. */
+			rt_present_pending(rt);
 
 			return rt_queue_schedule_next_draw(rt, FALSE);
 			}
 
-		qd = static_cast<QueueData *>(rt->draw_queue_2pass->data);
+		qd = static_cast<QueueData *>(g_queue_peek_head(&rt->draw_queue_2pass));
 		fast = FALSE;
 		}
 
@@ -1467,10 +1513,10 @@ gboolean rt_queue_draw_idle_cb(gpointer data)
 			}
 		}
 
-	if (rt->draw_queue)
+	if (first_pass)
 		{
 		qd->it->qd = nullptr;
-		rt->draw_queue = g_list_remove(rt->draw_queue, qd);
+		g_queue_pop_head(&rt->draw_queue);
 		if (fast)
 			{
 			if (qd->it->qd2)
@@ -1481,7 +1527,7 @@ gboolean rt_queue_draw_idle_cb(gpointer data)
 			else
 				{
 				qd->it->qd2 = qd;
-				rt->draw_queue_2pass = g_list_append(rt->draw_queue_2pass, qd);
+				g_queue_push_tail(&rt->draw_queue_2pass, qd);
 				}
 			}
 		else
@@ -1492,12 +1538,14 @@ gboolean rt_queue_draw_idle_cb(gpointer data)
 	else
 		{
 		qd->it->qd2 = nullptr;
-		rt->draw_queue_2pass = g_list_remove(rt->draw_queue_2pass, qd);
+		g_queue_pop_head(&rt->draw_queue_2pass);
 		g_free(qd);
 		}
 
-	if (!rt->draw_queue && !rt->draw_queue_2pass)
+	if (g_queue_is_empty(&rt->draw_queue) && g_queue_is_empty(&rt->draw_queue_2pass))
 		{
+		/* Present all tiles updated by this render batch in one frame. */
+		rt_present_pending(rt);
 		pr_render_complete_signal(pr);
 
 		rt->draw_idle_id = 0;
@@ -1518,11 +1566,8 @@ void rt_queue_data_free(gpointer data)
 
 void rt_queue_clear(RendererTiles *rt)
 {
-	g_list_free_full(rt->draw_queue, rt_queue_data_free);
-	rt->draw_queue = nullptr;
-
-	g_list_free_full(rt->draw_queue_2pass, rt_queue_data_free);
-	rt->draw_queue_2pass = nullptr;
+	g_queue_clear_full(&rt->draw_queue, rt_queue_data_free);
+	g_queue_clear_full(&rt->draw_queue_2pass, rt_queue_data_free);
 
 	g_clear_handle_id(&rt->draw_idle_id, g_source_remove);
 
@@ -1608,7 +1653,7 @@ void rt_queue_to_tiles(RendererTiles *rt, gint x, gint y, gint w, gint h,
 				else
 					{
 					it->qd = qd;
-					rt->draw_queue = g_list_append(rt->draw_queue, qd);
+					g_queue_push_tail(&rt->draw_queue, qd);
 					}
 				}
 			}
@@ -1636,7 +1681,7 @@ void rt_queue(RendererTiles *rt, gint x, gint y, gint w, gint h,
 
 	rt_queue_to_tiles(rt, nx, ny, w, h, render, new_data, only_existing);
 
-	if ((rt->draw_queue || rt->draw_queue_2pass) && rt->draw_idle_id) return;
+	if ((!g_queue_is_empty(&rt->draw_queue) || !g_queue_is_empty(&rt->draw_queue_2pass)) && rt->draw_idle_id) return;
 
 	g_clear_handle_id(&rt->draw_idle_id, g_source_remove);
 	rt_queue_schedule_next_draw(rt, TRUE);
@@ -1889,10 +1934,10 @@ void rt_resize_cb(GtkDrawingArea *, gint width, gint height, gpointer data)
 			cairo_set_source_surface(cr, old_surface, 0, 0);
 			cairo_paint(cr);
 			}
-			cairo_destroy(cr);
-			g_clear_pointer(&old_surface, cairo_surface_destroy);
+		cairo_destroy(cr);
+		g_clear_pointer(&old_surface, cairo_surface_destroy);
 
-			rt_redraw(rt, {0, 0, width, height}, false, FALSE);
+		rt_redraw(rt, {0, 0, width, height}, false, FALSE);
 		}
 }
 
@@ -1968,8 +2013,8 @@ RendererFuncs *renderer_tiles_new(PixbufRenderer *pr)
 
 	rt->tiles = nullptr;
 	rt->tile_cache_size = 0;
-
-	rt->tile_cache_max = PR_CACHE_SIZE_DEFAULT;
+	g_queue_init(&rt->draw_queue);
+	g_queue_init(&rt->draw_queue_2pass);
 
 	rt->draw_idle_id = 0;
 

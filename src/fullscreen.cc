@@ -23,14 +23,12 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <string>
 #include <vector>
 
 #include <gdk/gdk.h>
 #include <glib-object.h>
 
-#include "compat.h"
 #include "image-load.h"
 #include "image.h"
 #include "intl.h"
@@ -546,7 +544,7 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 
 	fs->imd = image_new(FALSE);
 
-	gq_gtk_container_add(fs->window, fs->imd->widget);
+	gtk_window_set_child(GTK_WINDOW(fs->window), fs->imd->widget);
 
 	image_background_set_color_from_options(fs->imd, TRUE);
 	image_set_delay_flip(fs->imd, options->fullscreen.clean_flip);
@@ -558,7 +556,6 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 		image_set_complete_func(fs->imd, fullscreen_image_complete_cb, fs);
 		}
 
-	gtk_widget_show(fs->imd->widget);
 
 	if (fs->same_region)
 		{
@@ -595,7 +592,7 @@ FullScreenData *fullscreen_start(GtkWidget *window, ImageWindow *imd,
 		gtk_window_set_startup_id(GTK_WINDOW(fs->window), id);
 		}
 
-	gtk_widget_show(fs->window);
+	gtk_window_present(GTK_WINDOW(fs->window));
 
 	/* for hiding the mouse */
 	GtkEventController *controller = gtk_event_controller_motion_new();
@@ -644,7 +641,7 @@ void fullscreen_stop(FullScreenData *fs)
 
 	if (fs->stop_func) fs->stop_func(fs);
 
-	gq_gtk_widget_destroy(fs->window);
+	gtk_window_destroy(GTK_WINDOW(fs->window));
 
 	gtk_window_present(GTK_WINDOW(fs->normal_window));
 
@@ -693,7 +690,7 @@ GtkWidget *fullscreen_prefs_selection_new(const gchar *text, gint *screen_value)
 	const gint current = (it != list.cend()) ? std::distance(list.cbegin(), it) : 0;
 	gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down), current);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox), drop_down, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(hbox), drop_down);
 
 	g_signal_connect(G_OBJECT(drop_down), "notify::selected",
 	                 G_CALLBACK(fullscreen_prefs_selection_cb), screen_value);

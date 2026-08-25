@@ -30,8 +30,6 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
-#include "compat.h"
-
 enum StereoPixbufData : gint;
 
 struct CollectInfo;
@@ -39,6 +37,8 @@ struct CollectionData;
 struct ColorMan;
 struct ColorManStatus;
 class FileData;
+struct GqMouseButtonEvent;
+struct GqPointerMotionEvent;
 struct ImageLoader;
 
 enum AlterType : gint {
@@ -59,6 +59,18 @@ enum ImageState {
 	IMAGE_STATE_ROTATE_AUTO	= 1 << 4,
 	IMAGE_STATE_ROTATE_USER	= 1 << 5,
 	IMAGE_STATE_DELAY_FLIP	= 1 << 6
+};
+
+struct GqScrollEvent
+{
+	gdouble x;
+	gdouble y;
+	gdouble dx;
+	gdouble dy;
+	GdkModifierType state;
+	GdkScrollDirection direction;
+	GdkScrollUnit unit;
+	guint32 time;
 };
 
 struct ImageWindow
@@ -144,6 +156,7 @@ struct ImageWindow
 	gdouble smooth_zoom_accumulator;
 	gdouble smooth_scroll_x;
 	gdouble smooth_scroll_y;
+	gdouble wheel_navigation_accumulator;
 };
 
 void image_set_frame(ImageWindow *imd, gboolean frame);
@@ -200,6 +213,7 @@ GdkPixbuf *image_get_pixbuf(ImageWindow *imd);
 void image_area_changed(ImageWindow *imd, gint x, gint y, gint width, gint height);
 void image_reload(ImageWindow *imd);
 void image_mousewheel_scroll(ImageWindow *imd, GdkScrollDirection direction);
+gint image_scroll_navigation_steps(ImageWindow *imd, const GqScrollEvent *event);
 gdouble image_smooth_scroll_zoom_delta(ImageWindow *imd, gdouble delta, gdouble increment);
 void image_smooth_scroll_get_deltas(ImageWindow *imd, gdouble dx, gdouble dy, gdouble scale,
 				    gint &x, gint &y);

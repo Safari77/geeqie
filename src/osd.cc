@@ -35,7 +35,6 @@
 
 #include <config.h>
 
-#include "compat.h"
 #include "dnd.h"
 #include "exif.h"
 #if HAVE_LUA
@@ -144,7 +143,6 @@ GtkWidget *osd_tag_button_new(const OsdTag &tag, GtkWidget *template_view)
 	g_signal_connect(drag_source, "prepare", G_CALLBACK(tag_data_dnd_prepare), td);
 	gtk_widget_add_controller(tag_button, GTK_EVENT_CONTROLLER(drag_source));
 
-	gtk_widget_show(tag_button);
 
 	return tag_button;
 }
@@ -294,24 +292,24 @@ GtkWidget *osd_new(gint max_cols, GtkWidget *template_view)
 	pref_label_new(vbox, _("To include predefined tags in the template, click a button or drag-and-drop"));
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
-	gq_gtk_box_pack_start(GTK_BOX(vbox), scrolled, FALSE, FALSE, 0);
-	gq_gtk_widget_set_border_width(scrolled, PREF_PAD_BORDER);
+	gtk_box_append(GTK_BOX(vbox), scrolled);
+	gtk_widget_set_margin_top(scrolled, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(scrolled, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(scrolled, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(scrolled, PREF_PAD_BORDER);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 				       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-	gtk_widget_show(scrolled);
 	gtk_widget_set_size_request(scrolled, -1, 140);
 
 	GtkWidget *viewport = gtk_viewport_new(nullptr, nullptr);
 	gtk_widget_remove_css_class(viewport, "frame");
-	gq_gtk_container_add(scrolled, viewport);
-	gtk_widget_show(viewport);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), viewport);
 
 	constexpr gint entries = std::size(predefined_tags);
 	const gint max_rows = ceil(static_cast<gdouble>(entries) / max_cols);
 
 	auto *grid = GTK_GRID(gtk_grid_new());
-	gq_gtk_container_add(viewport, GTK_WIDGET(grid));
-	gtk_widget_show(GTK_WIDGET(grid));
+	gtk_viewport_set_child(GTK_VIEWPORT(viewport), GTK_WIDGET(grid));
 
 	gint i = 0;
 	for (gint rows = 0; rows < max_rows; rows++)

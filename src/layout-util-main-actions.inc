@@ -571,9 +571,22 @@ const ActionDef main_actions[] =
 		},
 
 		{
+		"win.main-win-context-menu",
+		nullptr,
+		N_("Context menu"),
+		layout_menu_context_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
 		"win.main-win-copy",
 		GQ_ICON_COPY,
-		N_("Copy…"),
+		N_("Copy File To…"),
 		layout_menu_copy_cb,
 		nullptr,
 		ActionStateType::NONE,
@@ -586,7 +599,7 @@ const ActionDef main_actions[] =
 		{
 		"win.main-win-copy-image",
 		nullptr,
-		N_("Copy image to clipboard"),
+		N_("Copy Image"),
 		layout_menu_copy_image_cb,
 		nullptr,
 		ActionStateType::NONE,
@@ -651,7 +664,7 @@ const ActionDef main_actions[] =
 		{
 		"win.main-win-cut-path",
 		nullptr,
-		N_("Cut to clipboard"),
+		N_("Cut File to Clipboard"),
 		layout_menu_cut_path_cb,
 		nullptr,
 		ActionStateType::NONE,
@@ -1910,19 +1923,6 @@ const ActionDef main_actions[] =
 		},
 
 		{
-		"win.main-win-remove",
-		GQ_ICON_USER_TRASH,
-		N_("Remove selection …"),
-		layout_menu_remove_cb,
-		nullptr,
-		ActionStateType::NONE,
-		FALSE,
-		nullptr,
-		0,
-		nullptr,
-		},
-
-		{
 		"win.main-win-rename",
 		PIXBUF_INLINE_ICON_RENAME,
 		N_("Rename…"),
@@ -1940,32 +1940,6 @@ const ActionDef main_actions[] =
 		GQ_ICON_EDIT,
 		N_("Rename window"),
 		layout_menu_window_rename_cb,
-		nullptr,
-		ActionStateType::NONE,
-		FALSE,
-		nullptr,
-		0,
-		nullptr,
-		},
-
-		{
-		"win.main-win-return",
-		GQ_ICON_CLOSE,
-		N_("Close window"),
-		layout_menu_return_cb,
-		nullptr,
-		ActionStateType::NONE,
-		FALSE,
-		nullptr,
-		0,
-		nullptr,
-		},
-
-		{
-		"win.main-win-return-primary",
-		GQ_ICON_CLOSE,
-		N_("Close window"),
-		layout_menu_return_primary_cb,
 		nullptr,
 		ActionStateType::NONE,
 		FALSE,

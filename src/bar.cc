@@ -28,7 +28,6 @@
 
 #include <config.h>
 
-#include "compat.h"
 #include "exif.h"
 #include "filedata.h"
 #include "intl.h"
@@ -244,75 +243,6 @@ static const gchar *bar_pane_get_default_config(const gchar *id)
 	return pane->config;
 }
 
-static void height_spin_changed_cb(GtkSpinButton *spin, gpointer data)
-{
-	gtk_widget_set_size_request(static_cast<GtkWidget *>(data), -1, gtk_spin_button_get_value_as_int(spin));
-}
-
-static void height_spin_key_press_cb(GtkEventControllerKey *, gint keyval, guint, GdkModifierType, gpointer data)
-{
-	if ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_Escape))
-		{
-		gq_gtk_widget_destroy(static_cast<GtkWidget *>(data));
-		}
-}
-
-static gboolean expander_height_cb(GtkEventControllerKey *controller, guint, guint, GdkModifierType, gpointer)
-{
-	GtkWidget *window = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
-	gq_gtk_widget_destroy(window);
-
-	return TRUE;
-}
-
-static void bar_expander_height_cb(GtkWidget *, gpointer data)
-{
-	auto expander = static_cast<GtkWidget *>(data);
-	GtkWidget *window;
-	gint x;
-	gint y;
-	gint w;
-	gint h;
-	GdkDisplay *display;
-	GdkSeat *seat;
-	GdkDevice *device;
-
-	display = gdk_display_get_default();
-	seat = gdk_display_get_default_seat(display);
-	device = gdk_seat_get_pointer(seat);
-	get_device_position(device, x, y);
-
-	window = gtk_window_new();
-
-	gtk_window_set_modal(GTK_WINDOW(window), TRUE);
-	gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-	gtk_window_set_default_size(GTK_WINDOW(window), 50, 30); //** @FIXME set these values in a more sensible way */
-	GtkEventController *controller = gtk_event_controller_key_new();
-	g_signal_connect(controller, "key-pressed", G_CALLBACK(expander_height_cb), nullptr);
-	gtk_widget_add_controller(window, controller);
-
-	gtk_widget_show(window);
-
-	GtkWidget *data_box = gtk_expander_get_child(GTK_EXPANDER(expander));
-	gtk_widget_get_size_request(data_box, &w, &h);
-
-	GtkWidget *spin = gtk_spin_button_new_with_range(1, 1000, 1);
-	g_signal_connect(G_OBJECT(spin), "value-changed", G_CALLBACK(height_spin_changed_cb), data_box);
-	controller = gtk_event_controller_key_new();
-	g_signal_connect(controller, "key-pressed", G_CALLBACK(height_spin_key_press_cb), window);
-	gtk_widget_add_controller(spin, controller);
-
-	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), h);
-	gq_gtk_container_add(window, spin);
-	gtk_widget_show(spin);
-	gtk_widget_grab_focus(spin);
-}
-
-void menu_expander_height_cb(GSimpleAction *, GVariant *, gpointer data)
-{
-	bar_expander_height_cb(nullptr, data);
-}
-
 static void bar_expander_add_action_cb(GSimpleAction *, GVariant *parameter, gpointer)
 {
 	if (!parameter) return;
@@ -382,7 +312,7 @@ static void bar_expander_add_action_cb(GSimpleAction *, GVariant *parameter, gpo
 		mpd->title_entry = gtk_entry_new();
 		gtk_entry_set_placeholder_text(GTK_ENTRY(mpd->title_entry), _("Automatic"));
 		gtk_grid_attach(GTK_GRID(table), mpd->title_entry, 1, 1, 1, 1);
-		gtk_widget_show(mpd->gd->dialog);
+		gtk_window_present(GTK_WINDOW(mpd->gd->dialog));
 		return;
 		}
 	const gchar *config = bar_pane_get_default_config(id);
@@ -408,7 +338,7 @@ static void bar_menu_popup(GtkWidget *widget)
 		expander = widget;
 		}
 
-	gboolean display_height_option = FALSE;
+	bool display_height_option = false;
 	if (expander)
 		{
 		GtkWidget *pane = gtk_expander_get_child(GTK_EXPANDER(expander));
@@ -420,7 +350,7 @@ static void bar_menu_popup(GtkWidget *widget)
 		                                pd->type == PANE_RATING);
 		}
 
-	popup_menu_bar(expander, display_height_option ? G_CALLBACK(bar_expander_height_cb) : nullptr, widget);
+	popup_menu_bar(expander, display_height_option);
 }
 
 
@@ -449,11 +379,13 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 
 	if (gtk_expander_get_expanded(expander))
 		{
-		gq_gtk_widget_show_all(child);
+		gtk_widget_set_vexpand_set(GTK_WIDGET(expander), FALSE);
+		gtk_widget_set_visible(child, TRUE);
 		}
 	else
 		{
-		gtk_widget_hide(child);
+		gtk_widget_set_vexpand(GTK_WIDGET(expander), FALSE);
+		gtk_widget_set_visible(child, FALSE);
 		}
 
 	auto *image = static_cast<GtkImage *>(g_object_get_data(G_OBJECT(expander), "bar_expander_button_image"));
@@ -465,12 +397,16 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 
 static GtkWidget *bar_expander_label_widget_new(GtkWidget *expander, GtkWidget *title)
 {
-	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+	GtkWidget *image = gtk_image_new_from_icon_name(gtk_expander_get_expanded(GTK_EXPANDER(expander)) ? GQ_ICON_PAN_UP : GQ_ICON_PAN_DOWN);
 
 	gtk_widget_set_tooltip_text(expander, _("Expand or collapse pane"));
+	gtk_box_append(GTK_BOX(box), image);
 	gtk_box_append(GTK_BOX(box), title);
 	gtk_widget_set_hexpand(title, TRUE);
 	gtk_widget_set_halign(title, GTK_ALIGN_FILL);
+
+	g_object_set_data(G_OBJECT(expander), "bar_expander_button_image", image);
 
 	return box;
 }
@@ -510,8 +446,7 @@ static GtkWidget *bar_menu_add_button_new(GtkWidget *toolbar)
 	gtk_widget_insert_action_group(button, "bar", G_ACTION_GROUP(action_group));
 	g_object_set_data_full(G_OBJECT(button), "bar-action-group", action_group, g_object_unref);
 
-	gq_gtk_container_add(toolbar, button);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(toolbar), button);
 
 	return button;
 }
@@ -681,13 +616,13 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 
 	GtkWidget *expander = gtk_expander_new(nullptr);
 	DEBUG_NAME(expander);
+	gtk_widget_add_css_class(expander, "bar-pane-expander");
 	if (pd && pd->title)
 		{
 		gtk_expander_set_label_widget(GTK_EXPANDER(expander), bar_expander_label_widget_new(expander, pd->title));
-		gtk_widget_show(pd->title);
 		}
 
-	gq_gtk_box_pack_start(GTK_BOX(bd->vbox), expander, FALSE, TRUE, 0);
+	gtk_box_append(GTK_BOX(bd->vbox), expander);
 
 	GtkGesture *gesture = gtk_gesture_click_new();
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
@@ -695,11 +630,11 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 	gtk_widget_add_controller(expander, GTK_EVENT_CONTROLLER(gesture));
 	g_signal_connect(expander, "notify::expanded", G_CALLBACK(bar_expander_cb), pd);
 
-	gq_gtk_container_add(expander, pane);
+	gtk_expander_set_child(GTK_EXPANDER(expander), pane);
 
 	gtk_expander_set_expanded(GTK_EXPANDER(expander), pd->expanded);
+	bar_expander_cb(G_OBJECT(expander), nullptr, pd);
 
-	gtk_widget_show(expander);
 
 	if (bd->fd && pd && pd->pane_set_fd) pd->pane_set_fd(pane, bd->fd);
 }
@@ -732,7 +667,7 @@ void bar_close(GtkWidget *bar)
 	if (!bd) return;
 
 	/* @FIXME This causes a g_object_unref failed error on exit */
-	gq_gtk_widget_destroy(bd->widget);
+	gtk_box_remove(GTK_BOX(gtk_widget_get_parent(bd->widget)), bd->widget);
 }
 
 static void bar_destroy(gpointer data)
@@ -772,33 +707,33 @@ GtkWidget *bar_new(LayoutWindow *lw)
 	gtk_label_set_xalign(GTK_LABEL(bd->label_file_name), 0.5);
 	gtk_label_set_yalign(GTK_LABEL(bd->label_file_name), 0.5);
 
-	gq_gtk_box_pack_start(GTK_BOX(box), bd->label_file_name, TRUE, TRUE, 0);
-	gtk_widget_show(bd->label_file_name);
+	gtk_widget_set_hexpand(bd->label_file_name, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(bd->label_file_name, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box), bd->label_file_name);
 
-	gq_gtk_box_pack_start(GTK_BOX(bd->widget), box, FALSE, FALSE, 0);
-	gtk_widget_show(box);
+	gtk_box_append(GTK_BOX(bd->widget), box);
 
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	DEBUG_NAME(scrolled);
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
 		GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-	gq_gtk_box_pack_start(GTK_BOX(bd->widget), scrolled, TRUE, TRUE, 0);
-	gtk_widget_show(scrolled);
+	gtk_widget_set_hexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(bd->widget))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(scrolled, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(bd->widget))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(bd->widget), scrolled);
 
 
 	bd->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gq_gtk_container_add(scrolled, bd->vbox);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), bd->vbox);
 	gtk_widget_remove_css_class(gtk_widget_get_first_child(scrolled), "frame");
 
 	add_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(add_box);
-	gq_gtk_box_pack_end(GTK_BOX(bd->widget), add_box, FALSE, FALSE, 0);
+	gtk_widget_set_valign(add_box, GTK_ALIGN_START);
+	gtk_box_append(GTK_BOX(bd->widget), add_box);
 	tbar = pref_toolbar_new(add_box);
 	bar_menu_add_button_new(tbar);
-	gtk_widget_show(add_box);
 
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
-	gtk_widget_show(bd->vbox);
 	return bd->widget;
 }
 

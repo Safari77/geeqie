@@ -131,53 +131,6 @@ static void pan_window_dnd_init(PanWindow *pw);
 static void pan_window_new_real(FileData *dir_fd);
 static void pan_popup_menu_cb(GSimpleAction *, GVariant *, gpointer data);
 
-/**
- * This array must be kept in sync with the contents of:\n
- * @link pan_window_key_press_cb @endlink \n
- * @link pan_popup_menu @endlink
- *
- * See also @link HardcodedWindowKey @endlink
- **/
-static HardcodedWindowKeyList pan_view_window_keys{
-	{GDK_CONTROL_MASK, 'C', N_("Copy")},
-	{GDK_CONTROL_MASK, 'M', N_("Move")},
-	{GDK_CONTROL_MASK, 'R', N_("Rename")},
-	{GDK_CONTROL_MASK, 'D', N_("Move to Trash")},
-	{GDK_CONTROL_MASK, 'W', N_("Close window")},
-	{GDK_CONTROL_MASK, 'F', N_("Display Find search bar")},
-	{GDK_CONTROL_MASK, 'G', N_("Start search")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Escape, N_("Exit fullscreen")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Escape, N_("Hide Find search bar")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_equal, N_("Zoom in")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_plus, N_("Zoom in")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_minus, N_("Zoom out")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Z, N_("Zoom 1:1")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_1, N_("Zoom 1:1")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_KP_Divide, N_("Zoom 1:1")},
-	{static_cast<GdkModifierType>(0), '2', N_("Zoom 2:1")},
-	{static_cast<GdkModifierType>(0), '3', N_("Zoom 3:1")},
-	{static_cast<GdkModifierType>(0), '4', N_("Zoom 4:1")},
-	{static_cast<GdkModifierType>(0), '7', N_("Zoom 1:4")},
-	{static_cast<GdkModifierType>(0), '8', N_("Zoom 1:3")},
-	{static_cast<GdkModifierType>(0), '9', N_("Zoom 1:2")},
-	{static_cast<GdkModifierType>(0), 'F', N_("Full screen")},
-	{static_cast<GdkModifierType>(0), 'V', N_("Full screen")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_F11, N_("Full screen")},
-	{static_cast<GdkModifierType>(0), '/', N_("Display Find search bar")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Left, N_("Scroll left")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Right, N_("Scroll right")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Up, N_("Scroll up")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Down, N_("Scroll down")},
-	{GDK_SHIFT_MASK, GDK_KEY_Left, N_("Scroll left faster")},
-	{GDK_SHIFT_MASK, GDK_KEY_Right, N_("Scroll right faster")},
-	{GDK_SHIFT_MASK, GDK_KEY_Up, N_("Scroll up faster")},
-	{GDK_SHIFT_MASK, GDK_KEY_Down, N_("Scroll down faster")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Page_Up, N_("Scroll display half screen up")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Page_Down, N_("Scroll display half screen down")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_Home, N_("Scroll display half screen left")},
-	{static_cast<GdkModifierType>(0), GDK_KEY_End, N_("Scroll display half screen right")},
-};
-
 /*
  *-----------------------------------------------------------------------------
  * the image/thumb loader queue
@@ -1052,10 +1005,8 @@ static FileData *pan_menu_click_fd(PanWindow *pw)
 	return nullptr;
 }
 
-static gboolean pan_window_key_press_cb(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer data)
+static gboolean pan_window_key_press_cb(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer data)
 {
-	const GqKeyEvent event_data{keyval, keycode, state, 0};
-	const GqKeyEvent *event = &event_data;
 	auto pw = static_cast<PanWindow *>(data);
 	PixbufRenderer *pr;
 	gboolean stop_signal = FALSE;
@@ -1066,13 +1017,25 @@ static gboolean pan_window_key_press_cb(GtkEventControllerKey *, guint keyval, g
 
 	pr = PIXBUF_RENDERER(pw->imd->pr);
 
-	imd_widget = gq_gtk_widget_get_focus_child(pw->imd->widget);
+	imd_widget = nullptr;
+	if (GtkRoot *root = gtk_widget_get_root(pw->imd->widget))
+		{
+		GtkWidget *focus = gtk_root_get_focus(root);
+		for (GtkWidget *work = focus; work; work = gtk_widget_get_parent(work))
+			{
+			if (work == pw->imd->widget)
+				{
+				imd_widget = focus;
+				break;
+				}
+			}
+		}
 	focused = (pw->fs || (imd_widget && gtk_widget_has_focus(imd_widget)));
 
 	if (focused)
 		{
 		stop_signal = TRUE;
-		switch (event->keyval)
+		switch (keyval)
 			{
 			case GDK_KEY_Left: case GDK_KEY_KP_Left:
 				x -= 1;
@@ -1105,7 +1068,7 @@ static gboolean pan_window_key_press_cb(GtkEventControllerKey *, guint keyval, g
 
 		if (x != 0 || y != 0)
 			{
-			keyboard_scroll_calc(x, y, static_cast<GdkModifierType>(event->state), event->keyval, event->time);
+			keyboard_scroll_calc(x, y, state, keyval, 0);
 			pixbuf_renderer_scroll(pr, x, y);
 			}
 		}
@@ -1438,30 +1401,28 @@ static void pan_window_image_scroll_notify_cb(PixbufRenderer *pr, gpointer data)
 	pixbuf_renderer_get_visible_rect(pr, rect);
 	pixbuf_renderer_get_image_size(pr, width, height);
 
-	adj = gtk_range_get_adjustment(GTK_RANGE(pw->scrollbar_h));
+	adj = gtk_scrollbar_get_adjustment(GTK_SCROLLBAR(pw->scrollbar_h));
+	g_signal_handlers_block_matched(adj, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, pw);
 	gtk_adjustment_set_page_size(adj, rect.width);
 	gtk_adjustment_set_page_increment(adj, gtk_adjustment_get_page_size(adj) / 2.0);
 	gtk_adjustment_set_step_increment(adj, 48.0 / pr->scale);
 	gtk_adjustment_set_lower(adj, 0.0);
 	gtk_adjustment_set_upper(adj, std::max<gdouble>(width, 1.0));
 	gtk_adjustment_set_value(adj, static_cast<gdouble>(rect.x));
+	g_signal_handlers_unblock_matched(adj, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, pw);
 
-	pref_signal_block_data(pw->scrollbar_h, pw);
-	pref_signal_unblock_data(pw->scrollbar_h, pw);
-
-	adj = gtk_range_get_adjustment(GTK_RANGE(pw->scrollbar_v));
+	adj = gtk_scrollbar_get_adjustment(GTK_SCROLLBAR(pw->scrollbar_v));
+	g_signal_handlers_block_matched(adj, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, pw);
 	gtk_adjustment_set_page_size(adj, rect.height);
 	gtk_adjustment_set_page_increment(adj, gtk_adjustment_get_page_size(adj) / 2.0);
 	gtk_adjustment_set_step_increment(adj, 48.0 / pr->scale);
 	gtk_adjustment_set_lower(adj, 0.0);
 	gtk_adjustment_set_upper(adj, std::max<gdouble>(height, 1.0));
 	gtk_adjustment_set_value(adj, static_cast<gdouble>(rect.y));
-
-	pref_signal_block_data(pw->scrollbar_v, pw);
-	pref_signal_unblock_data(pw->scrollbar_v, pw);
+	g_signal_handlers_unblock_matched(adj, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, pw);
 }
 
-static void pan_window_scrollbar_h_value_cb(GtkRange *range, gpointer data)
+static void pan_window_scrollbar_h_value_cb(GtkAdjustment *adjustment, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
 	PixbufRenderer *pr;
@@ -1471,12 +1432,12 @@ static void pan_window_scrollbar_h_value_cb(GtkRange *range, gpointer data)
 
 	if (!pr->scale) return;
 
-	x = static_cast<gint>(gtk_range_get_value(range));
+	x = static_cast<gint>(gtk_adjustment_get_value(adjustment));
 
 	pixbuf_renderer_scroll_to_point(pr, x, static_cast<gint>(static_cast<gdouble>(pr->y_scroll) / pr->scale), 0.0, 0.0);
 }
 
-static void pan_window_scrollbar_v_value_cb(GtkRange *range, gpointer data)
+static void pan_window_scrollbar_v_value_cb(GtkAdjustment *adjustment, gpointer data)
 {
 	auto pw = static_cast<PanWindow *>(data);
 	PixbufRenderer *pr;
@@ -1486,7 +1447,7 @@ static void pan_window_scrollbar_v_value_cb(GtkRange *range, gpointer data)
 
 	if (!pr->scale) return;
 
-	y = static_cast<gint>(gtk_range_get_value(range));
+	y = static_cast<gint>(gtk_adjustment_get_value(adjustment));
 
 	pixbuf_renderer_scroll_to_point(pr, static_cast<gint>(static_cast<gdouble>(pr->x_scroll) / pr->scale), y, 0.0, 0.0);
 }
@@ -1539,7 +1500,7 @@ static void pan_window_close(PanWindow *pw)
 	pan_search_ui_destroy(g_steal_pointer(&pw->search_ui));
 	pan_filter_ui_destroy(g_steal_pointer(&pw->filter_ui));
 	g_object_set_data(G_OBJECT(pw->window), PAN_WINDOW_DATA_KEY, nullptr);
-	gq_gtk_widget_destroy(pw->window);
+	gtk_window_destroy(GTK_WINDOW(pw->window));
 
 	pan_window_items_free(pw);
 	pan_cache_free(pw);
@@ -1626,7 +1587,7 @@ static gboolean pan_warning(FileData *dir_fd)
 	pref_checkbox_new(box, _("Do not show this dialog again"), hide_dlg,
 			  G_CALLBACK(pan_warning_hide_cb), nullptr);
 
-	gtk_widget_show(gd->dialog);
+	gtk_window_present(GTK_WINDOW(gd->dialog));
 
 	return TRUE;
 }
@@ -1752,7 +1713,7 @@ static void pan_exif_date_toggle_cb(GSimpleAction *action, GVariant *value, gpoi
 	gboolean active = g_variant_get_boolean(value);
 	g_simple_action_set_state(G_SIMPLE_ACTION(action), value);
 
-	pw->exif_date_enable = !active;
+	pw->exif_date_enable = active;
 	pan_layout_update(pw);
 }
 
@@ -1957,13 +1918,14 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_widget_set_size_request(pw->window, DEFAULT_MINIMAL_WINDOW_SIZE, DEFAULT_MINIMAL_WINDOW_SIZE);
 
 	gtk_window_set_resizable(GTK_WINDOW(pw->window), TRUE);
-	gq_gtk_widget_set_border_width(pw->window, 0);
+	gtk_widget_set_margin_top(pw->window, 0);
+	gtk_widget_set_margin_bottom(pw->window, 0);
+	gtk_widget_set_margin_start(pw->window, 0);
+	gtk_widget_set_margin_end(pw->window, 0);
 
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	DEBUG_NAME(vbox);
-	gq_gtk_container_add(pw->window, vbox);
-	gtk_widget_show(pw->window);
-	gtk_widget_show(vbox);
+	gtk_window_set_child(GTK_WINDOW(pw->window), vbox);
 
 	box = pref_box_new(vbox, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
 
@@ -1986,7 +1948,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_drop_down_set_selected(GTK_DROP_DOWN(layout_drop_down), pw->layout);
 	g_signal_connect(G_OBJECT(layout_drop_down), "notify::selected",
 	                 G_CALLBACK(pan_window_layout_change_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(box), layout_drop_down, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(box), layout_drop_down);
 
 	static const char *size_strings[] =
 		{
@@ -2006,7 +1968,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	gtk_drop_down_set_selected(GTK_DROP_DOWN(size_drop_down), pw->size);
 	g_signal_connect(G_OBJECT(size_drop_down), "notify::selected",
 	                 G_CALLBACK(pan_window_layout_size_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(box), size_drop_down, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(box), size_drop_down);
 
 	pw->imd = image_new(TRUE);
 	pw->imd_normal = pw->imd;
@@ -2017,26 +1979,28 @@ static void pan_window_new_real(FileData *dir_fd)
 	vbox_imd_widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	hbox_imd_widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-	gq_gtk_box_pack_start(GTK_BOX(vbox_imd_widget), pw->imd->widget, true, true, 0);
+	gtk_widget_set_hexpand(pw->imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox_imd_widget))) == GTK_ORIENTATION_HORIZONTAL ? true : FALSE);
+	gtk_widget_set_vexpand(pw->imd->widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox_imd_widget))) == GTK_ORIENTATION_VERTICAL ? true : FALSE);
+	gtk_box_append(GTK_BOX(vbox_imd_widget), pw->imd->widget);
 
 	pw->scrollbar_h = gtk_scrollbar_new(GTK_ORIENTATION_HORIZONTAL, nullptr);
-	g_signal_connect(G_OBJECT(pw->scrollbar_h), "value_changed",  G_CALLBACK(pan_window_scrollbar_h_value_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(vbox_imd_widget), pw->scrollbar_h, false, false, 0);
+	GtkAdjustment *adjustment_h = gtk_scrollbar_get_adjustment(GTK_SCROLLBAR(pw->scrollbar_h));
+	g_signal_connect(adjustment_h, "value-changed", G_CALLBACK(pan_window_scrollbar_h_value_cb), pw);
+	gtk_box_append(GTK_BOX(vbox_imd_widget), pw->scrollbar_h);
 
-	gq_gtk_box_pack_start(GTK_BOX(hbox_imd_widget), vbox_imd_widget, true, true, 0);
+	gtk_widget_set_hexpand(vbox_imd_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox_imd_widget))) == GTK_ORIENTATION_HORIZONTAL ? true : FALSE);
+	gtk_widget_set_vexpand(vbox_imd_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox_imd_widget))) == GTK_ORIENTATION_VERTICAL ? true : FALSE);
+	gtk_box_append(GTK_BOX(hbox_imd_widget), vbox_imd_widget);
 
 	pw->scrollbar_v = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, nullptr);
-	g_signal_connect(G_OBJECT(pw->scrollbar_v), "value_changed", G_CALLBACK(pan_window_scrollbar_v_value_cb), pw);
-	gq_gtk_box_pack_start(GTK_BOX(hbox_imd_widget), pw->scrollbar_v, false, false, 0);
+	GtkAdjustment *adjustment_v = gtk_scrollbar_get_adjustment(GTK_SCROLLBAR(pw->scrollbar_v));
+	g_signal_connect(adjustment_v, "value-changed", G_CALLBACK(pan_window_scrollbar_v_value_cb), pw);
+	gtk_box_append(GTK_BOX(hbox_imd_widget), pw->scrollbar_v);
 
-	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox_imd_widget, true, true, 0);
+	gtk_widget_set_hexpand(hbox_imd_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? true : FALSE);
+	gtk_widget_set_vexpand(hbox_imd_widget, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? true : FALSE);
+	gtk_box_append(GTK_BOX(vbox), hbox_imd_widget);
 
-	gtk_widget_show(hbox_imd_widget);
-	gtk_widget_show(pw->imd->widget);
-	gtk_widget_show(vbox);
-	gtk_widget_show(vbox_imd_widget);
-	gtk_widget_show(pw->scrollbar_h);
-	gtk_widget_show(pw->scrollbar_v);
 
 	pan_window_dnd_init(pw);
 
@@ -2045,11 +2009,27 @@ static void pan_window_new_real(FileData *dir_fd)
 	/* find bar */
 
 	pw->search_ui = pan_search_ui_new(pw);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), pw->search_ui->search_box, FALSE, FALSE, 2);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(pw->search_ui->search_box, 2);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(pw->search_ui->search_box, 2);
+		}
+	gtk_box_append(GTK_BOX(vbox), pw->search_ui->search_box);
 
 	/* filter bar */
 	pw->filter_ui = pan_filter_ui_new(pw);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), pw->filter_ui->filter_box, FALSE, FALSE, 2);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(pw->filter_ui->filter_box, 2);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(pw->filter_ui->filter_box, 2);
+		}
+	gtk_box_append(GTK_BOX(vbox), pw->filter_ui->filter_box);
 
 	/* status bar */
 
@@ -2059,34 +2039,36 @@ static void pan_window_new_real(FileData *dir_fd)
 	DEBUG_NAME(frame);
 	gtk_widget_add_css_class(frame, "frame");
 	gtk_widget_set_size_request(frame, ZOOM_LABEL_WIDTH, -1);
-	gq_gtk_box_pack_start(GTK_BOX(box), frame, TRUE, TRUE, 0);
-	gtk_widget_show(frame);
+	gtk_widget_set_hexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(box), frame);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-	gq_gtk_container_add(frame, hbox);
-	gtk_widget_show(hbox);
+	gtk_frame_set_child(GTK_FRAME(frame), hbox);
 
 	pref_spacer(hbox, 0);
 	pw->label_message = pref_label_new(hbox, "");
+
+	GtkWidget *end_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_widget_set_hexpand(end_box, TRUE);
+	gtk_widget_set_halign(end_box, GTK_ALIGN_END);
+	gtk_box_append(GTK_BOX(box), end_box);
 
 	frame = gtk_frame_new(nullptr);
 	DEBUG_NAME(frame);
 	gtk_widget_add_css_class(frame, "frame");
 	gtk_widget_set_size_request(frame, ZOOM_LABEL_WIDTH, -1);
-	gq_gtk_box_pack_end(GTK_BOX(box), frame, FALSE, FALSE, 0);
-	gtk_widget_show(frame);
 
 	pw->label_zoom = gtk_label_new("");
-	gq_gtk_container_add(frame, pw->label_zoom);
-	gtk_widget_show(pw->label_zoom);
-
-	// Add the "Find" button to the status bar area.
-	gq_gtk_box_pack_end(GTK_BOX(box), pw->search_ui->search_button, FALSE, FALSE, 0);
-	gtk_widget_show(pw->search_ui->search_button);
+	gtk_frame_set_child(GTK_FRAME(frame), pw->label_zoom);
 
 	// Add the "Filter" button to the status bar area.
-	gq_gtk_box_pack_end(GTK_BOX(box), pw->filter_ui->filter_button, FALSE, FALSE, 0);
-	gtk_widget_show(pw->filter_ui->filter_button);
+	gtk_box_append(GTK_BOX(end_box), pw->filter_ui->filter_button);
+
+	// Add the "Find" button to the status bar area.
+	gtk_box_append(GTK_BOX(end_box), pw->search_ui->search_button);
+
+	gtk_box_append(GTK_BOX(end_box), frame);
 
 	g_signal_connect(G_OBJECT(pw->window), "close-request", G_CALLBACK(pan_window_delete_cb), pw);
 	GtkEventController *controller = gtk_event_controller_key_new();
@@ -2101,7 +2083,7 @@ static void pan_window_new_real(FileData *dir_fd)
 	register_actions_from_table(GTK_APPLICATION(app), pw->window, pan_actions, get_keyfile_merged(), pw);
 
 	gtk_widget_grab_focus(pw->imd->widget);
-	gtk_widget_show(pw->window);
+	gtk_window_present(GTK_WINDOW(pw->window));
 }
 
 static void pan_popup_menu(PanWindow *pw, GtkWidget *parent, gdouble x, gdouble y)
@@ -2124,7 +2106,7 @@ static void pan_popup_menu(PanWindow *pw, GtkWidget *parent, gdouble x, gdouble 
 	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), active);
 
 	GMenu *collections_menu = G_MENU(gtk_builder_get_object(builder, "collections-submenu"));
-	submenu_add_collections_new(collections_menu, active, "win.pan-win-collections", pw);
+	submenu_add_collections_new(collections_menu, "win.pan-win-collections");
 	action = g_action_map_lookup_action(G_ACTION_MAP(pw->window), "pan-win-collections");
 	g_simple_action_set_enabled(G_SIMPLE_ACTION(action), active);
 

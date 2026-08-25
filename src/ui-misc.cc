@@ -28,18 +28,13 @@
 #include <cstring>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include <pango/pango.h>
 
 #include <config.h>
 
-#include "actions.h"
-#include "compat.h"
 #include "geometry.h"
 #include "history-list.h"
-#include "layout-util.h"
-#include "layout.h"
 #include "main-defines.h"
 
 namespace
@@ -80,8 +75,9 @@ GtkWidget *pref_box_new(GtkWidget *parent_box, gboolean fill,
 {
 	GtkWidget *box = gtk_box_new(orientation, padding);
 
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), box, fill, fill, 0);
-	gtk_widget_show(box);
+	gtk_widget_set_hexpand(box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL ? fill : FALSE);
+	gtk_widget_set_vexpand(box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_VERTICAL ? fill : FALSE);
+	gtk_box_append(GTK_BOX(parent_box), box);
 
 	return box;
 }
@@ -104,20 +100,21 @@ GtkWidget *pref_group_new(GtkWidget *parent_box, gboolean fill,
 		pref_spacer(vbox, PREF_PAD_GROUP - PREF_PAD_GAP);
 		}
 
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), vbox, fill, fill, 0);
-	gtk_widget_show(vbox);
+	gtk_widget_set_hexpand(vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL ? fill : FALSE);
+	gtk_widget_set_vexpand(vbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_VERTICAL ? fill : FALSE);
+	gtk_box_append(GTK_BOX(parent_box), vbox);
 
 	label = gtk_label_new(text);
 	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
 	gtk_label_set_yalign(GTK_LABEL(label), 0.5);
 	pref_label_bold(label, TRUE, FALSE);
 
-	gq_gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
-	gtk_widget_show(label);
+	gtk_box_append(GTK_BOX(vbox), label);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_INDENT);
-	gq_gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
-	gtk_widget_show(hbox);
+	gtk_widget_set_hexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(vbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(vbox), hbox);
 
 	/* indent using empty box */
 	pref_spacer(hbox, 0);
@@ -130,8 +127,9 @@ GtkWidget *pref_group_new(GtkWidget *parent_box, gboolean fill,
 		{
 		box = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 		}
-	gq_gtk_box_pack_start(GTK_BOX(hbox), box, TRUE, TRUE, 0);
-	gtk_widget_show(box);
+	gtk_widget_set_hexpand(box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+	gtk_widget_set_vexpand(box, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+	gtk_box_append(GTK_BOX(hbox), box);
 
 	g_object_set_data(G_OBJECT(box), "pref_group", vbox);
 
@@ -164,13 +162,16 @@ GtkWidget *pref_frame_new(GtkWidget *parent_box, gboolean fill,
 	GtkWidget *frame = nullptr;
 
 	frame = gtk_frame_new(text);
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), frame, fill, fill, 0);
-	gtk_widget_show(frame);
+	gtk_widget_set_hexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL ? fill : FALSE);
+	gtk_widget_set_vexpand(frame, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_VERTICAL ? fill : FALSE);
+	gtk_box_append(GTK_BOX(parent_box), frame);
 
 	box = gtk_box_new(orientation, padding);
-	gq_gtk_container_add(frame, box);
-	gq_gtk_widget_set_border_width(box, PREF_PAD_BORDER);
-	gtk_widget_show(box);
+	gtk_frame_set_child(GTK_FRAME(frame), box);
+	gtk_widget_set_margin_top(box, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(box, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(box, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(box, PREF_PAD_BORDER);
 
 	return box;
 }
@@ -180,8 +181,15 @@ GtkWidget *pref_spacer(GtkWidget *parent_box, gboolean padding)
 	GtkWidget *spacer;
 
 	spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), spacer, FALSE, FALSE, padding / 2);
-	gtk_widget_show(spacer);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(spacer, padding / 2);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(spacer, padding / 2);
+		}
+	gtk_box_append(GTK_BOX(parent_box), spacer);
 
 	return spacer;
 }
@@ -193,8 +201,15 @@ GtkWidget *pref_line(GtkWidget *parent_box, gboolean padding)
 
 	orientation = gtk_orientable_get_orientation(GTK_ORIENTABLE(parent_box));
 	spacer = gtk_separator_new((orientation == GTK_ORIENTATION_HORIZONTAL) ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), spacer, FALSE, FALSE, padding / 2);
-	gtk_widget_show(spacer);
+	if (gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL)
+		{
+		gtk_widget_set_margin_end(spacer, padding / 2);
+		}
+	else
+		{
+		gtk_widget_set_margin_bottom(spacer, padding / 2);
+		}
+	gtk_box_append(GTK_BOX(parent_box), spacer);
 
 	return spacer;
 }
@@ -204,8 +219,7 @@ GtkWidget *pref_label_new(GtkWidget *parent_box, const gchar *text)
 	GtkWidget *label;
 
 	label = gtk_label_new(text);
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), label, FALSE, FALSE, 0);
-	gtk_widget_show(label);
+	gtk_box_append(GTK_BOX(parent_box), label);
 
 	return label;
 }
@@ -216,8 +230,7 @@ GtkWidget *pref_label_new_mnemonic(GtkWidget *parent_box, const gchar *text, Gtk
 
 	label = gtk_label_new_with_mnemonic(text);
 	gtk_label_set_mnemonic_widget(GTK_LABEL(label), widget);
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), label, FALSE, FALSE, 0);
-	gtk_widget_show(label);
+	gtk_box_append(GTK_BOX(parent_box), label);
 
 	return label;
 }
@@ -254,8 +267,7 @@ GtkWidget *pref_button_new(GtkWidget *parent_box, const gchar *icon_name,
 
 	if (parent_box)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(parent_box), button, FALSE, FALSE, 0);
-		gtk_widget_show(button);
+		gtk_box_append(GTK_BOX(parent_box), button);
 		}
 
 	return button;
@@ -277,8 +289,7 @@ static GtkWidget *real_pref_checkbox_new(GtkWidget *parent_box, const gchar *tex
 	gtk_check_button_set_active(GTK_CHECK_BUTTON(button), active);
 	if (func) g_signal_connect(G_OBJECT(button), "toggled", func, data);
 
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(parent_box), button);
 
 	return button;
 }
@@ -353,8 +364,7 @@ static GtkWidget *real_pref_radiobutton_new(GtkWidget *parent_box, GtkWidget *si
 	if (active) gtk_check_button_set_active(GTK_CHECK_BUTTON(button), active);
 	if (func) g_signal_connect(G_OBJECT(button), "toggled", func, data);
 
-	gq_gtk_box_pack_start(GTK_BOX(parent_box), button, FALSE, FALSE, 0);
-	gtk_widget_show(button);
+	gtk_box_append(GTK_BOX(parent_box), button);
 
 	return button;
 }
@@ -400,8 +410,7 @@ static GtkWidget *real_pref_spin_new(GtkWidget *parent_box, const gchar *text, c
 		pref_link_sensitivity(label, spin);
 		}
 
-	gq_gtk_box_pack_start(GTK_BOX(box), spin, FALSE, FALSE, 0);
-	gtk_widget_show(spin);
+	gtk_box_append(GTK_BOX(box), spin);
 
 	/* perhaps this should only be PREF_PAD_GAP distance from spinbutton ? */
 	if (suffix)
@@ -461,8 +470,9 @@ GtkWidget *pref_table_new(GtkWidget *parent_box, gint, gint, gboolean, gboolean 
 
 	if (parent_box)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(parent_box), table, fill, fill, 0);
-		gtk_widget_show(table);
+		gtk_widget_set_hexpand(table, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL ? fill : FALSE);
+		gtk_widget_set_vexpand(table, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_VERTICAL ? fill : FALSE);
+		gtk_box_append(GTK_BOX(parent_box), table);
 		}
 
 	return table;
@@ -494,7 +504,6 @@ GtkWidget *pref_table_box(GtkWidget *table, gint column, gint row,
 
 	gtk_grid_attach(GTK_GRID(table), shell, column, row, 1, 1);
 
-	gtk_widget_show(shell);
 
 	return box;
 }
@@ -508,7 +517,6 @@ GtkWidget *pref_table_label(GtkWidget *table, gint column, gint row,
 	gtk_widget_set_halign(label, alignment);
 	gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
 	gtk_grid_attach(GTK_GRID(table), label, column, row, 1, 1);
-	gtk_widget_show(label);
 
 	return label;
 }
@@ -521,7 +529,6 @@ GtkWidget *pref_table_button(GtkWidget *table, gint column, gint row,
 
 	button = pref_button_new(nullptr, stock_id, text, func, data);
 	gtk_grid_attach(GTK_GRID(table), button, column, row, 1, 1);
-	gtk_widget_show(button);
 
 	return button;
 }
@@ -554,8 +561,7 @@ GtkWidget *pref_table_spin(GtkWidget *table, gint column, gint row,
 	if (suffix)
 		{
 		box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
-		gq_gtk_box_pack_start(GTK_BOX(box), spin, FALSE, FALSE, 0);
-		gtk_widget_show(spin);
+		gtk_box_append(GTK_BOX(box), spin);
 
 		label = pref_label_new(box, suffix);
 		pref_link_sensitivity(label, spin);
@@ -566,7 +572,6 @@ GtkWidget *pref_table_spin(GtkWidget *table, gint column, gint row,
 		}
 
 	gtk_grid_attach(GTK_GRID(table), box, column, row, 1, 1);
-	gtk_widget_show(box);
 
 	return spin;
 }
@@ -593,8 +598,7 @@ GtkWidget *pref_toolbar_new(GtkWidget *parent_box)
 
 	if (parent_box)
 		{
-		gq_gtk_box_pack_start(GTK_BOX(parent_box), tbar, FALSE, FALSE, 0);
-		gtk_widget_show(tbar);
+		gtk_box_append(GTK_BOX(parent_box), tbar);
 		}
 	return tbar;
 }
@@ -628,8 +632,7 @@ GtkWidget *pref_toolbar_button(GtkWidget *toolbar,
 	gtk_button_set_use_underline(GTK_BUTTON(item), TRUE);
 
 	if (func) g_signal_connect(item, "clicked", func, data);
-	gq_gtk_container_add(toolbar, item);
-	gtk_widget_show(item);
+	gtk_box_append(GTK_BOX(toolbar), item);
 
 	if (description)
 		{
@@ -778,14 +781,12 @@ GtkWidget *date_selection_new()
 
 	icon = gtk_image_new_from_icon_name(GQ_ICON_PAN_DOWN);
 	gtk_menu_button_set_child(GTK_MENU_BUTTON(ds->button), icon);
-	gtk_widget_show(icon);
 
-	gq_gtk_box_pack_start(GTK_BOX(ds->box), ds->button, FALSE, FALSE, 0);
+	gtk_box_append(GTK_BOX(ds->box), ds->button);
 	g_signal_connect(G_OBJECT(ds->button), "notify::active",
 			 G_CALLBACK(date_selection_button_active_cb), ds);
 	g_object_set_data(G_OBJECT(ds->box), DATE_SELECION_KEY, ds);
 	date_selection_popup(ds);
-	gtk_widget_show(ds->button);
 
 	return ds->box;
 }
@@ -949,10 +950,16 @@ GtkWidget *pref_color_button_new(GtkWidget *parent_box, const gchar *title, cons
 		GtkWidget *label = gtk_label_new(title);
 
 		GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-		gq_gtk_box_pack_start(GTK_BOX(parent_box), hbox, TRUE, TRUE, 0);
+		gtk_widget_set_hexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(hbox, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(parent_box))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(parent_box), hbox);
 
-		gq_gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
-		gq_gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
+		gtk_widget_set_hexpand(label, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(label, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(hbox), label);
+		gtk_widget_set_hexpand(button, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_HORIZONTAL ? TRUE : FALSE);
+		gtk_widget_set_vexpand(button, gtk_orientable_get_orientation(GTK_ORIENTABLE(GTK_BOX(hbox))) == GTK_ORIENTATION_VERTICAL ? TRUE : FALSE);
+		gtk_box_append(GTK_BOX(hbox), button);
 
 		gtk_widget_set_visible(hbox, TRUE);
 		}
@@ -1025,143 +1032,7 @@ gchar *text_widget_text_pull_selected(GtkWidget *text_widget)
 	
 }
 
-ActionItem::ActionItem(const gchar *name, const gchar *label, const gchar *icon_name)
-    : name(g_strdup(name))
-    , label(g_strdup(label))
-    , icon_name(g_strdup(icon_name))
-{}
-
-ActionItem::ActionItem(const ActionItem &other)
-    : name(g_strdup(other.name))
-    , label(g_strdup(other.label))
-    , icon_name(g_strdup(other.icon_name))
-{}
-
-ActionItem::ActionItem(ActionItem &&other) noexcept
-    : name(std::exchange(other.name, nullptr))
-    , label(std::exchange(other.label, nullptr))
-    , icon_name(std::exchange(other.icon_name, nullptr))
-{}
-
-ActionItem::~ActionItem()
-{
-	g_free(name);
-	g_free(label);
-	g_free(icon_name);
-}
-
-ActionItem &ActionItem::operator=(const ActionItem &other)
-{
-	if (this != &other)
-		{
-		g_free(name);
-		name = g_strdup(other.name);
-
-		g_free(label);
-		label = g_strdup(other.label);
-
-		g_free(icon_name);
-		icon_name = g_strdup(other.icon_name);
-		}
-
-	return *this;
-}
-
-ActionItem &ActionItem::operator=(ActionItem &&other) noexcept
-{
-	if (this != &other)
-		{
-		g_free(name);
-		name = std::exchange(other.name, nullptr);
-
-		g_free(label);
-		label = std::exchange(other.label, nullptr);
-
-		g_free(icon_name);
-		icon_name = std::exchange(other.icon_name, nullptr);
-		}
-
-	return *this;
-}
-
-bool ActionItem::has_label(const gchar *label) const
-{
-	return g_strcmp0(this->label, label) == 0;
-}
-
-static gchar *get_action_label(gpointer, const gchar *action_name)
-{
-	const gchar *label = get_description_for_action_name(action_name);
-	if (label) return g_strdup(label);
-
-	if (!strchr(action_name, '.'))
-		{
-		g_autofree gchar *window_action_name = g_strdup_printf("win.%s", action_name);
-		label = get_description_for_action_name(window_action_name);
-		if (label) return g_strdup(label);
-
-		g_autofree gchar *app_action_name = g_strdup_printf("app.%s", action_name);
-		label = get_description_for_action_name(app_action_name);
-		if (label) return g_strdup(label);
-		}
-
-	return g_strdup(action_name);
-}
-
-static void action_to_list_duplicates(gpointer data, gpointer user_data)
-{
-	if (!G_IS_ACTION(data) || !user_data) return;
-
-	auto *list_duplicates = static_cast<std::vector<ActionItem> *>(user_data);
-	const gchar *action_name = g_action_get_name(G_ACTION(data));
-	g_autofree gchar *label = get_action_label(nullptr, action_name);
-	g_autofree gchar *window_action_name = g_strdup_printf("win.%s", action_name);
-	auto icon_name = get_icon_for_action_name(window_action_name);
-
-	list_duplicates->emplace_back(action_name, label, icon_name);
-}
-
-/**
- * @brief Get a list of menu actions
- * @param
- * @returns std::vector<ActionItem>
- *
- * The list generated is used in the --action-list command and
- * programmable mouse buttons 8 and 9.
- */
-std::vector<ActionItem> get_action_items()
-{
-	LayoutWindow *lw = get_current_layout();
-	if (!lw) return {};
-
-	std::vector<ActionItem> list_duplicates;
-	layout_actions_foreach(lw, action_to_list_duplicates, &list_duplicates);
-
-	/* Use the shortest name i.e. ignore -Alt versions. Sort makes the shortest first in the list */
-	const auto action_item_compare_names = [](const ActionItem &a, const ActionItem &b)
-	{
-		return g_strcmp0(a.name, b.name) < 0;
-	};
-	std::sort(list_duplicates.begin(), list_duplicates.end(), action_item_compare_names);
-
-	/* Ignore duplicate entries */
-	std::vector<ActionItem> list_unique;
-	for (const ActionItem &action_item : list_duplicates)
-		{
-		const auto action_item_has_label = [label = action_item.label](const ActionItem &action_item)
-		{
-			return action_item.has_label(label);
-		};
-		if (std::none_of(list_unique.cbegin(), list_unique.cend(), action_item_has_label))
-			{
-			list_unique.push_back(action_item);
-			}
-		}
-
-	return list_unique;
-}
-
-GdkPixbuf *gq_gtk_icon_theme_load_icon_copy(GtkIconTheme *icon_theme, const gchar *icon_name, gint size, GtkIconLookupFlags flags)
+GdkPixbuf *icon_theme_load_pixbuf_copy(GtkIconTheme *icon_theme, const gchar *icon_name, gint size, GtkIconLookupFlags flags)
 {
 	g_autoptr(GtkIconPaintable) icon = nullptr;
 	g_autoptr(GFile) file = nullptr;
@@ -1221,7 +1092,7 @@ gboolean widget_get_pointer_position(GtkWidget *widget, GqPoint &pos)
 
 	double x = 0.0;
 	double y = 0.0;
-	auto mask = static_cast<GdkModifierType>(0);
+	GdkModifierType mask = GDK_NO_MODIFIER_MASK;
 
 	if (!gdk_surface_get_device_position(surface, device, &x, &y, &mask))
 		return FALSE;
@@ -1336,7 +1207,60 @@ void widget_remove_from_parent(GtkWidget *widget)
 {
 	if (!GTK_IS_WIDGET(widget)) return;
 
-	gq_gtk_container_remove(gtk_widget_get_parent(widget), widget);
+	GtkWidget *parent = gtk_widget_get_parent(widget);
+	if (!GTK_IS_WIDGET(parent)) return;
+
+	if (GTK_IS_BOX(parent))
+		{
+		gtk_box_remove(GTK_BOX(parent), widget);
+		}
+	else if (GTK_IS_BUTTON(parent))
+		{
+		gtk_button_set_child(GTK_BUTTON(parent), nullptr);
+		}
+	else if (GTK_IS_EXPANDER(parent))
+		{
+		gtk_expander_set_child(GTK_EXPANDER(parent), nullptr);
+		}
+	else if (GTK_IS_FRAME(parent))
+		{
+		gtk_frame_set_child(GTK_FRAME(parent), nullptr);
+		}
+	else if (GTK_IS_PANED(parent))
+		{
+		if (gtk_paned_get_start_child(GTK_PANED(parent)) == widget)
+			{
+			gtk_paned_set_start_child(GTK_PANED(parent), nullptr);
+			}
+		else if (gtk_paned_get_end_child(GTK_PANED(parent)) == widget)
+			{
+			gtk_paned_set_end_child(GTK_PANED(parent), nullptr);
+			}
+		else
+			{
+			g_abort();
+			}
+		}
+	else if (GTK_IS_POPOVER(parent))
+		{
+		gtk_popover_set_child(GTK_POPOVER(parent), nullptr);
+		}
+	else if (GTK_IS_SCROLLED_WINDOW(parent))
+		{
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(parent), nullptr);
+		}
+	else if (GTK_IS_VIEWPORT(parent))
+		{
+		gtk_viewport_set_child(GTK_VIEWPORT(parent), nullptr);
+		}
+	else if (GTK_IS_WINDOW(parent))
+		{
+		gtk_window_set_child(GTK_WINDOW(parent), nullptr);
+		}
+	else
+		{
+		g_abort();
+		}
 }
 
 void widget_remove_from_parent_cb(GSimpleAction *, GVariant *, gpointer data)
@@ -1344,59 +1268,35 @@ void widget_remove_from_parent_cb(GSimpleAction *, GVariant *, gpointer data)
 	widget_remove_from_parent(static_cast<GtkWidget *>(data));
 }
 
-gboolean get_pointer_position(GtkWidget *widget, GdkDevice *device, int *x, int *y, GdkModifierType *mask)
+bool get_pointer_position(GtkWidget *widget, int &x, int &y, GdkModifierType *mask)
 {
 	GtkNative *native = widget_get_native_safe(widget);
 	if (!native)
 		{
-		return FALSE;
+		return false;
 		}
 
 	GdkSurface *surface = gtk_native_get_surface(native);
+	if (!surface)
+		{
+		return false;
+		}
+
+	GdkSeat *seat = gdk_display_get_default_seat(gtk_widget_get_display(widget));
+	GdkDevice *device = gdk_seat_get_pointer(seat);
 	double dx;
 	double dy;
-
-	if (!surface)
-		{
-		return FALSE;
-		}
-
-	auto local_mask = static_cast<GdkModifierType>(0);
+	GdkModifierType local_mask = GDK_NO_MODIFIER_MASK;
 	if (!gdk_surface_get_device_position(surface, device, &dx, &dy, &local_mask))
 		{
-		return FALSE;
-		}
-
-	*x = (int)dx;
-	*y = (int)dy;
-	if (mask) *mask = local_mask;
-
-	return TRUE;
-}
-
-void get_device_position(GdkDevice *device, int &x, int &y)
-{
-	double dx = 0.0;
-	double dy = 0.0;
-	GdkSurface *surface = nullptr;
-
-	if (!device)
-		{
-		x = y = -1;
-		return;
-		}
-
-	surface = gdk_device_get_surface_at_position(device, &dx, &dy);
-
-	if (!surface)
-		{
-		/* Pointer not over any surface */
-		x = y = -1;
-		return;
+		return false;
 		}
 
 	x = (int)dx;
 	y = (int)dy;
+	if (mask) *mask = local_mask;
+
+	return true;
 }
 
 PangoAttrList *get_pango_attr_list(gboolean weight, gboolean scale)
@@ -1422,15 +1322,6 @@ PangoAttrList *get_pango_attr_list(gboolean weight, gboolean scale)
 		}
 
 	return pal;
-}
-
-gboolean get_alternative_button_order(GtkWidget *widget)
-{
-	(void)widget;
-
-	/* GTK4 no longer exposes the old alternative button order setting.
-	 * Use the standard application-defined order consistently. */
-	return FALSE;
 }
 
 namespace
@@ -1481,7 +1372,7 @@ bool focus_widget_is_editable_text(GtkWidget *focus)
 
 } // namespace
 
-bool focus_is_text_editable(GtkWindow *window)
+bool focus_is_editable(GtkWindow *window)
 {
 	if (!window)
 		{
@@ -1494,11 +1385,6 @@ bool focus_is_text_editable(GtkWindow *window)
 		}
 
 	return focus_widget_is_editable_text(gtk_root_get_focus(GTK_ROOT(window)));
-}
-
-bool focus_is_editable(GtkWindow *window)
-{
-	return focus_is_text_editable(window);
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

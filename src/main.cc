@@ -49,13 +49,11 @@
 #endif
 
 #include "accelerators.h"
-#include "actions.h"
 #include "cache-maint.h"
 #include "cache.h"
 #include "collect-io.h"
 #include "collect.h"
 #include "command-line-handling.h"
-#include "compat.h"
 #include "convert-configuration.h"
 #include "exif.h"
 #include "filedata.h"
@@ -74,7 +72,6 @@
 #include "logwindow.h"
 #include "main-defines.h"
 #include "metadata.h"
-#include "misc.h"
 #include "options.h"
 #include "pixbuf-util.h"
 #include "third-party/whereami.h"
@@ -512,7 +509,7 @@ gint exit_confirm_dlg()
 	generic_dialog_add_message(exit_dialog, GQ_ICON_DIALOG_QUESTION, quit_msg, message->str, TRUE);
 	generic_dialog_add_button(exit_dialog, GQ_ICON_QUIT, _("Quit"), exit_confirm_exit_cb, TRUE);
 
-	gtk_widget_show(exit_dialog->dialog);
+	gtk_window_present(GTK_WINDOW(exit_dialog->dialog));
 
 	return TRUE;
 }
@@ -575,11 +572,10 @@ void set_theme_bg_color()
 		if (lw && lw->window)
 			{
 			GdkRGBA theme_color {};
-			GtkStyleContext *style_context = gtk_widget_get_style_context(lw->window);
 
 /** @FIXME This sets the foreground color. CSS should be used.
  */
-			gtk_style_context_get_color(style_context, &theme_color);
+			gtk_widget_get_color(lw->window, &theme_color);
 
 			layout_window_foreach([&theme_color](LayoutWindow *lw)
 				{
@@ -695,7 +691,7 @@ void startup_common(GtkApplication *, gpointer)
 		}
 
 	DEBUG_1("%s main: pixbuf_inline_register_stock_icons", get_exec_time());
-	gtk_icon_theme_add_resource_path(gq_icon_theme_get_default(), GQ_RESOURCE_PATH_ICONS);
+	gtk_icon_theme_add_resource_path(gtk_icon_theme_get_for_display(gdk_display_get_default()), GQ_RESOURCE_PATH_ICONS);
 	pixbuf_inline_register_stock_icons();
 
 	DEBUG_1("%s main: setting default options before commandline handling", get_exec_time());
@@ -750,25 +746,19 @@ If you find problems, check these files:\n \
 %s (new)\n \
 %s (revised Toolbar sections)\n \
 %s (backup of original)\n\n \
-If you press Yes to continue, shortcuts and configuration files will be automatically converted.\n\n \
+Shortcuts and configuration files will be automatically converted.\n\n \
 This message will not be shown again.\n\n \
-Continue?"),
+Select OK to dismiss this message."),
 		accels_old,
 		accels_new,
 		rc_file,
 		rc_backup);
 
-		GtkWidget *dialog = gtk_message_dialog_new(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO, _("Some keyboard shortcuts and \n menu actions have changed."));
-		gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", description);
-
-		int result = gq_gtk_dialog_run(GTK_DIALOG(dialog));
-
-		if (result == GTK_RESPONSE_NO)
-			{
-			abort();
-			}
-
-		gq_gtk_widget_destroy(dialog);
+		g_autoptr(GtkAlertDialog) dialog = gtk_alert_dialog_new("%s", _("Some keyboard shortcuts and menu actions have changed."));
+		gtk_alert_dialog_set_message(dialog, _("Changes to menus and shortcuts"));
+		gtk_alert_dialog_set_detail(dialog, description);
+		gtk_alert_dialog_set_modal(dialog, TRUE);
+		gtk_alert_dialog_show(dialog, nullptr);
 
 		convert_configuration_file();
 		convert_accel_map();

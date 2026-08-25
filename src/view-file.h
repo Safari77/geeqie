@@ -66,6 +66,10 @@ struct ViewFile
 	GList *list;
 
 	FileData *click_fd;
+	gboolean drag_started;
+	gboolean preserve_selection;
+	FileDataList *drag_selection;
+	gint64 last_press_time;
 
 	FileData::FileList::SortSettings sort;
 
@@ -106,6 +110,16 @@ struct ViewFile
 	guint read_metadata_in_idle_id;
 
 	using SelectionCallback = std::function<void(FileData *)>;
+};
+
+struct ViewFileMouseButtonEvent
+{
+	GtkWidget *widget;
+	guint button;
+	gdouble x;
+	gdouble y;
+	GdkModifierType state;
+	gint n_press;
 };
 
 void vf_send_update(ViewFile *vf);
