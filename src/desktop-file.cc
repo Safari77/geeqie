@@ -31,6 +31,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "accelerators.h"
 #include "editors.h"
 #include "intl.h"
 #include "layout-util.h"
@@ -87,6 +88,44 @@ constexpr gint CONFIG_WINDOW_DEF_HEIGHT = 400;
 
 EditorListWindow *editor_list_window = nullptr;
 
+gchar *plugin_shortcut_conflict(const gchar *desktop_text, const gchar *desktop_name)
+{
+	g_autoptr(GKeyFile) key_file = g_key_file_new();
+	if (!g_key_file_load_from_data(key_file, desktop_text, -1, G_KEY_FILE_NONE, nullptr)) return nullptr;
+
+	g_autofree gchar *hotkey = g_key_file_get_string(key_file, G_KEY_FILE_DESKTOP_GROUP,
+	                                                "X-Geeqie-Hotkey", nullptr);
+	if (!hotkey || !*hotkey || !accelerator_string_is_valid(hotkey)) return nullptr;
+
+	g_auto(GStrv) shortcuts = g_strsplit(hotkey, ";", -1);
+	for (const EditorDescription *editor : editor_list_get())
+		{
+		if (g_strcmp0(editor->key, desktop_name) == 0 || !editor->hotkey || !*editor->hotkey) continue;
+
+		g_auto(GStrv) existing_shortcuts = g_strsplit(editor->hotkey, ";", -1);
+		for (gchar **shortcut = shortcuts; *shortcut; shortcut++)
+			{
+			guint key = 0;
+			GdkModifierType modifiers = GDK_NO_MODIFIER_MASK;
+			gtk_accelerator_parse(g_strstrip(*shortcut), &key, &modifiers);
+			if (!key) continue;
+
+			for (gchar **existing = existing_shortcuts; *existing; existing++)
+				{
+				guint existing_key = 0;
+				GdkModifierType existing_modifiers = GDK_NO_MODIFIER_MASK;
+				gtk_accelerator_parse(g_strstrip(*existing), &existing_key, &existing_modifiers);
+				if (key == existing_key && modifiers == existing_modifiers)
+					{
+					return g_strdup(editor->name && *editor->name ? editor->name : editor->key);
+					}
+				}
+			}
+		}
+
+	return nullptr;
+}
+
 gboolean editor_window_save(EditorWindow *ew)
 {
 	gboolean ret = TRUE;
@@ -99,6 +138,13 @@ gboolean editor_window_save(EditorWindow *ew)
 		}
 
 	g_autofree gchar *text = text_buffer_get_text(ew->buffer, FALSE);
+	g_autofree gchar *conflicting_plugin = plugin_shortcut_conflict(text, ew->desktop_name);
+	if (conflicting_plugin)
+		{
+		g_autofree gchar *message = g_strdup_printf(_("The shortcut is already assigned to plugin \"%s\".\n\nThe operation cannot be completed."), conflicting_plugin);
+		warning_dialog(_("Shortcut conflict"), message, GQ_ICON_DIALOG_WARNING, ew->window);
+		return FALSE;
+		}
 
 	g_autofree gchar *dir = g_build_filename(get_rc_dir(), "applications", NULL);
 	g_autofree gchar *path = g_build_filename(dir, name, NULL);
@@ -141,10 +187,7 @@ void editor_window_save_cb(GtkWidget *, gpointer data)
 {
 	auto ew = static_cast<EditorWindow *>(data);
 
-	if (ew->modified)
-		{
-		editor_window_save(ew);
-		}
+	if (ew->modified && !editor_window_save(ew)) return;
 
 	gtk_widget_set_sensitive(ew->save_button, FALSE);
 	gtk_text_buffer_set_modified(ew->buffer, FALSE);
@@ -201,12 +244,12 @@ void editor_window_new(const gchar *src_path, const gchar *desktop_name)
 
 	gtk_window_set_default_size(GTK_WINDOW(ew->window), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(ew->window), TRUE);
-	gtk_widget_set_margin_top(ew->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_bottom(ew->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_start(ew->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_end(ew->window, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
+	gtk_widget_set_margin_top(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(win_vbox, PREF_PAD_BORDER);
 	gtk_window_set_child(GTK_WINDOW(ew->window), win_vbox);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_SPACE);
@@ -229,13 +272,11 @@ void editor_window_new(const gchar *src_path, const gchar *desktop_name)
 	gtk_widget_set_halign(button_hbox, GTK_ALIGN_END);
 	gtk_box_append(GTK_BOX(hbox), button_hbox);
 
-	GtkWidget *button = pref_button_new(nullptr, GQ_ICON_CLOSE, _("Close"),
-	                                    G_CALLBACK(editor_window_close_cb), ew);
-	gtk_box_append(GTK_BOX(button_hbox), button);
+	pref_button_new(button_hbox, GQ_ICON_CLOSE, _("Close"),
+	                G_CALLBACK(editor_window_close_cb), ew);
 
-	ew->save_button = pref_button_new(nullptr, GQ_ICON_SAVE, _("Save"),
+	ew->save_button = pref_button_new(button_hbox, GQ_ICON_SAVE, _("Save"),
 	                                  G_CALLBACK(editor_window_save_cb), ew);
-	gtk_box_append(GTK_BOX(button_hbox), ew->save_button);
 	gtk_window_set_default_widget(GTK_WINDOW(ew->window), ew->save_button);
 	gtk_widget_set_sensitive(ew->save_button, FALSE);
 
@@ -494,15 +535,13 @@ GtkColumnViewColumn *editor_list_column_new(const gchar *title, DesktopFileField
 	return column;
 }
 
-void editor_list_window_create()
+EditorListWindow *editor_list_window_new()
 {
 	GtkWidget *win_vbox;
 	GtkWidget *hbox;
-	GtkWidget *button;
 	GtkWidget *scrolled;
-	EditorListWindow *ewl;
 
-	editor_list_window = ewl = g_new0(EditorListWindow, 1);
+	auto *ewl = g_new0(EditorListWindow, 1);
 
 	ewl->window = window_new("editors", PIXBUF_INLINE_ICON_CONFIG, _("Plugins"));
 	DEBUG_NAME(ewl->window);
@@ -510,12 +549,12 @@ void editor_list_window_create()
 			 G_CALLBACK(editor_list_window_delete), NULL);
 	gtk_window_set_default_size(GTK_WINDOW(ewl->window), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(ewl->window), TRUE);
-	gtk_widget_set_margin_top(ewl->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_bottom(ewl->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_start(ewl->window, PREF_PAD_BORDER);
-	gtk_widget_set_margin_end(ewl->window, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
+	gtk_widget_set_margin_top(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(win_vbox, PREF_PAD_BORDER);
 	gtk_window_set_child(GTK_WINDOW(ewl->window), win_vbox);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
@@ -523,29 +562,22 @@ void editor_list_window_create()
 	gtk_widget_set_valign(hbox, GTK_ALIGN_START);
 	gtk_box_append(GTK_BOX(win_vbox), hbox);
 
-	button = pref_button_new(nullptr, GQ_ICON_HELP, _("Help"),
-				 G_CALLBACK(editor_list_window_help_cb), ewl);
-	gtk_box_append(GTK_BOX(hbox), button);
+	pref_button_new(hbox, GQ_ICON_HELP, _("Help"),
+	                G_CALLBACK(editor_list_window_help_cb), ewl);
 
-	button = pref_button_new(nullptr, GQ_ICON_NEW, _("New"),
-				 G_CALLBACK(editor_list_window_new_cb), ewl);
-	gtk_box_append(GTK_BOX(hbox), button);
+	pref_button_new(hbox, GQ_ICON_NEW, _("New"),
+	                G_CALLBACK(editor_list_window_new_cb), ewl);
 
-	button = pref_button_new(nullptr, GQ_ICON_EDIT, _("Edit"),
-				 G_CALLBACK(editor_list_window_edit_cb), ewl);
-	gtk_box_append(GTK_BOX(hbox), button);
-	gtk_widget_set_sensitive(button, FALSE);
-	ewl->edit_button = button;
+	ewl->edit_button = pref_button_new(hbox, GQ_ICON_EDIT, _("Edit"),
+	                                   G_CALLBACK(editor_list_window_edit_cb), ewl);
+	gtk_widget_set_sensitive(ewl->edit_button, FALSE);
 
-	button = pref_button_new(nullptr, GQ_ICON_DELETE, _("Delete"),
-				 G_CALLBACK(editor_list_window_delete_cb), ewl);
-	gtk_box_append(GTK_BOX(hbox), button);
-	gtk_widget_set_sensitive(button, FALSE);
-	ewl->delete_button = button;
+	ewl->delete_button = pref_button_new(hbox, GQ_ICON_DELETE, _("Delete"),
+	                                     G_CALLBACK(editor_list_window_delete_cb), ewl);
+	gtk_widget_set_sensitive(ewl->delete_button, FALSE);
 
-	button = pref_button_new(nullptr, GQ_ICON_CLOSE, _("Close"),
-				 G_CALLBACK(editor_list_window_close_cb), ewl);
-	gtk_box_append(GTK_BOX(hbox), button);
+	pref_button_new(hbox, GQ_ICON_CLOSE, _("Close"),
+	                G_CALLBACK(editor_list_window_close_cb), ewl);
 
 	scrolled = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), true);
@@ -597,7 +629,7 @@ void editor_list_window_create()
 
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), ewl->view);
 
-	gtk_window_present(GTK_WINDOW(ewl->window));
+	return ewl;
 }
 
 } // namespace
@@ -610,12 +642,11 @@ void editor_list_window_create()
 
 void show_editor_list_window()
 {
-	if (editor_list_window)
+	if (!editor_list_window)
 		{
-		gtk_window_present(GTK_WINDOW(editor_list_window));
-		return;
+		editor_list_window = editor_list_window_new();
 		}
 
-	editor_list_window_create();
+	gtk_window_present(GTK_WINDOW(editor_list_window->window));
 }
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

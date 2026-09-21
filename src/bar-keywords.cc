@@ -278,62 +278,38 @@ void bar_keyword_tree_get_expanded_cb(GtkTreeView *keyword_treeview, GtkTreePath
 	*expanded = g_list_append(*expanded, path_string);
 }
 
-void bar_pane_keywords_entry_write_config(gchar *entry, GString *outstr, gint indent)
+void bar_pane_keywords_write_config(GtkWidget *pane, RcString &rc)
 {
-	struct {
-		gchar *path;
-	} expand;
-
-	expand.path = entry;
-
-	WRITE_NL(); WRITE_STRING("<expanded ");
-	WRITE_CHAR(expand, path);
-	WRITE_STRING("/>");
-}
-
-void bar_pane_keywords_write_config(GtkWidget *pane, GString *outstr, gint indent)
-{
-	PaneKeywordsData *pkd;
-	GList *path_expanded = nullptr;
-	gint w;
-	gint h;
-
-	pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
+	auto *pkd = static_cast<PaneKeywordsData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!pkd) return;
 
+	gint w;
+	gint h;
 	gtk_widget_get_size_request(pane, &w, &h);
 	pkd->height = h;
 
 	WRITE_NL(); WRITE_STRING("<pane_keywords ");
-	WRITE_CHAR(pkd->pane, id);
-	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(pkd->pane.title)));
-	WRITE_BOOL(pkd->pane, expanded);
+	bar_pane_common_write_config(pkd->pane, rc);
 	WRITE_CHAR(*pkd, key);
 	WRITE_INT(*pkd, height);
 	WRITE_STRING(">");
-	indent++;
+	rc.indent++;
 
+	GList *path_expanded = nullptr;
 	gtk_tree_view_map_expanded_rows(GTK_TREE_VIEW(pkd->keyword_treeview),
 								(bar_keyword_tree_get_expanded_cb), &path_expanded);
 
-	GList *work = g_list_first(path_expanded);
-	while (work)
+	for (GList *work = g_list_first(path_expanded); work; work = work->next)
 		{
-		bar_pane_keywords_entry_write_config(static_cast<gchar *>(work->data), outstr, indent);
-		work = work->next;
+		WRITE_NL(); WRITE_STRING("<expanded ");
+		WRITE_CHAR_FULL("path", static_cast<gchar *>(work->data));
+		WRITE_STRING("/>");
 		}
 	g_list_free_full(path_expanded, g_free);
 
-	indent--;
+	rc.indent--;
 	WRITE_NL();
 	WRITE_STRING("</pane_keywords>");
-}
-
-gint bar_pane_keywords_event(GtkWidget *bar, GdkEvent *event)
-{
-	(void)bar;
-	(void)event;
-	return FALSE;
 }
 
 void bar_pane_keywords_keyword_toggle(GtkCellRendererToggle *, const gchar *path, gpointer data)
@@ -1240,6 +1216,7 @@ void bar_pane_keywords_destroy(gpointer data)
 
 	file_data_unref(pkd->fd);
 	g_free(pkd->key);
+	g_free(pkd->pane.id);
 
 	g_free(pkd);
 }
@@ -1410,13 +1387,8 @@ GtkWidget *bar_pane_keywords_new(const gchar *id, const gchar *title, const gcha
 	pkd = g_new0(PaneKeywordsData, 1);
 
 	pkd->pane.pane_set_fd = bar_pane_keywords_set_fd;
-	pkd->pane.pane_event = bar_pane_keywords_event;
 	pkd->pane.pane_write_config = bar_pane_keywords_write_config;
-	pkd->pane.title = bar_pane_expander_title(title);
-	pkd->pane.id = g_strdup(id);
-	pkd->pane.type = PANE_KEYWORDS;
-
-	pkd->pane.expanded = expanded;
+	bar_pane_common_init(pkd->pane, id, title, expanded, PANE_KEYWORDS);
 
 	pkd->height = height;
 	pkd->key = g_strdup(key);

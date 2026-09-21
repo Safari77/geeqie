@@ -29,13 +29,18 @@
 
 namespace {
 
+constexpr gint FILE_DIALOG_RESPONSE_ALTERNATE = 1;
+
 struct PendingFileDialog
 {
 	FileDialogAction action;
 	FileDialogCallback callback;
+	FileDialogCallback alternate_callback;
 	gpointer data;
 	GtkWidget *dialog;
 	GtkWidget *chooser;
+	GtkWidget *checkbox;
+	gboolean *checkbox_value;
 	GtkWidget *preview_scroller;
 	gchar *preview_path;
 	guint preview_timer_id;
@@ -530,6 +535,19 @@ GtkFileChooserAction to_gtk_file_chooser_action(FileDialogAction action)
 	return GTK_FILE_CHOOSER_ACTION_OPEN;
 }
 
+GtkWidget *find_file_list(GtkWidget *widget)
+{
+	/* GtkFileChooserWidget does not expose its file view directly. */
+	if (GTK_IS_COLUMN_VIEW(widget) || GTK_IS_GRID_VIEW(widget)) return widget;
+
+	for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child))
+		{
+			if (GtkWidget *file_list = find_file_list(child)) return file_list;
+		}
+
+	return nullptr;
+}
+
 GFile *get_selected_file(PendingFileDialog *pending)
 {
 #ifndef SHOW_ALL_DEPRECATED_WARNINGS
@@ -603,12 +621,16 @@ void finish_file_dialog(PendingFileDialog *pending, gint response_id)
 		}
 
 	g_autoptr(GFile) file = nullptr;
-	if (response_id == GTK_RESPONSE_ACCEPT)
+	if (response_id == GTK_RESPONSE_ACCEPT || response_id == FILE_DIALOG_RESPONSE_ALTERNATE)
 		{
 		file = get_selected_file(pending);
 		}
 
-	pending->callback(file, pending->data);
+	FileDialogCallback callback = response_id == FILE_DIALOG_RESPONSE_ALTERNATE && pending->alternate_callback
+	                            ? pending->alternate_callback : pending->callback;
+	if (file && pending->checkbox_value)
+		*pending->checkbox_value = gtk_check_button_get_active(GTK_CHECK_BUTTON(pending->checkbox));
+	callback(file, pending->data);
 	gtk_window_destroy(GTK_WINDOW(pending->dialog));
 }
 
@@ -777,6 +799,22 @@ void add_shortcut_folder(GtkFileChooser *chooser, const gchar *path)
 #endif
 }
 
+void current_folder_clicked_cb(GtkButton *button, gpointer data)
+{
+	auto *pending = static_cast<PendingFileDialog *>(data);
+	auto *folder = G_FILE(g_object_get_data(G_OBJECT(button), "current-folder"));
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+#endif
+	auto *chooser = GTK_FILE_CHOOSER(pending->chooser);
+	g_autofree gchar *name = pending->action == FileDialogAction::SAVE ? gtk_file_chooser_get_current_name(chooser) : nullptr;
+	gtk_file_chooser_set_current_folder(chooser, folder, nullptr);
+	if (name) gtk_file_chooser_set_current_name(chooser, name);
+#ifndef SHOW_ALL_DEPRECATED_WARNINGS
+	G_GNUC_END_IGNORE_DEPRECATIONS
+#endif
+}
+
 GtkWidget *create_dialog_content(PendingFileDialog *pending)
 {
 	GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -821,12 +859,19 @@ void file_dialog_show(const FileDialogData &fdd)
 	auto *pending = g_new0(PendingFileDialog, 1);
 	pending->action = fdd.action;
 	pending->callback = fdd.callback;
+	pending->alternate_callback = fdd.alternate_callback;
 	pending->data = fdd.data;
 
 #ifndef SHOW_ALL_DEPRECATED_WARNINGS
 	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 #endif
 	pending->dialog = gtk_dialog_new_with_buttons(title, parent, GTK_DIALOG_MODAL, _("_Cancel"), GTK_RESPONSE_CANCEL, accept_text, GTK_RESPONSE_ACCEPT, nullptr);
+	if (fdd.alternate_callback && fdd.alternate_text)
+		{
+		gtk_dialog_add_button(GTK_DIALOG(pending->dialog), fdd.alternate_text, FILE_DIALOG_RESPONSE_ALTERNATE);
+		}
+	gtk_dialog_set_default_response(GTK_DIALOG(pending->dialog), fdd.alternate_default && fdd.alternate_callback && fdd.alternate_text
+	                                ? FILE_DIALOG_RESPONSE_ALTERNATE : GTK_RESPONSE_ACCEPT);
 #ifndef SHOW_ALL_DEPRECATED_WARNINGS
 	G_GNUC_END_IGNORE_DEPRECATIONS
 #endif
@@ -866,7 +911,25 @@ void file_dialog_show(const FileDialogData &fdd)
 	gtk_widget_set_margin_bottom(content, 6);
 	gtk_widget_set_margin_start(content, 6);
 	gtk_widget_set_margin_end(content, 6);
+	const gchar *current_path = layout_get_path(get_current_layout());
+	if (current_path && isdir(current_path))
+		{
+		GtkWidget *button = gtk_button_new_with_mnemonic(_("_Current folder"));
+		gtk_widget_set_halign(button, GTK_ALIGN_START);
+		gtk_widget_set_margin_bottom(button, 6);
+		gtk_widget_set_tooltip_text(button, current_path);
+		g_object_set_data_full(G_OBJECT(button), "current-folder", g_file_new_for_path(current_path), g_object_unref);
+		g_signal_connect(button, "clicked", G_CALLBACK(current_folder_clicked_cb), pending);
+		gtk_box_append(GTK_BOX(content), button);
+		}
 	gtk_box_append(GTK_BOX(content), create_dialog_content(pending));
+	if (fdd.checkbox_text && fdd.checkbox_value)
+		{
+		pending->checkbox_value = fdd.checkbox_value;
+		pending->checkbox = gtk_check_button_new_with_label(fdd.checkbox_text);
+		gtk_check_button_set_active(GTK_CHECK_BUTTON(pending->checkbox), *fdd.checkbox_value);
+		gtk_box_append(GTK_BOX(content), pending->checkbox);
+		}
 
 	g_signal_connect(pending->dialog, "response", G_CALLBACK(file_dialog_response_cb), pending);
 	g_signal_connect(pending->dialog, "destroy", G_CALLBACK(file_dialog_destroy_cb), pending);
@@ -875,6 +938,10 @@ void file_dialog_show(const FileDialogData &fdd)
 	pending->preview_timer_id = g_timeout_add(250, preview_timer_cb, pending);
 
 	gtk_window_present(GTK_WINDOW(pending->dialog));
+	if (fdd.action == FileDialogAction::OPEN)
+		{
+		if (GtkWidget *file_list = find_file_list(pending->chooser)) gtk_widget_grab_focus(file_list);
+		}
 }
 
 /* vim: set shiftwidth=8 softtabstop=0 cindent cinoptions={1s: */

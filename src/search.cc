@@ -33,6 +33,7 @@
 #include <gdk/gdk.h>
 #include <glib-object.h>
 #include <glib.h>
+#include <graphene.h>
 #include <gtk/gtk.h>
 
 #include "accelerators.h"
@@ -1093,8 +1094,10 @@ static void search_result_menu_cb(GSimpleAction *, GVariant *, gpointer data)
  *-------------------------------------------------------------------
  */
 
-static SearchResultRow *search_result_row_from_widget(GtkWidget *widget)
+static SearchResultRow *search_result_row_from_widget(GtkWidget *widget, const graphene_point_t *point = nullptr)
 {
+	if (point && !gtk_widget_contains(widget, point->x, point->y)) return nullptr;
+
 	if (auto *row = static_cast<SearchResultRow *>(g_object_get_data(G_OBJECT(widget), "search-result-row")))
 		{
 		return row;
@@ -1102,7 +1105,9 @@ static SearchResultRow *search_result_row_from_widget(GtkWidget *widget)
 
 	for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child))
 		{
-		if (auto *row = search_result_row_from_widget(child)) return row;
+		graphene_point_t child_point;
+		if (point && !gtk_widget_compute_point(widget, child, point, &child_point)) continue;
+		if (auto *row = search_result_row_from_widget(child, point ? &child_point : nullptr)) return row;
 		}
 
 	return nullptr;
@@ -1110,10 +1115,14 @@ static SearchResultRow *search_result_row_from_widget(GtkWidget *widget)
 
 static SearchResultRow *search_result_at_point(SearchData *sd, gdouble x, gdouble y, guint *position)
 {
+	const graphene_point_t point{static_cast<float>(x), static_cast<float>(y)};
 	GtkWidget *picked = gtk_widget_pick(sd->ui.result_view, x, y, GTK_PICK_DEFAULT);
 	while (picked && picked != sd->ui.result_view)
 		{
-		SearchResultRow *row = search_result_row_from_widget(picked);
+		graphene_point_t picked_point;
+		if (!gtk_widget_compute_point(sd->ui.result_view, picked, &point, &picked_point)) break;
+		/* Ancestor containers can include rows outside the pointer position. */
+		SearchResultRow *row = search_result_row_from_widget(picked, &picked_point);
 		if (row)
 			{
 			GListModel *model = gtk_multi_selection_get_model(sd->ui.result_selection);
@@ -1454,10 +1463,10 @@ static void search_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
 				text = g_strdup(fd->path);
 				break;
 			case SearchDndDestination::Gps:
-				const gdouble latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude", 1000);
-				const gdouble longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude", 1000);
-				text = (latitude != 1000 && longitude != 1000) ?
-				       g_strdup_printf("%f %f", latitude, longitude) :
+				const auto latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude");
+				const auto longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude");
+				text = (latitude && longitude) ?
+				       g_strdup_printf("%f %f", *latitude, *longitude) :
 				       g_strdup(_("Image is not geocoded"));
 				break;
 			}
@@ -2020,9 +2029,9 @@ static gboolean search_file_next(SearchData *sd)
 		tested = TRUE;
 		match = FALSE;
 
-		const gdouble latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude", 1000);
-		const gdouble longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude", 1000);
-		const bool image_has_gps = (latitude != 1000 && longitude != 1000);
+		const auto latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude");
+		const auto longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude");
+		const bool image_has_gps = (latitude && longitude);
 
 		if (sd->match_gps == SEARCH_MATCH_NONE)
 			{
@@ -2030,7 +2039,7 @@ static gboolean search_file_next(SearchData *sd)
 			}
 		else if (image_has_gps)
 			{
-			const gdouble range = get_gps_range(sd, latitude, longitude);
+			const gdouble range = get_gps_range(sd, *latitude, *longitude);
 			match = (sd->match_gps == SEARCH_MATCH_UNDER && range <= sd->search_gps) ||
 			        (sd->match_gps == SEARCH_MATCH_OVER && range > sd->search_gps);
 			}

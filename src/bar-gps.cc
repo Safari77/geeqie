@@ -186,9 +186,8 @@ void bar_pane_gps_dnd_file_received(GdkDrop *drop, GList *list, gpointer data)
 			{
 			count++;
 			pgd->geocode_list = g_list_append(pgd->geocode_list, file_data_ref(fd));
-			gdouble latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude", 1000);
-			gdouble longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude", 1000);
-			if (latitude != 1000 && longitude != 1000)
+			if (metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude") &&
+			    metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude"))
 				{
 				geocoded_count++;
 				}
@@ -464,8 +463,7 @@ void bar_pane_gps_add_marker(PaneGPSData *pgd, FileData *fd, gdouble latitude, g
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
 	gtk_widget_add_css_class(box, "gps-marker");
 
-	marker_data->summary = gtk_image_new_from_icon_name("mark-location-symbolic");
-	gtk_image_set_pixel_size(GTK_IMAGE(marker_data->summary), 24);
+	marker_data->summary = GTK_WIDGET(shumate_point_new());
 	gtk_widget_add_css_class(marker_data->summary, "gps-marker-summary");
 	gtk_box_append(GTK_BOX(box), marker_data->summary);
 
@@ -491,19 +489,19 @@ gboolean bar_pane_gps_add_file_marker(PaneGPSData *pgd, FileData *fd)
 {
 	if (!pgd || !fd) return FALSE;
 
-	const double lat = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude", 1000);
-	const double lon = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude", 1000);
+	const auto lat = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude");
+	const auto lon = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude");
 
-	if (lat == 1000 || lon == 1000)
+	if (!lat || !lon)
 		{
 		return FALSE;
 		}
 
-	bar_pane_gps_add_marker(pgd, fd, lat, lon);
+	bar_pane_gps_add_marker(pgd, fd, *lat, *lon);
 	pgd->num_added++;
 	if (pgd->centre_map_checked && pgd->selection_count == 1)
 		{
-		shumate_map_center_on(shumate_simple_map_get_map(pgd->map), lat, lon);
+		shumate_map_center_on(shumate_simple_map_get_map(pgd->map), *lat, *lon);
 		}
 
 	return TRUE;
@@ -520,13 +518,13 @@ void bar_pane_gps_fit_markers(PaneGPSData *pgd)
 	for (GList *work = pgd->selection_list; work; work = work->next)
 		{
 		auto *fd = static_cast<FileData *>(work->data);
-		const double latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude", 1000);
-		const double longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude", 1000);
-		if (latitude == 1000 || longitude == 1000) continue;
+		const auto latitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLatitude");
+		const auto longitude = metadata_read_GPS_coord(fd, "Xmp.exif.GPSLongitude");
+		if (!latitude || !longitude) continue;
 
-		min_latitude = MIN(min_latitude, latitude);
-		max_latitude = MAX(max_latitude, latitude);
-		longitudes.push_back(longitude < 0.0 ? longitude + 360.0 : longitude);
+		min_latitude = MIN(min_latitude, *latitude);
+		max_latitude = MAX(max_latitude, *latitude);
+		longitudes.push_back(longitude < 0.0 ? *longitude + 360.0 : *longitude);
 		}
 
 	if (longitudes.size() < 2) return;
@@ -758,33 +756,24 @@ void bar_pane_gps_set_fd(GtkWidget *bar, FileData *fd)
 	bar_pane_gps_update(pgd);
 }
 
-gint bar_pane_gps_event(GtkWidget *bar, GdkEvent *event)
-{
-	(void)bar;
-	(void)event;
-	return FALSE;
-}
-
 const gchar *bar_pane_gps_get_map_id(const PaneGPSData *pgd)
 {
 	return pgd->map_source ? pgd->map_source : DEFAULT_MAP_ID;
 }
 
-void bar_pane_gps_write_config(GtkWidget *pane, GString *outstr, gint indent)
+void bar_pane_gps_write_config(GtkWidget *pane, RcString &rc)
 {
 	auto *pgd = static_cast<PaneGPSData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!pgd) return;
 
 	WRITE_NL();
 	WRITE_STRING("<pane_gps ");
-	WRITE_CHAR(pgd->pane, id);
-	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(pgd->pane.title)));
-	WRITE_BOOL(pgd->pane, expanded);
+	bar_pane_common_write_config(pgd->pane, rc);
 
 	gint w;
 	gtk_widget_get_size_request(pane, &w, &pgd->height);
 	WRITE_INT(*pgd, height);
-	indent++;
+	rc.indent++;
 
 	const gchar *map_id = bar_pane_gps_get_map_id(pgd);
 	WRITE_NL();
@@ -795,19 +784,13 @@ void bar_pane_gps_write_config(GtkWidget *pane, GString *outstr, gint indent)
 	WRITE_NL();
 	WRITE_INT_FULL("zoom-level", static_cast<gint>(zoom));
 
-	const auto write_lat_long_option = [pgd, outstr, indent](const gchar *option)
-	{
-		gdouble position = g_strcmp0(option, "latitude") == 0
-		                    ? shumate_location_get_latitude(SHUMATE_LOCATION(pgd->viewport))
-		                    : shumate_location_get_longitude(SHUMATE_LOCATION(pgd->viewport));
-		const gint int_position = position * 1000000;
-		WRITE_NL();
-		WRITE_INT_FULL(option, int_position);
-	};
-	write_lat_long_option("latitude");
-	write_lat_long_option("longitude");
+	WRITE_NL();
+	WRITE_INT_FULL("latitude", shumate_location_get_latitude(SHUMATE_LOCATION(pgd->viewport)) * 1000000);
 
-	indent--;
+	WRITE_NL();
+	WRITE_INT_FULL("longitude", shumate_location_get_longitude(SHUMATE_LOCATION(pgd->viewport)) * 1000000);
+
+	rc.indent--;
 	WRITE_NL();
 	WRITE_STRING("/>");
 }
@@ -879,12 +862,9 @@ GtkWidget *bar_pane_gps_new(const gchar *id, const gchar *title, const gchar *ma
 
 	pgd->pane.pane_set_fd = bar_pane_gps_set_fd;
 	pgd->pane.pane_notify_selection = bar_pane_gps_notify_selection;
-	pgd->pane.pane_event = bar_pane_gps_event;
 	pgd->pane.pane_write_config = bar_pane_gps_write_config;
-	pgd->pane.title = bar_pane_expander_title(title);
-	pgd->pane.id = g_strdup(id);
-	pgd->pane.type = PANE_GPS;
-	pgd->pane.expanded = expanded;
+	bar_pane_common_init(pgd->pane, id, title, expanded, PANE_GPS);
+
 	pgd->height = height;
 
 	GtkWidget *frame = gtk_frame_new(nullptr);

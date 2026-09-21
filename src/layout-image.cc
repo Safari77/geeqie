@@ -22,7 +22,6 @@
 #include "layout-image.h"
 
 #include <algorithm>
-#include <array>
 #include <cstring>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -64,7 +63,6 @@
 #include "ui-fileops.h"
 #include "ui-menu.h"
 #include "ui-utildlg.h"
-#include "uri-utils.h"
 #include "utilops.h"
 #include "view-file.h"
 
@@ -1559,6 +1557,66 @@ std::optional<ColorManStatus> layout_image_color_profile_get_status(LayoutWindow
 	return image_color_profile_get_status(lw->image);
 }
 
+/**
+ * @brief Get the next or previous sibling directory in the same parent directory
+ * @param lw Layout window
+ * @param ascending Sort order
+ * @returns FileData for the next/prev directory, or nullptr if none
+ *
+ * Finds the next/prev (depending on sort order) directory alphabetically
+ * after the current directory in the same parent directory.
+ * Only returns directories that contain at least one image file.
+ */
+static FileData *layout_get_next_sibling_dir(LayoutWindow *lw, gboolean ascending)
+{
+	if (!lw || !lw->dir_fd || !lw->dir_fd->path || (lw->vf && lw->vf->collection)) return nullptr;
+
+	// Read the parent directory to get all subdirectories (don't follow symlinks)
+	g_autofree gchar *parent_dir = g_path_get_dirname(lw->dir_fd->path);
+	FileDataRef parent_fd = FileData::new_dir(parent_dir);
+	if (!parent_fd) return nullptr;
+
+	g_autoptr(FileDataList) dirs = nullptr;
+	FileData::FileList::read_list_lstat_all(*parent_fd, nullptr, &dirs);
+	if (!dirs) return nullptr;
+
+	// Sort directories by name
+	FileData::FileList::SortSettings sort_settings;
+	sort_settings.method = SORT_NAME;
+	sort_settings.ascending = ascending;
+	sort_settings.case_sensitive = FALSE;
+
+	dirs = FileData::FileList::sort(dirs, sort_settings);
+
+	// Find current directory in the list
+	g_autofree gchar *current_name = g_path_get_basename(lw->dir_fd->path);
+	static const auto is_current_dir = [](gconstpointer data, gconstpointer user_data)
+	{
+		const auto *fd = static_cast<const FileData *>(data);
+
+		g_autofree gchar *name = g_path_get_basename(fd->path);
+		return g_strcmp0(name, static_cast<const gchar *>(user_data));
+	};
+	GList *current = g_list_find_custom(dirs, current_name, is_current_dir);
+	if (!current) return nullptr;
+
+	FileData *next_dir = nullptr;
+	for (GList *work = current->next; !next_dir && work; work = work->next)
+		{
+		auto *fd = static_cast<FileData *>(work->data);
+
+		// Check if this directory has any image files
+		g_autoptr(FileDataList) sub_files = nullptr;
+		FileData::FileList::read_list_lstat_all(fd, &sub_files, nullptr);
+		if (sub_files)
+			{
+			next_dir = fd;
+			}
+		}
+
+	return file_data_ref(next_dir);
+}
+
 /*
  *----------------------------------------------------------------------------
  * list walkers
@@ -1621,6 +1679,25 @@ void layout_image_next(LayoutWindow *lw)
 		if (static_cast<guint>(current) < layout_list_count(lw) - 1)
 			{
 			layout_image_set_index(lw, current + 1);
+			}
+		else if (options->auto_next_folder)
+			{
+			FileData *next_dir = layout_get_next_sibling_dir(lw, TRUE);
+			if (next_dir)
+				{
+				layout_set_path(lw, next_dir->path);
+				file_data_unref(next_dir);
+				// Select the first image in the new folder
+				gint count = layout_list_count(lw);
+				if (count > 0)
+					{
+					layout_image_set_index(lw, 0);
+					}
+				}
+			else
+				{
+				image_osd_icon(lw->image, IMAGE_OSD_LAST, -1);
+				}
 			}
 		else
 			{
@@ -1692,6 +1769,25 @@ void layout_image_prev(LayoutWindow *lw)
 		if (current > 0)
 			{
 			layout_image_set_index(lw, current - 1);
+			}
+		else if (options->auto_next_folder)
+			{
+			FileData *prev_dir = layout_get_next_sibling_dir(lw, FALSE);
+			if (prev_dir)
+				{
+				layout_set_path(lw, prev_dir->path);
+				file_data_unref(prev_dir);
+				// Select the last image in the previous folder
+				gint count = layout_list_count(lw);
+				if (count > 0)
+					{
+					layout_image_set_index(lw, count - 1);
+					}
+				}
+			else
+				{
+				image_osd_icon(lw->image, IMAGE_OSD_FIRST, -1);
+				}
 			}
 		else
 			{
@@ -2274,6 +2370,8 @@ static GtkWidget *layout_image_setup_split_hv(LayoutWindow *lw, ImageSplitMode m
 	gtk_paned_set_start_child(GTK_PANED(paned), lw->split_images[0]->widget);
 	gtk_paned_set_end_child(GTK_PANED(paned), lw->split_images[1]->widget);
 
+	gtk_widget_set_visible(lw->split_images[0]->widget, TRUE);
+	gtk_widget_set_visible(lw->split_images[1]->widget, TRUE);
 
 	return paned;
 }

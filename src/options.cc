@@ -107,7 +107,6 @@ ConfOptions *conf_options_new()
 	options->fullscreen.disable_saver = TRUE;
 	options->fullscreen.screen = -1;
 
-	options->appimage_notifications = TRUE;
 	options->marks_save = TRUE;
 	options->with_rename = FALSE;
 	options->collections_duplicates = FALSE;
@@ -205,11 +204,11 @@ ConfOptions *conf_options_new()
 	options->thumbnails.use_exif = FALSE;
 	options->thumbnails.use_color_management = FALSE;
 	options->thumbnails.use_ft_metadata = TRUE;
-	options->thumbnails.collection_preview = 20;
 
 	options->tree_descend_subdirs = FALSE;
 	options->view_dir_list_single_click_enter = TRUE;
 	options->circular_selection_lists = TRUE;
+	options->auto_next_folder = FALSE;
 	options->update_on_time_change = TRUE;
 	options->clipboard_selection = CLIPBOARD_BOTH;
 

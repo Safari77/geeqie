@@ -36,8 +36,6 @@ main_sources = files('accelerators.cc',
 'collect-dlg.h',
 'collect-io.cc',
 'collect-io.h',
-'collect-table.cc',
-'collect-table.h',
 'color-man.cc',
 'color-man.h',
 'color-man-heif.cc',
@@ -79,8 +77,6 @@ main_sources = files('accelerators.cc',
 'image.h',
 'image-load.cc',
 'image-load.h',
-'image-load-collection.cc',
-'image-load-collection.h',
 'image-load-dds.cc',
 'image-load-dds.h',
 'image-load-external.cc',
@@ -338,8 +334,6 @@ subdir('pan-view')
 subdir('third-party')
 subdir('view-file')
 
-## @FIXME code_sources is modified in ./tests/meson.build
-# We assume that code_sources is only set above.
 project_sources += code_sources
 
 geeqie_exe = executable('geeqie', project_sources,

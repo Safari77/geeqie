@@ -205,7 +205,6 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 {
 	GtkWidget *group;
 	GtkWidget *hbox;
-	GtkWidget *button;
 	GtkWidget *button1;
 	GtkWidget *button2;
 	GtkWidget *image_text_button;
@@ -281,10 +280,8 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	hbox = pref_box_new(subgroup, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
 
 	static constexpr gchar image_text_font_title[] = "Image text font";
-	button = pref_button_new(nullptr, GQ_ICON_SELECT_FONT, _("Font"),
-	                         G_CALLBACK(print_set_font_cb<image_text_font_title>), options->printer.image_font);
-
-	gtk_box_append(GTK_BOX(hbox), button);
+	pref_button_new(hbox, GQ_ICON_SELECT_FONT, _("Font"),
+	                G_CALLBACK(print_set_font_cb<image_text_font_title>), options->printer.image_font);
 
 	pref_spacer(group, PREF_PAD_GAP);
 
@@ -345,10 +342,8 @@ void print_text_menu(GtkWidget *box, PrintWindow *pw)
 	hbox = pref_box_new(subgroup, FALSE, GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
 
 	static constexpr gchar page_text_font_title[] = "Page text font";
-	button = pref_button_new(nullptr, GQ_ICON_SELECT_FONT, _("Font"),
-	                         G_CALLBACK(print_set_font_cb<page_text_font_title>), options->printer.page_font);
-
-	gtk_box_append(GTK_BOX(hbox), button);
+	pref_button_new(hbox, GQ_ICON_SELECT_FONT, _("Font"),
+	                G_CALLBACK(print_set_font_cb<page_text_font_title>), options->printer.page_font);
 }
 
 gboolean paginate_cb(GtkPrintOperation *, GtkPrintContext *, gpointer data)
@@ -571,9 +566,14 @@ void draw_page(GtkPrintOperation *, GtkPrintContext *context, gint page_nr, gpoi
 
 	cairo_scale(cr, scale, scale);
 
-	cairo_rectangle(cr,  width_offset * scale , image_y, pixbuf_image_width / scale, pixbuf_image_height / scale);
-	gdk_cairo_set_source_pixbuf(cr, pixbuf, width_offset / scale, image_y / scale);
-	cairo_fill(cr);
+	cairo_surface_t *surface = pixbuf_to_cairo_surface(pixbuf);
+	if (surface)
+		{
+		cairo_rectangle(cr,  width_offset * scale , image_y, pixbuf_image_width / scale, pixbuf_image_height / scale);
+		cairo_set_source_surface(cr, surface, width_offset / scale, image_y / scale);
+		cairo_fill(cr);
+		cairo_surface_destroy(surface);
+		}
 
 	if (layout_image) g_object_unref(layout_image);
 	if (layout_page) g_object_unref(layout_page);

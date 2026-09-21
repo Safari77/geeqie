@@ -33,6 +33,7 @@
 enum ToolbarType : gint;
 
 struct LayoutWindow;
+struct RcString;
 
 void keyboard_scroll_calc(gint &x, gint &y, GdkModifierType state, guint keyval, guint32 time);
 
@@ -63,7 +64,7 @@ void layout_toolbar_add_from_config(LayoutWindow *lw, ToolbarType type, const gc
 
 GtkWidget *layout_actions_toolbar(LayoutWindow *lw, ToolbarType type);
 
-void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, GString *outstr, gint indent);
+void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, RcString &rc);
 void layout_toolbar_clear(LayoutWindow *lw, ToolbarType type);
 void layout_toolbar_add(LayoutWindow *lw, ToolbarType type, const gchar *action);
 void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type);
@@ -93,11 +94,6 @@ void create_toolbars(LayoutWindow *lw);
 void register_main_window_actions(GtkApplication *app,  LayoutWindow *lw);
 
 void plugin_run_cb(GSimpleAction *action, GVariant *parameter, gpointer user_data);
-
-GKeyFile *get_accels_as_keyfile();
-
-GStrv get_tooltips(void);
-GStrv get_actions_for_toolbar();
 
 void register_app_actions(GtkApplication *app );
 

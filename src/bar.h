@@ -28,6 +28,7 @@
 
 class FileData;
 struct LayoutWindow;
+struct RcString;
 
 enum PaneType {
 	PANE_UNDEF = 0,
@@ -42,8 +43,8 @@ enum PaneType {
 struct PaneData {
 	void (*pane_set_fd)(GtkWidget *pane, FileData *fd); /**< filled in by pane */
 	void (*pane_notify_selection)(GtkWidget *pane, gint count); /**< filled in by pane */
-	gint (*pane_event)(GtkWidget *pane, GdkEvent *event); /**< filled in by pane */
-	void (*pane_write_config)(GtkWidget *pane, GString *outstr, gint indent); /**< filled in by pane */
+	bool (*pane_event)(GtkWidget *pane, GdkEvent *event); /**< filled in by pane */
+	void (*pane_write_config)(GtkWidget *pane, RcString &rc); /**< filled in by pane */
 	GtkWidget *title; /**< filled in by pane */
 	gboolean expanded; /**< filled in by pane */
 	gchar *id; /**< filled in by pane */
@@ -62,10 +63,11 @@ GtkWidget *bar_update_from_config(GtkWidget *bar, const gchar **attribute_names,
 
 void bar_close(GtkWidget *bar);
 
-void bar_write_config(GtkWidget *bar, GString *outstr, gint indent);
+void bar_write_config(GtkWidget *bar, RcString &rc);
 
 void bar_populate_default(GtkWidget *bar);
 
+void bar_update_expander(GtkWidget *pane);
 void bar_add(GtkWidget *bar, GtkWidget *pane);
 GtkWidget *bar_find_pane_by_id(GtkWidget *bar, PaneType type, const gchar *id);
 
@@ -75,8 +77,8 @@ void bar_set_fd(GtkWidget *bar, FileData *fd);
 void bar_notify_selection(GtkWidget *bar, gint count);
 gboolean bar_event(GtkWidget *bar, GdkEvent *event);
 
-GtkWidget *bar_pane_expander_title(const gchar *title);
-void bar_update_expander(GtkWidget *pane);
+void bar_pane_common_init(PaneData &pane, const gchar *id, const gchar *title, gboolean expanded, PaneType type);
+void bar_pane_common_write_config(const PaneData &pane, RcString &rc);
 gboolean bar_pane_translate_title(PaneType type, const gchar *id, gchar **title);
 
 #endif

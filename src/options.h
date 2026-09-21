@@ -109,6 +109,8 @@ struct ConfOptions
 
 	gboolean circular_selection_lists;
 
+	gboolean auto_next_folder;
+
 	gboolean lazy_image_sync;
 	gboolean update_on_time_change;
 
@@ -138,8 +140,6 @@ struct ConfOptions
 
 	gboolean marks_save;		/**< save marks on exit */
 	gchar *marks_tooltips[FILEDATA_MARKS_SIZE];
-
-	gboolean appimage_notifications;
 
 	gboolean with_rename;
 	gboolean collections_duplicates;
@@ -243,7 +243,6 @@ struct ConfOptions
 		gboolean use_exif;
 		gboolean use_color_management;
 		gboolean use_ft_metadata;
-		gint collection_preview;
 	} thumbnails;
 
 	/* file filtering */

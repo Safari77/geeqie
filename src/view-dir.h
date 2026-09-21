@@ -55,6 +55,7 @@ struct PixmapFolders
 	GIcon *deny;
 	GIcon *link;
 	GIcon *read_only;
+	GIcon *collection;
 };
 
 struct ViewDir
@@ -64,6 +65,8 @@ struct ViewDir
 
 	GtkWidget *widget = nullptr;
 	GtkWidget *view = nullptr;
+	GtkWidget *collection_parent = nullptr;
+	gchar *collection_path = nullptr;
 
 	FileDataRef dir_fd{nullptr};
 
@@ -88,12 +91,16 @@ struct ViewDir
 	PixmapFolders *pf = nullptr;
 };
 
+gboolean vd_is_collection(FileData *fd);
+gboolean vd_read_directories(FileData *dir_fd, GList **list);
+
 ViewDir *vd_new(LayoutWindow *lw);
 
 void vd_set_select_func(ViewDir *vdl, void (*func)(ViewDir *vdl, FileData *fd, gpointer data), gpointer data);
 
 gboolean vd_set_fd(ViewDir *vdl, FileData *dir_fd);
 void vd_refresh(ViewDir *vdl);
+void vd_set_collection(ViewDir *vd, const gchar *path);
 gboolean vd_find_row(ViewDir *vd, FileData *fd, GtkTreeIter *iter);
 
 void vd_color_set(ViewDir *vd, FileData *fd, gint color_set);

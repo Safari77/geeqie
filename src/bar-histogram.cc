@@ -34,6 +34,7 @@
 #include "filedata.h"
 #include "histogram.h"
 #include "intl.h"
+#include "pixbuf-util.h"
 #include "rcfile.h"
 #include "ui-menu.h"
 #include "ui-misc.h"
@@ -130,17 +131,13 @@ static void bar_pane_histogram_set_fd(GtkWidget *pane, FileData *fd)
 	bar_pane_histogram_update(phd);
 }
 
-static void bar_pane_histogram_write_config(GtkWidget *pane, GString *outstr, gint indent)
+static void bar_pane_histogram_write_config(GtkWidget *pane, RcString &rc)
 {
-	PaneHistogramData *phd;
-
-	phd = static_cast<PaneHistogramData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
+	auto *phd = static_cast<PaneHistogramData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!phd) return;
 
 	WRITE_NL(); WRITE_STRING("<pane_histogram ");
-	WRITE_CHAR(phd->pane, id);
-	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(phd->pane.title)));
-	WRITE_BOOL(phd->pane, expanded);
+	bar_pane_common_write_config(phd->pane, rc);
 	WRITE_INT(phd->histogram, histogram_channel);
 	WRITE_INT(phd->histogram, histogram_mode);
 	WRITE_STRING("/>");
@@ -168,8 +165,12 @@ static void bar_pane_histogram_draw_cb(GtkDrawingArea *, cairo_t *cr, gint, gint
 
 	if (!phd->pixbuf) return;
 
-	gdk_cairo_set_source_pixbuf(cr, phd->pixbuf, 0, 0);
+	cairo_surface_t *surface = pixbuf_to_cairo_surface(phd->pixbuf);
+	if (!surface) return;
+
+	cairo_set_source_surface(cr, surface, 0, 0);
 	cairo_paint (cr);
+	cairo_surface_destroy(surface);
 }
 
 static void bar_pane_histogram_resize_cb(GtkWidget *, gint width, gint height, gpointer data)
@@ -329,10 +330,7 @@ static GtkWidget *bar_pane_histogram_new(const gchar *id, const gchar *title, gi
 
 	phd->pane.pane_set_fd = bar_pane_histogram_set_fd;
 	phd->pane.pane_write_config = bar_pane_histogram_write_config;
-	phd->pane.title = bar_pane_expander_title(title);
-	phd->pane.id = g_strdup(id);
-	phd->pane.type = PANE_HISTOGRAM;
-	phd->pane.expanded = expanded;
+	bar_pane_common_init(phd->pane, id, title, expanded, PANE_HISTOGRAM);
 
 	phd->histogram = Histogram();
 	phd->histogram.set_channel(histogram_channel);

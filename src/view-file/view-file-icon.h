@@ -33,16 +33,12 @@ class FileData;
 struct ViewFileInfoIcon
 {
 	/* table stuff */
+	GListStore *store;
 	gint columns;
 	gint rows;
 
 	GList *selection;
 	FileData *prev_selection;
-
-	GtkWidget *tip_window;
-	GtkWidget *tip_label;
-	guint tip_delay_id; /**< event source id */
-	FileData *tip_fd;
 
 	FileData *focus_fd;
 	gint focus_row;

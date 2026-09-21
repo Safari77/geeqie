@@ -64,11 +64,6 @@ enum MetadataKey {
 	MK_COMMENT
 };
 
-struct MetadataCacheEntry {
-	gchar *key;
-	GList *values;
-};
-
 /* If contents change, keep GuideOptionsMetadata.xml up to date */
 /**
  *  @brief Tags that will be written to all files in a group - selected by: options->metadata.sync_grouped_files, Preferences/Metadata/Write The Same Description Tags To All Grouped Sidecars
@@ -99,20 +94,6 @@ constexpr std::array<const gchar *, 22> group_keys{
 };
 
 GtkTreeStore *keyword_tree;
-
-gint metadata_cache_entry_compare_key(const MetadataCacheEntry *entry, const gchar *key)
-{
-	return strcmp(entry->key, key);
-}
-
-void metadata_cache_entry_free(MetadataCacheEntry *entry)
-{
-	if (!entry) return;
-
-	g_free(entry->key);
-	g_list_free_full(entry->values, g_free);
-	g_free(entry);
-}
 
 void string_list_free(gpointer data)
 {
@@ -253,8 +234,12 @@ gchar *metadata_lua_info(FileData *fd, const gchar *key)
 
 static gboolean metadata_write_queue_idle_cb(gpointer data);
 static gboolean metadata_legacy_write(FileData *fd);
-static void metadata_legacy_delete(FileData *fd, const gchar *except);
 static gboolean metadata_file_read(gchar *path, GList **keywords, gchar **comment);
+static void metadata_legacy_delete(FileData *fd, const gchar *except);
+
+static gboolean keyword_equal(GtkTreeModel *keyword_tree, GtkTreeIter *a, GtkTreeIter *b);
+static GList *keyword_tree_get_path(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr);
+static gboolean keyword_tree_get_iter(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr, GList *path);
 
 
 /*
@@ -263,74 +248,56 @@ static gboolean metadata_file_read(gchar *path, GList **keywords, gchar **commen
  *-------------------------------------------------------------------
  */
 
-/* fd->cached_metadata list of MetadataCacheEntry */
-
 static void metadata_cache_update(FileData *fd, const gchar *key, const GList *values)
 {
-	GList *work;
-
-	work = g_list_find_custom(fd->cached_metadata, key, reinterpret_cast<GCompareFunc>(metadata_cache_entry_compare_key));
-	if (work)
+	if (!fd->cached_metadata)
 		{
-		/* key found - just replace values */
-		auto *entry = static_cast<MetadataCacheEntry *>(work->data);
+		fd->cached_metadata = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_list_free);
+		}
 
-		g_list_free_full(entry->values, g_free);
-		entry->values = string_list_copy(values);
+	if (!g_hash_table_insert(fd->cached_metadata, g_strdup(key), string_list_copy(values)))
+		{
 		DEBUG_1("updated %s %s\n", key, fd->path);
 		return;
 		}
 
-	/* key not found - prepend new entry */
-	auto *entry = g_new0(MetadataCacheEntry, 1);
-	entry->key = g_strdup(key);
-	entry->values = string_list_copy(values);
-
-	fd->cached_metadata = g_list_prepend(fd->cached_metadata, entry);
 	DEBUG_1("added %s %s\n", key, fd->path);
 }
 
-static const GList *metadata_cache_get(FileData *fd, const gchar *key)
+static const GList *metadata_cache_get(const FileData *fd, const gchar *key)
 {
-	GList *work;
+	if (!fd->cached_metadata) return nullptr;
 
-	work = g_list_find_custom(fd->cached_metadata, key, reinterpret_cast<GCompareFunc>(metadata_cache_entry_compare_key));
-	if (work)
+	gpointer values = g_hash_table_lookup(fd->cached_metadata, key);
+	if (!values)
 		{
-		/* key found */
-		auto *entry = static_cast<MetadataCacheEntry *>(work->data);
-
-		DEBUG_1("found %s %s\n", key, fd->path);
-		return entry->values;
+		DEBUG_1("not found %s %s\n", key, fd->path);
+		return nullptr;
 		}
-	DEBUG_1("not found %s %s\n", key, fd->path);
-	return nullptr;
+
+	DEBUG_1("found %s %s\n", key, fd->path);
+	return static_cast<const GList *>(values);
 }
 
 static void metadata_cache_remove(FileData *fd, const gchar *key)
 {
-	GList *work;
+	if (!fd->cached_metadata) return;
 
-	work = g_list_find_custom(fd->cached_metadata, key, reinterpret_cast<GCompareFunc>(metadata_cache_entry_compare_key));
-	if (work)
+	if (g_hash_table_remove(fd->cached_metadata, key))
 		{
-		/* key found */
-		auto *entry = static_cast<MetadataCacheEntry *>(work->data);
-
-		metadata_cache_entry_free(entry);
-		fd->cached_metadata = g_list_delete_link(fd->cached_metadata, work);
 		DEBUG_1("removed %s %s\n", key, fd->path);
 		return;
 		}
+
 	DEBUG_1("not removed %s %s\n", key, fd->path);
 }
 
 void metadata_cache_free(FileData *fd)
 {
-	if (fd->cached_metadata) DEBUG_1("freed %s\n", fd->path);
+	if (!fd->cached_metadata) return;
 
-	g_list_free_full(fd->cached_metadata, reinterpret_cast<GDestroyNotify>(metadata_cache_entry_free));
-	fd->cached_metadata = nullptr;
+	g_clear_pointer(&fd->cached_metadata, g_hash_table_destroy);
+	DEBUG_1("freed %s\n", fd->path);
 }
 
 
@@ -506,7 +473,7 @@ gboolean metadata_write_list(FileData *fd, const gchar *key, const GList *values
 		{
 		fd->modified_xmp = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_list_free);
 		}
-	g_hash_table_insert(fd->modified_xmp, g_strdup(key), string_list_copy(const_cast<GList *>(values)));
+	g_hash_table_insert(fd->modified_xmp, g_strdup(key), string_list_copy(values));
 
 	metadata_cache_remove(fd, key);
 
@@ -800,6 +767,11 @@ GList *metadata_read_list(FileData *fd, const gchar *key, MetadataFormat format)
 		{
 		return g_list_append(nullptr, metadata_file_info(fd, key));
 		}
+	else if (strcmp(key, "formatted.MediaDate") == 0)
+		{
+		read_media_time_data(fd);
+		return g_list_append(nullptr, g_strdup(text_from_time(fd->media_date)));
+		}
 #if HAVE_LUA
 	else if (strncmp(key, "lua.", 4) == 0)
 		{
@@ -855,39 +827,39 @@ gchar *metadata_read_rating_stars(FileData *fd)
 	return ret;
 }
 
-gdouble metadata_read_GPS_coord(FileData *fd, const gchar *key, gdouble fallback)
+std::optional<gdouble> metadata_read_GPS_coord(FileData *fd, const gchar *key)
 {
-	gdouble coord;
-	gchar *endptr;
-	gdouble deg;
-	gdouble min;
-	gdouble sec;
-	gboolean ok = FALSE;
 	g_autofree gchar *string = metadata_read_string(fd, key, METADATA_PLAIN);
-	if (!string) return fallback;
+	if (!string) return {};
 
-	deg = g_ascii_strtod(string, &endptr);
+	gdouble coord;
+	bool ok = false;
+
+	gchar *endptr;
+	const gdouble deg = g_ascii_strtod(string, &endptr);
+
 	if (*endptr == ',')
 		{
-		min = g_ascii_strtod(endptr + 1, &endptr);
+		const gdouble min = g_ascii_strtod(endptr + 1, &endptr);
+
+		gdouble sec;
 		if (*endptr == ',')
 			sec = g_ascii_strtod(endptr + 1, &endptr);
 		else
 			sec = 0.0;
 
-
 		if (*endptr == 'S' || *endptr == 'W' || *endptr == 'N' || *endptr == 'E')
 			{
 			coord = deg + (min /60.0) + (sec / 3600.0);
-			ok = TRUE;
+			ok = true;
 			if (*endptr == 'S' || *endptr == 'W') coord = -coord;
 			}
 		}
 
 	if (!ok)
 		{
-		coord = fallback;
 		log_printf("unable to parse GPS coordinate '%s'\n", string);
+		return {};
 		}
 
 	return coord;
@@ -920,18 +892,6 @@ gdouble metadata_read_GPS_direction(FileData *fd, const gchar *key, gdouble fall
 		}
 
 	return deg;
-}
-
-gboolean metadata_append_string(FileData *fd, const gchar *key, const char *value)
-{
-	g_autofree gchar *str = metadata_read_string(fd, key, METADATA_PLAIN);
-	if (!str)
-		{
-		return metadata_write_string(fd, key, value);
-		}
-
-	g_autofree gchar *new_string = g_strconcat(str, value, NULL);
-	return metadata_write_string(fd, key, new_string);
 }
 
 gboolean metadata_write_GPS_coord(FileData *fd, const gchar *key, gdouble value)
@@ -984,6 +944,18 @@ gboolean metadata_write_GPS_coord(FileData *fd, const gchar *key, gdouble value)
 		}
 
 	return ok;
+}
+
+gboolean metadata_append_string(FileData *fd, const gchar *key, const char *value)
+{
+	g_autofree gchar *str = metadata_read_string(fd, key, METADATA_PLAIN);
+	if (!str)
+		{
+		return metadata_write_string(fd, key, value);
+		}
+
+	g_autofree gchar *new_string = g_strconcat(str, value, NULL);
+	return metadata_write_string(fd, key, new_string);
 }
 
 gboolean metadata_append_list(FileData *fd, const gchar *key, const GList *values)
@@ -1095,7 +1067,7 @@ GList *string_to_keywords_list(const gchar *text)
  */
 
 
-gboolean meta_data_get_keyword_mark(FileData *fd, gint, gpointer data)
+static gboolean meta_data_get_keyword_mark(FileData *fd, gint, gpointer data)
 {
 	/** @FIXME do not use global keyword_tree */
 	GList *keywords = metadata_read_list(fd, KEYWORD_KEY, METADATA_PLAIN);
@@ -1110,7 +1082,7 @@ gboolean meta_data_get_keyword_mark(FileData *fd, gint, gpointer data)
 	return found;
 }
 
-gboolean meta_data_set_keyword_mark(FileData *fd, gint, gboolean value, gpointer data)
+static gboolean meta_data_set_keyword_mark(FileData *fd, gint, gboolean value, gpointer data)
 {
 	auto path = static_cast<GList *>(data);
 	GtkTreeIter iter;
@@ -1185,14 +1157,14 @@ void meta_data_connect_mark_with_keyword(GtkTreeModel *keyword_tree, GtkTreeIter
  *-------------------------------------------------------------------
  */
 
-gchar *keyword_get_name(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
+static gchar *keyword_get_name(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
 {
 	gchar *name;
 	gtk_tree_model_get(keyword_tree, iter, KEYWORD_COLUMN_NAME, &name, -1);
 	return name;
 }
 
-gchar *keyword_get_mark(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
+static gchar *keyword_get_mark(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
 {
 	gchar *mark_str;
 
@@ -1200,14 +1172,14 @@ gchar *keyword_get_mark(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
 	return mark_str;
 }
 
-gchar *keyword_get_casefold(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
+static gchar *keyword_get_casefold(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
 {
 	gchar *casefold;
 	gtk_tree_model_get(keyword_tree, iter, KEYWORD_COLUMN_CASEFOLD, &casefold, -1);
 	return casefold;
 }
 
-gboolean keyword_get_is_keyword(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
+static gboolean keyword_get_is_keyword(GtkTreeModel *keyword_tree, GtkTreeIter *iter)
 {
 	gboolean is_keyword;
 	gtk_tree_model_get(keyword_tree, iter, KEYWORD_COLUMN_IS_KEYWORD, &is_keyword, -1);
@@ -1223,28 +1195,12 @@ void keyword_set(GtkTreeStore *keyword_tree, GtkTreeIter *iter, const gchar *nam
 						KEYWORD_COLUMN_IS_KEYWORD, is_keyword, -1);
 }
 
-gboolean keyword_equal(GtkTreeModel *keyword_tree, GtkTreeIter *a, GtkTreeIter *b)
+static gboolean keyword_equal(GtkTreeModel *keyword_tree, GtkTreeIter *a, GtkTreeIter *b)
 {
 	g_autoptr(GtkTreePath) pa = gtk_tree_model_get_path(keyword_tree, a);
 	g_autoptr(GtkTreePath) pb = gtk_tree_model_get_path(keyword_tree, b);
 
 	return gtk_tree_path_compare(pa, pb) == 0;
-}
-
-gboolean keyword_same_parent(GtkTreeModel *keyword_tree, GtkTreeIter *a, GtkTreeIter *b)
-{
-	GtkTreeIter parent_a;
-	GtkTreeIter parent_b;
-
-	gboolean valid_pa = gtk_tree_model_iter_parent(keyword_tree, &parent_a, a);
-	gboolean valid_pb = gtk_tree_model_iter_parent(keyword_tree, &parent_b, b);
-
-	if (valid_pa && valid_pb)
-		{
-		return keyword_equal(keyword_tree, &parent_a, &parent_b);
-		}
-
-	return (!valid_pa && !valid_pb); /* both are toplevel */
 }
 
 gboolean keyword_exists(GtkTreeModel *keyword_tree, GtkTreeIter *parent_ptr, GtkTreeIter *sibling, const gchar *name, gboolean exclude_sibling, GtkTreeIter *result)
@@ -1296,49 +1252,7 @@ gboolean keyword_exists(GtkTreeModel *keyword_tree, GtkTreeIter *parent_ptr, Gtk
 }
 
 
-void keyword_copy(GtkTreeStore *keyword_tree, GtkTreeIter *to, GtkTreeIter *from)
-{
-	g_autofree gchar *mark = nullptr;
-	g_autofree gchar *name = nullptr;
-	g_autofree gchar *casefold = nullptr;
-	gboolean is_keyword;
-
-	/* do not copy KEYWORD_COLUMN_HIDE_IN, it fully shows the new subtree */
-	gtk_tree_model_get(GTK_TREE_MODEL(keyword_tree), from, KEYWORD_COLUMN_MARK, &mark,
-						KEYWORD_COLUMN_NAME, &name,
-						KEYWORD_COLUMN_CASEFOLD, &casefold,
-						KEYWORD_COLUMN_IS_KEYWORD, &is_keyword, -1);
-
-	gtk_tree_store_set(keyword_tree, to, KEYWORD_COLUMN_MARK, mark,
-						KEYWORD_COLUMN_NAME, name,
-						KEYWORD_COLUMN_CASEFOLD, casefold,
-						KEYWORD_COLUMN_IS_KEYWORD, is_keyword, -1);
-}
-
-void keyword_copy_recursive(GtkTreeStore *keyword_tree, GtkTreeIter *to, GtkTreeIter *from)
-{
-	GtkTreeIter from_child;
-
-	keyword_copy(keyword_tree, to, from);
-
-	if (!gtk_tree_model_iter_children(GTK_TREE_MODEL(keyword_tree), &from_child, from)) return;
-
-	while (TRUE)
-		{
-		GtkTreeIter to_child;
-		gtk_tree_store_append(keyword_tree, &to_child, to);
-		keyword_copy_recursive(keyword_tree, &to_child, &from_child);
-		if (!gtk_tree_model_iter_next(GTK_TREE_MODEL(keyword_tree), &from_child)) return;
-		}
-}
-
-void keyword_move_recursive(GtkTreeStore *keyword_tree, GtkTreeIter *to, GtkTreeIter *from)
-{
-	keyword_copy_recursive(keyword_tree, to, from);
-	keyword_delete(keyword_tree, from);
-}
-
-GList *keyword_tree_get_path(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr)
+static GList *keyword_tree_get_path(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr)
 {
 	GList *path = nullptr;
 	GtkTreeIter iter = *iter_ptr;
@@ -1608,7 +1522,7 @@ void keyword_hide_in(GtkTreeStore *keyword_tree, GtkTreeIter *iter, gpointer id)
 		}
 }
 
-void keyword_show_in(GtkTreeStore *keyword_tree, GtkTreeIter *iter, gpointer id)
+static void keyword_show_in(GtkTreeStore *keyword_tree, GtkTreeIter *iter, gpointer id)
 {
 	GList *list;
 	gtk_tree_model_get(GTK_TREE_MODEL(keyword_tree), iter, KEYWORD_COLUMN_HIDE_IN, &list, -1);
@@ -1791,10 +1705,10 @@ void keyword_tree_set_default(GtkTreeStore *keyword_tree)
 }
 
 
-static void keyword_tree_node_write_config(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr, GString *outstr, gint indent)
+static void keyword_tree_node_write_config(GtkTreeModel *keyword_tree, GtkTreeIter *iter_ptr, RcString &rc)
 {
 	GtkTreeIter iter = *iter_ptr;
-	while (TRUE)
+	do
 		{
 		GtkTreeIter children;
 
@@ -1811,30 +1725,30 @@ static void keyword_tree_node_write_config(GtkTreeModel *keyword_tree, GtkTreeIt
 		if (gtk_tree_model_iter_children(keyword_tree, &children, &iter))
 			{
 			WRITE_STRING(">");
-			indent++;
-			keyword_tree_node_write_config(keyword_tree, &children, outstr, indent);
-			indent--;
+			rc.indent++;
+			keyword_tree_node_write_config(keyword_tree, &children, rc);
+			rc.indent--;
 			WRITE_NL(); WRITE_STRING("</keyword>");
 			}
 		else
 			{
 			WRITE_STRING("/>");
 			}
-		if (!gtk_tree_model_iter_next(keyword_tree, &iter)) return;
 		}
+	while (gtk_tree_model_iter_next(keyword_tree, &iter));
 }
 
-void keyword_tree_write_config(GString *outstr, gint indent)
+void keyword_tree_write_config(RcString &rc)
 {
 	GtkTreeIter iter;
 	WRITE_NL(); WRITE_STRING("<keyword_tree>");
-	indent++;
+	rc.indent++;
 
 	if (keyword_tree && gtk_tree_model_get_iter_first(GTK_TREE_MODEL(keyword_tree), &iter))
 		{
-		keyword_tree_node_write_config(GTK_TREE_MODEL(keyword_tree), &iter, outstr, indent);
+		keyword_tree_node_write_config(GTK_TREE_MODEL(keyword_tree), &iter, rc);
 		}
-	indent--;
+	rc.indent--;
 	WRITE_NL(); WRITE_STRING("</keyword_tree>");
 }
 

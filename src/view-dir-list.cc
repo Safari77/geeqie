@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include <glib-object.h>
+#include <graphene.h>
 
 #include "filedata.h"
 #include "layout.h"
@@ -44,8 +45,7 @@ struct ViewDirInfoList
 	GHashTable *labels;
 	GHashTable *buttons;
 	FileData *selected_fd;
-	FileData *last_press_fd;
-	gint64 last_press_time;
+	guint scroll_id;
 };
 
 #define VDLIST(_vd_) ((ViewDirInfoList *)((_vd_)->info))
@@ -58,11 +58,9 @@ constexpr gchar VDLIST_FD_DATA[] = "vdlist-fd";
 } // namespace
 
 static void vdlist_editing_changed(GtkEditableLabel *label, GParamSpec *, gpointer data);
-static void vdlist_button_state_changed(GtkWidget *button, GtkStateFlags previous_flags, gpointer data);
-
-static GtkWidget *vdlist_icon_widget_new(const gchar *icon_name, const gchar *emblem_name)
+static GtkWidget *vdlist_icon_widget_new(const gchar *icon_name, const gchar *emblem_name, GIcon *icon)
 {
-	GtkWidget *image = gtk_image_new_from_icon_name(icon_name);
+	GtkWidget *image = icon ? gtk_image_new_from_gicon(icon) : gtk_image_new_from_icon_name(icon_name);
 	gtk_image_set_pixel_size(GTK_IMAGE(image), 16);
 	GtkWidget *content = image;
 	if (emblem_name)
@@ -126,9 +124,8 @@ FileData *vdlist_row_by_path(ViewDir *vd, const gchar *path, gint *row)
 
 void vdlist_scroll_to_fd(ViewDir *vd, FileData *fd, gfloat)
 {
-	if (!gtk_widget_get_realized(vd->view)) return;
-
 	vdlist_color_set(vd, fd, TRUE);
+	if (!gtk_widget_get_realized(vd->view)) return;
 
 	auto *button = static_cast<GtkWidget *>(g_hash_table_lookup(VDLIST(vd)->buttons, fd));
 	if (button && !gtk_widget_has_focus(button)) gtk_widget_grab_focus(button);
@@ -142,6 +139,12 @@ void vdlist_scroll_to_fd(ViewDir *vd, FileData *fd, gfloat)
 
 static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 {
+	if (VDLIST(vd)->scroll_id)
+		{
+		gtk_widget_remove_tick_callback(vd->view, VDLIST(vd)->scroll_id);
+		VDLIST(vd)->scroll_id = 0;
+		}
+
 	(void)clear;
 	GList *work;
 	GList *old_list;
@@ -151,7 +154,7 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 
 	old_list = VDLIST(vd)->list;
 
-	ret = filelist_read(vd->dir_fd, nullptr, &VDLIST(vd)->list);
+	ret = vd_read_directories(vd->dir_fd, &VDLIST(vd)->list);
 	VDLIST(vd)->list = filelist_sort(VDLIST(vd)->list, settings);
 
 	/* add . and .. */
@@ -187,7 +190,11 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 
 		fd = static_cast<FileData *>(work->data);
 
-		if (access_file(fd->path, R_OK | X_OK) && fd->name)
+		if (vd_is_collection(fd))
+			{
+			icon_name = "folder-pictures";
+			}
+		else if (access_file(fd->path, R_OK | X_OK) && fd->name)
 			{
 			if (islink(fd->path))
 				{
@@ -223,7 +230,7 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 		g_autofree gchar *link = islink(fd->path) ? realpath(fd->path, nullptr) : nullptr;
 		GtkWidget *button = gtk_button_new();
 		GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
-		GtkWidget *icon_widget = vdlist_icon_widget_new(icon_name, emblem_name);
+		GtkWidget *icon_widget = vdlist_icon_widget_new(icon_name, emblem_name, vd_is_collection(fd) ? vd->pf->collection : nullptr);
 		GtkWidget *name = gtk_editable_label_new(fd->name);
 		GtkWidget *date_label = gtk_label_new(date);
 
@@ -250,8 +257,10 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 		g_hash_table_insert(VDLIST(vd)->buttons, fd, button);
 		g_hash_table_insert(VDLIST(vd)->labels, fd, name);
 
-		g_signal_connect(button, "state-flags-changed", G_CALLBACK(vdlist_button_state_changed), vd);
-		g_signal_connect(name, "notify::editing", G_CALLBACK(vdlist_editing_changed), vd);
+		if (vd_is_collection(fd))
+			gtk_editable_set_editable(GTK_EDITABLE(name), FALSE);
+		else
+			g_signal_connect(name, "notify::editing", G_CALLBACK(vdlist_editing_changed), vd);
 		gtk_box_append(GTK_BOX(VDLIST(vd)->box), button);
 		work = work->next;
 		}
@@ -260,11 +269,30 @@ static gboolean vdlist_populate(ViewDir *vd, gboolean clear)
 	vd->click_fd = nullptr;
 	vd->drop_fd = nullptr;
 	VDLIST(vd)->selected_fd = nullptr;
-	VDLIST(vd)->last_press_fd = nullptr;
-	VDLIST(vd)->last_press_time = 0;
 
 	file_data_list_free(old_list);
 	return ret;
+}
+
+static gboolean vdlist_scroll_after_layout(GtkWidget *, GdkFrameClock *, gpointer data)
+{
+	auto *vd = static_cast<ViewDir *>(data);
+	auto *button = static_cast<GtkWidget *>(g_hash_table_lookup(VDLIST(vd)->buttons, VDLIST(vd)->selected_fd));
+	if (button)
+		{
+		/* Newly populated rows have no allocation until the next layout. */
+		if (gtk_widget_get_height(button) == 0) return G_SOURCE_CONTINUE;
+
+		graphene_rect_t bounds;
+		if (gtk_widget_compute_bounds(button, vd->view, &bounds))
+			{
+			GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(vd->widget));
+			gtk_adjustment_set_value(adjustment, bounds.origin.y);
+			}
+		}
+
+	VDLIST(vd)->scroll_id = 0;
+	return G_SOURCE_REMOVE;
 }
 
 gboolean vdlist_set_fd(ViewDir *vd, FileData *dir_fd)
@@ -300,19 +328,45 @@ gboolean vdlist_set_fd(ViewDir *vd, FileData *dir_fd)
 		work = work->next;
 		}
 
-	if (found) vdlist_scroll_to_fd(vd, found, 0.5);
+	if (found)
+		{
+		vdlist_scroll_to_fd(vd, found, 0.5);
+		VDLIST(vd)->scroll_id = gtk_widget_add_tick_callback(vd->view, vdlist_scroll_after_layout, vd, nullptr);
+		}
 
 	return ret;
 }
 
 void vdlist_refresh(ViewDir *vd)
 {
+	g_autofree gchar *selected_path = VDLIST(vd)->selected_fd ? g_strdup(VDLIST(vd)->selected_fd->path) : nullptr;
+	const gboolean scroll_pending = VDLIST(vd)->scroll_id != 0;
 	vdlist_populate(vd, FALSE);
+	if (FileData *fd = vdlist_row_by_path(vd, selected_path, nullptr))
+		{
+		vdlist_color_set(vd, fd, TRUE);
+		if (scroll_pending)
+			{
+			VDLIST(vd)->scroll_id = gtk_widget_add_tick_callback(vd->view, vdlist_scroll_after_layout, vd, nullptr);
+			}
+		}
 }
 
 gboolean vdlist_press_key_cb(GtkWidget *widget, guint keyval, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
+
+	if (keyval == GDK_KEY_Up || keyval == GDK_KEY_KP_Up ||
+	    keyval == GDK_KEY_Down || keyval == GDK_KEY_KP_Down)
+		{
+		GList *work = g_list_find(VDLIST(vd)->list, VDLIST(vd)->selected_fd);
+		if (!work) work = keyval == GDK_KEY_Up || keyval == GDK_KEY_KP_Up ?
+		                  g_list_last(VDLIST(vd)->list) : VDLIST(vd)->list;
+		else work = keyval == GDK_KEY_Up || keyval == GDK_KEY_KP_Up ? work->prev : work->next;
+
+		if (work) vdlist_scroll_to_fd(vd, static_cast<FileData *>(work->data), 0.5);
+		return TRUE;
+		}
 
 	if (keyval != GDK_KEY_Menu) return FALSE;
 
@@ -326,9 +380,24 @@ gboolean vdlist_press_key_cb(GtkWidget *widget, guint keyval, gpointer data)
 	return TRUE;
 }
 
-void vdlist_press_cb(ViewDir *vd, gdouble x, gdouble y)
+void vdlist_press_cb(ViewDir *vd, guint button, gdouble x, gdouble y)
 {
 	vd->click_fd = vdlist_fd_at_point(vd, x, y);
+	if (button == GDK_BUTTON_PRIMARY && vd->click_fd)
+		{
+		vdlist_scroll_to_fd(vd, vd->click_fd, 0.5);
+		}
+}
+
+void vdlist_release_cb(ViewDir *vd, gint n_press, guint button, gdouble x, gdouble y)
+{
+	if (button != GDK_BUTTON_PRIMARY || !vd->click_fd) return;
+	if (vdlist_fd_at_point(vd, x, y) != vd->click_fd) return;
+
+	if ((vd_is_collection(vd->click_fd) || options->view_dir_list_single_click_enter || n_press == 2) && vd->select_func)
+		{
+		vd->select_func(vd, vd->click_fd, vd->select_data);
+		}
 }
 
 void vdlist_destroy_cb(GtkWidget *widget, gpointer data)
@@ -337,6 +406,7 @@ void vdlist_destroy_cb(GtkWidget *widget, gpointer data)
 
 	vd_dnd_drop_scroll_cancel(vd);
 	widget_auto_scroll_stop(widget);
+	if (VDLIST(vd)->scroll_id) gtk_widget_remove_tick_callback(vd->view, VDLIST(vd)->scroll_id);
 
 	g_clear_pointer(&VDLIST(vd)->labels, g_hash_table_unref);
 	g_clear_pointer(&VDLIST(vd)->buttons, g_hash_table_unref);
@@ -397,31 +467,6 @@ static void vdlist_editing_changed(GtkEditableLabel *label, GParamSpec *, gpoint
 		FileData *fd = vdlist_row_by_path(vd, path, nullptr);
 		if (fd) vdlist_scroll_to_fd(vd, fd, 0.5);
 	});
-}
-
-static void vdlist_button_state_changed(GtkWidget *button, GtkStateFlags previous_flags, gpointer data)
-{
-	const GtkStateFlags flags = gtk_widget_get_state_flags(button);
-	if ((previous_flags & GTK_STATE_FLAG_ACTIVE) || !(flags & GTK_STATE_FLAG_ACTIVE)) return;
-
-	auto *vd = static_cast<ViewDir *>(data);
-	auto *fd = static_cast<FileData *>(g_object_get_data(G_OBJECT(button), VDLIST_FD_DATA));
-	if (!fd) return;
-
-	vdlist_color_set(vd, fd, TRUE);
-
-	gint double_click_time = 400;
-	g_object_get(gtk_settings_get_default(), "gtk-double-click-time", &double_click_time, nullptr);
-	const gint64 press_time = g_get_monotonic_time();
-	const gboolean double_click = VDLIST(vd)->last_press_fd == fd &&
-	                              press_time - VDLIST(vd)->last_press_time <= double_click_time * 1000;
-	VDLIST(vd)->last_press_fd = fd;
-	VDLIST(vd)->last_press_time = press_time;
-
-	if ((options->view_dir_list_single_click_enter || double_click) && vd->select_func)
-		{
-		vd->select_func(vd, fd, vd->select_data);
-		}
 }
 
 void vdlist_rename_by_data(ViewDir *vd, FileData *fd)

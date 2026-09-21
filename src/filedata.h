@@ -251,8 +251,9 @@ public:
 	ExifData *exif;
 	time_t exifdate;
 	time_t exifdate_digitized;
+	time_t media_date;
 	GHashTable *modified_xmp; /**< hash table which contains unwritten xmp metadata in format: key->list of string values */
-	GList *cached_metadata;
+	GHashTable *cached_metadata;
 	gint rating;
 	gboolean metadata_in_idle_loaded;
 
@@ -394,6 +395,7 @@ public:
 
 	void read_exif_time_data(FileData *file);
 	void read_exif_time_digitized_data(FileData *file);
+	void read_media_time_data(FileData *file);
 
 	static gboolean marks_list_save(gchar *path, gboolean save);
 	static gboolean marks_list_load(const gchar *path);
@@ -462,6 +464,7 @@ class FileData::FileList
 
 	static gboolean read_list(FileData *dir_fd, GList **files, GList **dirs);
 	static gboolean read_list_lstat(FileData *dir_fd, GList **files, GList **dirs);
+	static gboolean read_list_lstat_all(FileData *dir_fd, GList **files, GList **dirs);
 	static void free_list(GList *list);
 	static GList *copy(GList *list);
 	static GList *from_path_list(GList *list);
@@ -478,6 +481,7 @@ class FileData::FileList
 	static GList *filter_out_sidecars(GList *flist);
 	static gboolean is_hidden_file(const gchar *filepath);
 	static gboolean read_list_real(const gchar *dir_path, GList **files, GList **dirs, gboolean follow_symlinks);
+	static gboolean read_list_real_all(const gchar *dir_path, GList **files, GList **dirs, gboolean follow_symlinks);
 	static gint sort_file_cb(gconstpointer a, gconstpointer b, gpointer data);
 	static gint sort_path_cb(gconstpointer a, gconstpointer b);
 	static void recursive_append(GList **list, GList *dirs);
@@ -623,6 +627,8 @@ gboolean file_data_unregister_real_time_monitor(FileData *fd);
 
 void read_exif_time_data(FileData *file);
 void read_exif_time_digitized_data(FileData *file);
+void read_media_time_data(FileData *file);
+time_t date_time_from_quicktime(const gchar *value);
 
 gboolean marks_list_save(gchar *path, gboolean save);
 gboolean marks_list_load(const gchar *path);

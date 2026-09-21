@@ -478,13 +478,11 @@ GdkTexture *utility_texture_new_from_pixbuf(GdkPixbuf *pixbuf)
 
 	const gint height = gdk_pixbuf_get_height(pixbuf);
 	const gsize stride = gdk_pixbuf_get_rowstride(pixbuf);
-	GBytes *bytes = g_bytes_new_with_free_func(gdk_pixbuf_get_pixels(pixbuf), stride * height,
-							     reinterpret_cast<GDestroyNotify>(g_object_unref), g_object_ref(pixbuf));
+	g_autoptr(GBytes) bytes = g_bytes_new_with_free_func(gdk_pixbuf_read_pixels(pixbuf), stride * height,
+	                                                     g_object_unref, g_object_ref(pixbuf));
 	const GdkMemoryFormat format = gdk_pixbuf_get_has_alpha(pixbuf) ? GDK_MEMORY_R8G8B8A8 : GDK_MEMORY_R8G8B8;
-	GdkTexture *texture = gdk_memory_texture_new(gdk_pixbuf_get_width(pixbuf), height, format, bytes, stride);
-	g_bytes_unref(bytes);
 
-	return texture;
+	return gdk_memory_texture_new(gdk_pixbuf_get_width(pixbuf), height, format, bytes, stride);
 }
 
 UtilityListItem *utility_list_item_new(FileData *fd, GdkPixbuf *pixbuf, const gchar *sidecars)
@@ -1503,7 +1501,7 @@ static void file_util_dest_folder_update_path(UtilityData *ud, GFile *file)
 		}
 }
 
-static void file_util_fdlg_ok_cb(GFile *file, gpointer data)
+static void file_util_dest_folder_selected(GFile *file, gpointer data, gboolean with_rename)
 {
 	auto ud = static_cast<UtilityData *>(data);
 
@@ -1532,7 +1530,7 @@ static void file_util_fdlg_ok_cb(GFile *file, gpointer data)
 				}
 			}
 
-		ud->phase = UtilityPhase::ENTERING;
+		ud->phase = with_rename ? UtilityPhase::INTERMEDIATE : UtilityPhase::ENTERING;
 
 		file_util_dialog_run(ud);
 		}
@@ -1541,6 +1539,16 @@ static void file_util_fdlg_ok_cb(GFile *file, gpointer data)
 		ud->phase = UtilityPhase::CANCEL;
 		file_util_dialog_run(ud);
 		}
+}
+
+static void file_util_fdlg_ok_cb(GFile *file, gpointer data)
+{
+	file_util_dest_folder_selected(file, data, FALSE);
+}
+
+static void file_util_fdlg_rename_cb(GFile *file, gpointer data)
+{
+	file_util_dest_folder_selected(file, data, TRUE);
 }
 
 /* format: * = filename without extension, ## = number position, extension is kept */
@@ -1889,6 +1897,13 @@ static void file_util_dialog_init_dest_folder(UtilityData *ud)
 	fdd.history_key = "move_copy";
 	fdd.title = (ud->type == UtilityType::MOVE) ? _("Geeqie - Move File") : _("Geeqie - Copy File");
 	fdd.parent = GTK_WINDOW(ud->parent);
+
+	if (ud->type == UtilityType::COPY || ud->type == UtilityType::MOVE)
+		{
+		fdd.alternate_callback = file_util_fdlg_rename_cb;
+		fdd.alternate_text = _("With Rename");
+		fdd.alternate_default = options->with_rename;
+		}
 
 	file_dialog_show(fdd);
 }

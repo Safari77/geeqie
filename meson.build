@@ -50,10 +50,11 @@ if not get_option('deprecated_warnings') and not get_option('all_deprecated_warn
 endif
 
 # Project requirements
-# code_sources is all human-written geeqie C/C++ code
+# code_sources is application C/C++ code checked by the analysis suite.
+# Unit tests and third-party sources are only added to project_sources.
 code_sources = []
 # project_sources will include code_sources, as well as auto-generated code,
-# third-party code, and some other code-like dependencies.
+# unit tests, third-party code, and some other code-like dependencies.
 project_sources = []
 gnome = import('gnome')
 thread_dep = dependency('threads')
@@ -132,7 +133,6 @@ completionsdir = join_paths(datadir, 'bash-completion', 'completions')
 podir = join_paths(meson.project_source_root(), 'po')
 buildauxdir = join_paths(meson.project_source_root(), 'build-aux')
 packagingdir = join_paths(meson.project_source_root(), 'packaging')
-testsdir = join_paths(meson.project_source_root(), 'teste')
 
 summary({'gq_appdir': gq_appdir,
         'gq_bindir': gq_helpdir,
@@ -312,17 +312,17 @@ shumate_dep = []
 
 conf_data.set('HAVE_LIBSHUMATE', 0)
 req_version_shumate = '>=1.5.0'
-option = get_option('gps-map')
+option = get_option('gps_map')
 if not option.disabled()
-    shumate_dep = dependency('shumate-1.0', version : req_version_shumate, required : get_option('gps-map'))
+    shumate_dep = dependency('shumate-1.0', version : req_version_shumate, required : get_option('gps_map'))
     if shumate_dep.found()
         conf_data.set('HAVE_LIBSHUMATE', 1)
-        summary({'gps-map' : ['GPS map displayed', true]}, section : 'Configuration', bool_yn : true)
+        summary({'gps_map' : ['GPS map displayed', true]}, section : 'Configuration', bool_yn : true)
     else
-        summary({'gps-map' : ['shumate-1.0 ' + req_version_shumate + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
+        summary({'gps_map' : ['shumate-1.0 ' + req_version_shumate + ' not found - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
     endif
 else
-    summary({'gps-map' : ['disabled - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
+    summary({'gps_map' : ['disabled - GPS map displayed:', false]}, section : 'Configuration', bool_yn : true)
 endif
 
 conf_data.set('HAVE_HEIF', 0)

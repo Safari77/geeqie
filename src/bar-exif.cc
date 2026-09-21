@@ -45,8 +45,6 @@
 namespace
 {
 
-constexpr gint MIN_HEIGHT = 25;
-
 /*
  *-------------------------------------------------------------------
  * EXIF widget
@@ -60,9 +58,6 @@ struct PaneExifData
 	GtkWidget *widget;
 	GtkSizeGroup *size_group;
 
-	gint min_height;
-
-	gboolean all_hidden;
 	gboolean show_all;
 
 	FileData *fd;
@@ -97,7 +92,6 @@ struct ConfDialogData
 };
 
 void bar_pane_exif_entry_dnd_init(GtkWidget *entry);
-void bar_pane_exif_entry_update_title(ExifEntry *ee);
 void bar_pane_exif_update(PaneExifData *ped);
 void bar_pane_exif_menu_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data);
 void bar_pane_exif_copy_gesture_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data);
@@ -179,6 +173,13 @@ void bar_pane_exif_setup_entry_box(PaneExifData *ped, ExifEntry *ee)
 	gtk_box_append(GTK_BOX(ee->box), ee->value_widget);
 }
 
+void bar_pane_exif_entry_update_title(ExifEntry *ee)
+{
+	g_autofree gchar *markup = g_markup_printf_escaped("<span size='small'>%s:</span>", ee->title ? ee->title : _("<empty label, fixme>"));
+
+	gtk_label_set_markup(GTK_LABEL(ee->title_label), markup);
+}
+
 GtkWidget *bar_pane_exif_add_entry(PaneExifData *ped, const gchar *key, const gchar *title, gboolean if_set, gboolean editable)
 {
 	auto ee = g_new0(ExifEntry, 1);
@@ -244,14 +245,7 @@ void bar_pane_exif_reparent_entry(GtkWidget *entry, GtkWidget *pane)
 	gtk_box_append(GTK_BOX(ped->vbox), entry);
 }
 
-void bar_pane_exif_entry_update_title(ExifEntry *ee)
-{
-	g_autofree gchar *markup = g_markup_printf_escaped("<span size='small'>%s:</span>", ee->title ? ee->title : _("<empty label, fixme>"));
-
-	gtk_label_set_markup(GTK_LABEL(ee->title_label), markup);
-}
-
-void bar_pane_exif_update_entry(PaneExifData *ped, GtkWidget *entry, gboolean update_title)
+void bar_pane_exif_update_entry(PaneExifData *ped, GtkWidget *entry, gboolean &all_hidden)
 {
 	auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(entry), "entry_data"));
 	gshort rating;
@@ -289,24 +283,22 @@ void bar_pane_exif_update_entry(PaneExifData *ped, GtkWidget *entry, gboolean up
 			gtk_widget_set_tooltip_text(ee->box, text);
 			}
 		gtk_widget_set_visible(entry, TRUE);
-		ped->all_hidden = FALSE;
+		all_hidden = FALSE;
 		}
-
-	if (update_title) bar_pane_exif_entry_update_title(ee);
 }
 
 void bar_pane_exif_update(PaneExifData *ped)
 {
-	ped->all_hidden = TRUE;
+	gboolean all_hidden = TRUE;
 
 	for (GtkWidget *entry = gtk_widget_get_first_child(ped->vbox);
 	     entry;
 	     entry = gtk_widget_get_next_sibling(entry))
 		{
-		bar_pane_exif_update_entry(ped, entry, FALSE);
+		bar_pane_exif_update_entry(ped, entry, all_hidden);
 		}
 
-	gtk_widget_set_sensitive(ped->pane.title, !ped->all_hidden);
+	gtk_widget_set_sensitive(ped->pane.title, !all_hidden);
 }
 
 void bar_pane_exif_set_fd(GtkWidget *widget, FileData *fd)
@@ -320,13 +312,6 @@ void bar_pane_exif_set_fd(GtkWidget *widget, FileData *fd)
 	ped->fd = file_data_ref(fd);
 
 	bar_pane_exif_update(ped);
-}
-
-gint bar_pane_exif_event(GtkWidget *bar, GdkEvent *event)
-{
-	(void)bar;
-	(void)event;
-	return FALSE;
 }
 
 void bar_pane_exif_notify_cb(FileData *fd, NotifyType type, gpointer data)
@@ -668,7 +653,7 @@ void bar_pane_exif_copy_gesture_cb(GtkGestureClick *gesture, gint, gdouble, gdou
 	bar_pane_exif_copy_to_primary(widget);
 }
 
-void bar_pane_exif_entry_write_config(GtkWidget *entry, GString *outstr, gint indent)
+void bar_pane_exif_entry_write_config(GtkWidget *entry, RcString &rc)
 {
 	auto ee = static_cast<ExifEntry *>(g_object_get_data(G_OBJECT(entry), "entry_data"));
 	if (!ee) return;
@@ -681,27 +666,25 @@ void bar_pane_exif_entry_write_config(GtkWidget *entry, GString *outstr, gint in
 	WRITE_STRING("/>");
 }
 
-void bar_pane_exif_write_config(GtkWidget *pane, GString *outstr, gint indent)
+void bar_pane_exif_write_config(GtkWidget *pane, RcString &rc)
 {
 	auto *ped = static_cast<PaneExifData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!ped) return;
 
 	WRITE_NL(); WRITE_STRING("<pane_exif ");
-	WRITE_CHAR(ped->pane, id);
-	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(ped->pane.title)));
-	WRITE_BOOL(ped->pane, expanded);
+	bar_pane_common_write_config(ped->pane, rc);
 	WRITE_BOOL(*ped, show_all);
 	WRITE_STRING(">");
-	indent++;
+	rc.indent++;
 
 	for (GtkWidget *entry = gtk_widget_get_first_child(ped->vbox);
 	    entry;
 	    entry = gtk_widget_get_next_sibling(entry))
 		{
-		bar_pane_exif_entry_write_config(entry, outstr, indent);
+		bar_pane_exif_entry_write_config(entry, rc);
 		}
 
-	indent--;
+	rc.indent--;
 	WRITE_NL(); WRITE_STRING("</pane_exif>");
 }
 
@@ -724,20 +707,15 @@ GtkWidget *bar_pane_exif_new(const gchar *id, const gchar *title, gboolean expan
 
 	ped->pane.pane_set_fd = bar_pane_exif_set_fd;
 	ped->pane.pane_write_config = bar_pane_exif_write_config;
-	ped->pane.pane_event = bar_pane_exif_event;
-	ped->pane.title = bar_pane_expander_title(title);
-	ped->pane.id = g_strdup(id);
-	ped->pane.expanded = expanded;
-	ped->pane.type = PANE_EXIF;
-	ped->show_all = show_all;
+	bar_pane_common_init(ped->pane, id, title, expanded, PANE_EXIF);
 
+	ped->show_all = show_all;
 	ped->size_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
 	ped->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	ped->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 
 	gtk_box_append(GTK_BOX(ped->widget), ped->vbox);
 
-	ped->min_height = MIN_HEIGHT;
 	g_object_set_data_full(G_OBJECT(ped->widget), "pane_data", ped, bar_pane_exif_destroy);
 
 	bar_pane_exif_dnd_init(ped->widget);

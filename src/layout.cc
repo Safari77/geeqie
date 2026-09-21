@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -37,6 +38,9 @@
 
 #include "bar-sort.h"
 #include "bar.h"
+#include "collect-dlg.h"
+#include "collect-io.h"
+#include "collect.h"
 #include "filedata.h"
 #include "histogram.h"
 #include "history-list.h"
@@ -155,6 +159,7 @@ void layout_load_attributes(LayoutOptions &lop, const gchar **attribute_names, c
 		if (READ_INT(lop, main_window.vdivider_pos)) continue;
 
 		if (READ_INT_CLAMP(lop, folder_window.vdivider_pos, 1, 1000)) continue;
+		if (READ_INT_CLAMP(lop, file_view_list.vdivider_pos, 1, 1000)) continue;
 
 		if (READ_INT_FULL("float_window.x", lop.float_window.rect.x)) continue;
 		if (READ_INT_FULL("float_window.y", lop.float_window.rect.y)) continue;
@@ -236,6 +241,7 @@ LayoutOptions init_layout_options(const gchar **attribute_names, const gchar **a
 	lop.dupe_window.rect = {100, 100, 800, 400};
 	lop.advanced_exif_window = {0, 0, 900, 600};
 	lop.folder_window.vdivider_pos = 100;
+	lop.file_view_list.vdivider_pos = 320;
 	lop.order = g_strdup("123");
 	lop.show_directory_date = FALSE;
 	lop.show_marks = FALSE;
@@ -461,14 +467,43 @@ static void layout_path_entry_cb(LayoutWindow *lw, const gchar *path)
 
 	g_autofree gchar *buf = g_strdup(path);
 	parse_out_relatives(buf);
+	if (lw->vf && lw->vf->collection &&
+	    g_strcmp0(buf, lw->vf->collection->path ? lw->vf->collection->path : lw->vf->collection->name) == 0) return;
 
 	layout_set_path(lw, buf);
+}
+
+static gboolean layout_open_collection(LayoutWindow *lw, FileData *fd)
+{
+	CollectionData *cd = nullptr;
+	for (gint i = 0; (cd = collection_from_number(i)); i++)
+		if (g_strcmp0(cd->path, fd->path) == 0) break;
+	if (cd)
+		collection_ref(cd);
+	else
+		{
+		cd = collection_new(fd->path);
+		if (!collection_load(cd, fd->path, COLLECTION_LOAD_NONE))
+			{
+			warning_dialog(_("Unable to open collection"), fd->path, GQ_ICON_DIALOG_ERROR, lw->window);
+			collection_unref(cd);
+			return FALSE;
+			}
+		}
+	const gboolean result = layout_set_collection(lw, cd);
+	collection_unref(cd);
+	return result;
 }
 
 static void layout_vd_select_cb(ViewDir *, FileData *fd, gpointer data)
 {
 	auto lw = static_cast<LayoutWindow *>(data);
 
+	if (vd_is_collection(fd))
+		{
+		layout_open_collection(lw, fd);
+		return;
+		}
 	layout_set_fd(lw, fd);
 }
 
@@ -490,6 +525,61 @@ static gboolean path_entry_tooltip_cb(GtkWidget *widget, gpointer)
 		}
 
 	return FALSE;
+}
+
+static gboolean layout_hamburger_menu_restore_focus_cb(gpointer data)
+{
+	auto focus = static_cast<GtkWidget *>(data);
+
+	GtkRoot *root = gtk_widget_get_root(focus);
+	if (GTK_IS_WINDOW(root))
+		{
+		gtk_window_set_focus(GTK_WINDOW(root), nullptr);
+		gtk_widget_grab_focus(focus);
+		}
+
+	return G_SOURCE_REMOVE;
+}
+
+static void layout_hamburger_menu_closed_cb(GtkPopover *, gpointer data)
+{
+	auto lw = static_cast<LayoutWindow *>(data);
+	GtkWidget *previous_focus = lw->hamburger_menu_previous_focus;
+
+	if (!previous_focus) return;
+
+	g_object_remove_weak_pointer(G_OBJECT(previous_focus),
+	                             reinterpret_cast<gpointer *>(&lw->hamburger_menu_previous_focus));
+	lw->hamburger_menu_previous_focus = nullptr;
+
+	g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, layout_hamburger_menu_restore_focus_cb,
+	                g_object_ref(previous_focus), g_object_unref);
+}
+
+static gboolean layout_hamburger_menu_key_press_cb(GtkEventControllerKey *, guint keyval, guint,
+	                                                GdkModifierType state, gpointer data)
+{
+	auto lw = static_cast<LayoutWindow *>(data);
+
+	if (keyval != GDK_KEY_F10 || state & gtk_accelerator_get_default_mod_mask()) return FALSE;
+
+	GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(lw->hamburger_menu_button));
+	if (gtk_widget_get_visible(GTK_WIDGET(popover)))
+		{
+		gtk_popover_popdown(GTK_POPOVER(popover));
+		return TRUE;
+		}
+
+	GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(lw->window));
+	if (focus)
+		{
+		lw->hamburger_menu_previous_focus = focus;
+		g_object_add_weak_pointer(G_OBJECT(focus),
+		                          reinterpret_cast<gpointer *>(&lw->hamburger_menu_previous_focus));
+		}
+
+	gtk_menu_button_popup(GTK_MENU_BUTTON(lw->hamburger_menu_button));
+	return TRUE;
 }
 
 static GtkWidget *layout_tool_setup(LayoutWindow *lw)
@@ -549,10 +639,18 @@ static GtkWidget *layout_tool_setup(LayoutWindow *lw)
 		gtk_window_set_titlebar(GTK_WINDOW(lw->window), header);
 		GtkWidget *menu_button = gtk_menu_button_new();
 		GtkWidget *image = gtk_image_new_from_icon_name("open-menu-symbolic");
+		lw->hamburger_menu_button = menu_button;
 
 		gtk_menu_button_set_child(GTK_MENU_BUTTON(menu_button), image);
 
 		gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(menu_button), lw->menu_model);
+		GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(menu_button));
+		g_signal_connect(popover, "closed", G_CALLBACK(layout_hamburger_menu_closed_cb), lw);
+
+		GtkEventController *controller = gtk_event_controller_key_new();
+		gtk_event_controller_set_propagation_phase(controller, GTK_PHASE_CAPTURE);
+		g_signal_connect(controller, "key-pressed", G_CALLBACK(layout_hamburger_menu_key_press_cb), lw);
+		gtk_widget_add_controller(lw->window, controller);
 
 		gtk_header_bar_pack_end(GTK_HEADER_BAR(header), menu_button);
 		}
@@ -691,9 +789,16 @@ static GtkWidget *layout_sort_popover_new(LayoutWindow *lw)
 	g_autoptr(GMenu) options_section = g_menu_new();
 
 	for (const SortType sort_type : { SORT_NAME, SORT_NUMBER, SORT_TIME, SORT_CTIME, SORT_EXIFTIME,
-	                                  SORT_EXIFTIMEDIGITIZED, SORT_SIZE, SORT_RATING, SORT_CLASS })
+	                                  SORT_EXIFTIMEDIGITIZED, SORT_MEDIA_TIME, SORT_SIZE, SORT_RATING, SORT_CLASS })
 		{
 		layout_sort_popover_append_method_item(sort_section, sort_type);
+		}
+	if (lw->vf && lw->vf->collection)
+		{
+		layout_sort_popover_append_method_item(sort_section, SORT_PATH);
+		g_autoptr(GMenuItem) item = g_menu_item_new(_("Collection order"), nullptr);
+		g_menu_item_set_action_and_target(item, "sort.method", "i", SORT_NONE);
+		g_menu_append_item(sort_section, item);
 		}
 	g_menu_append_section(menu, nullptr, G_MENU_MODEL(sort_section));
 
@@ -1248,7 +1353,7 @@ GList *layout_selection_list(LayoutWindow *lw)
 {
 	if (!layout_valid(&lw)) return nullptr;
 
-	if (layout_image_get_collection(lw, nullptr))
+	if ((!lw->vf || !lw->vf->collection) && layout_image_get_collection(lw, nullptr))
 		{
 		FileData *fd;
 
@@ -1369,13 +1474,113 @@ const gchar *layout_get_path(LayoutWindow *lw)
 	return lw->dir_fd ? lw->dir_fd->path : nullptr;
 }
 
+struct CollectionConfirmData
+{
+	LayoutWindow *layout;
+	CollectionData *collection;
+	GenericDialog *dialog;
+	std::function<void()> continuation;
+};
+
+static void layout_collection_confirm_finish(CollectionConfirmData *data, gboolean proceed)
+{
+	auto continuation = std::move(data->continuation);
+	data->layout->collection_confirm_data = nullptr;
+	if (data->collection->path && data->layout->vf && data->layout->vf->collection == data->collection &&
+	    data->layout->path_entry &&
+	    g_strcmp0(gtk_editable_get_text(GTK_EDITABLE(data->layout->path_entry)), data->collection->path) != 0)
+		layout_set_collection(data->layout, data->collection);
+	if (!proceed && data->layout->path_entry && data->layout->vf &&
+	    data->layout->vf->collection == data->collection)
+		entry_set_text(GTK_ENTRY(data->layout->path_entry),
+		               data->collection->path ? data->collection->path : data->collection->name);
+	collection_unref(data->collection);
+	delete data;
+	if (proceed) continuation();
+}
+
+static void layout_collection_confirm_cancel_cb(GenericDialog *dialog, gpointer user_data)
+{
+	auto *data = static_cast<CollectionConfirmData *>(user_data);
+	generic_dialog_close(dialog);
+	layout_collection_confirm_finish(data, FALSE);
+}
+
+static void layout_collection_confirm_discard_cb(GenericDialog *dialog, gpointer user_data)
+{
+	auto *data = static_cast<CollectionConfirmData *>(user_data);
+	generic_dialog_close(dialog);
+	data->collection->changed = FALSE;
+	layout_collection_confirm_finish(data, TRUE);
+}
+
+static void layout_collection_confirm_save_done_cb(gboolean saved, gpointer user_data)
+{
+	layout_collection_confirm_finish(static_cast<CollectionConfirmData *>(user_data), saved);
+}
+
+static void layout_collection_confirm_save_cb(GenericDialog *dialog, gpointer user_data)
+{
+	auto *data = static_cast<CollectionConfirmData *>(user_data);
+	generic_dialog_close(dialog);
+	data->dialog = nullptr;
+	if (!data->collection->path)
+		{
+		collection_dialog_save_with_callback(data->collection, layout_collection_confirm_save_done_cb, data);
+		return;
+		}
+	if (!collection_save(data->collection, data->collection->path))
+		{
+		g_autofree gchar *message = g_strdup_printf(_("Failed to save the collection:\n%s"), data->collection->path);
+		warning_dialog(_("Save Failed"), message, GQ_ICON_DIALOG_ERROR, data->layout->window);
+		layout_collection_confirm_finish(data, FALSE);
+		return;
+		}
+	layout_collection_confirm_finish(data, TRUE);
+}
+
+gboolean layout_confirm_collection_leave(LayoutWindow *lw, const std::function<void()> &continuation, gboolean force)
+{
+	if (lw->collection_confirm_data)
+		{
+		auto *data = static_cast<CollectionConfirmData *>(lw->collection_confirm_data);
+		if (data->dialog) gtk_window_present(GTK_WINDOW(data->dialog->dialog));
+		return FALSE;
+		}
+	CollectionData *collection = lw->vf ? lw->vf->collection : nullptr;
+	if (!collection || !collection->changed) return TRUE;
+	if (!force)
+		{
+		gboolean shared = FALSE;
+		layout_window_foreach([&](LayoutWindow *other)
+			{
+			if (other != lw && other->vf && other->vf->collection == collection) shared = TRUE;
+			});
+		if (shared) return TRUE;
+		}
+	auto *data = new CollectionConfirmData{lw, collection_ref(collection), nullptr, continuation};
+	lw->collection_confirm_data = data;
+	data->dialog = generic_dialog_new(_("Close collection"), "close_collection", lw->window, FALSE,
+	                                  layout_collection_confirm_cancel_cb, data);
+	g_autofree gchar *message = g_strdup_printf(_("Save changes to collection %s?"), collection->name);
+	generic_dialog_add_message(data->dialog, GQ_ICON_DIALOG_QUESTION, _("Collection has been modified"), message, TRUE);
+	generic_dialog_add_button(data->dialog, GQ_ICON_SAVE, _("Save"), layout_collection_confirm_save_cb, TRUE);
+	generic_dialog_add_button(data->dialog, GQ_ICON_DELETE, _("_Discard"), layout_collection_confirm_discard_cb, FALSE);
+	gtk_window_present(GTK_WINDOW(data->dialog->dialog));
+	return FALSE;
+}
+
 static void layout_sync_path(LayoutWindow *lw)
 {
 	if (!lw->dir_fd) return;
 
 	if (lw->path_entry) entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
 
-	if (lw->vd) vd_set_fd(lw->vd, lw->dir_fd);
+	if (lw->vd)
+		{
+			vd_set_collection(lw->vd, nullptr);
+		vd_set_fd(lw->vd, lw->dir_fd);
+		}
 	if (lw->vf) vf_set_fd(lw->vf, lw->dir_fd);
 }
 
@@ -1387,11 +1592,49 @@ gboolean layout_set_path(LayoutWindow *lw, const gchar *path)
 	if (!path) return FALSE;
 
 	fd = file_data_new_group(path);
-	ret = layout_set_fd(lw, fd);
+	ret = vd_is_collection(fd) ? layout_open_collection(lw, fd) : layout_set_fd(lw, fd);
 	file_data_unref(fd);
 	return ret;
 }
 
+
+gboolean layout_set_collection(LayoutWindow *lw, CollectionData *cd)
+{
+	if (!layout_valid(&lw) || !lw->vf || !cd) return FALSE;
+	if (lw->vf->collection && lw->vf->collection != cd)
+		{
+			auto next = std::shared_ptr<CollectionData>(collection_ref(cd), [](CollectionData *item) { collection_unref(item); });
+			if (!layout_confirm_collection_leave(lw, [lw, next]() { layout_set_collection(lw, next.get()); }, FALSE)) return FALSE;
+		}
+	collection_ref(cd);
+	FileDataRef current(layout_image_get_fd(lw));
+	g_autofree gchar *parent = cd->path ? remove_level_from_path(cd->path) : nullptr;
+	if (parent && (!lw->dir_fd || g_strcmp0(lw->dir_fd->path, parent) != 0) && !layout_set_path(lw, parent))
+		{
+		collection_unref(cd);
+		return FALSE;
+		}
+	layout_image_slideshow_stop(lw);
+	/* Pane navigation uses the displayed file list, not ImageWindow's collection mode. */
+	if (layout_image_get_collection(lw, nullptr)) layout_image_set_fd(lw, nullptr);
+	if (!vf_set_collection(lw->vf, cd))
+		{
+		collection_unref(cd);
+		return FALSE;
+		}
+	const gboolean in_collection_parent = lw->dir_fd && parent && g_strcmp0(lw->dir_fd->path, parent) == 0;
+	if (lw->vd) vd_set_collection(lw->vd, in_collection_parent ? cd->path : nullptr);
+	if (lw->path_entry) entry_set_text(GTK_ENTRY(lw->path_entry), cd->path ? cd->path : cd->name);
+	if (current && vf_index_by_fd(lw->vf, current) >= 0)
+		layout_image_set_fd(lw, current);
+	else
+		layout_image_set_index(lw, 0);
+	if (lw->info_sort) gtk_menu_button_set_popover(GTK_MENU_BUTTON(lw->info_sort), layout_sort_popover_new(lw));
+	layout_status_update_all(lw);
+	if (options->read_metadata_in_idle || sort_type_requires_metadata(lw->vf->sort.method)) vf_read_metadata_in_idle(lw->vf);
+	collection_unref(cd);
+	return TRUE;
+}
 
 gboolean layout_set_fd(LayoutWindow *lw, FileData *fd)
 {
@@ -1401,8 +1644,22 @@ gboolean layout_set_fd(LayoutWindow *lw, FileData *fd)
 	if (!layout_valid(&lw)) return FALSE;
 
 	if (!fd || !isname(fd->path)) return FALSE;
+	if (lw->vf && lw->vf->collection)
+		{
+			auto target = std::shared_ptr<FileData>(file_data_ref(fd), [](FileData *item) { file_data_unref(item); });
+			if (!layout_confirm_collection_leave(lw, [lw, target]() { layout_set_fd(lw, target.get()); }, FALSE)) return FALSE;
+		}
 	if (lw->dir_fd && fd == lw->dir_fd)
 		{
+		if (lw->vf && lw->vf->collection)
+			{
+			layout_image_slideshow_stop(lw);
+			if (lw->vd) vd_set_collection(lw->vd, nullptr);
+			if (lw->path_entry) entry_set_text(GTK_ENTRY(lw->path_entry), lw->dir_fd->path);
+			vf_set_fd(lw->vf, lw->dir_fd);
+			layout_image_set_index(lw, 0);
+			if (lw->info_sort) gtk_menu_button_set_popover(GTK_MENU_BUTTON(lw->info_sort), layout_sort_popover_new(lw));
+			}
 		return TRUE;
 		}
 
@@ -2145,6 +2402,8 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 		}
 
 	/* remember state */
+	FileDataRef current_file(layout_image_get_fd(lw));
+	CollectionData *collection = lw->vf && lw->vf->collection ? collection_ref(lw->vf->collection) : nullptr;
 
 	/* layout_image_slideshow_stop(lw); slideshow should survive */
 	layout_image_full_screen_stop(lw);
@@ -2207,7 +2466,14 @@ void layout_style_set(LayoutWindow *lw, gint style, const gchar *order)
 
 	/* sync */
 
-	if (image_get_fd(lw->image))
+	if (collection)
+		{
+		layout_set_fd(lw, dir_fd);
+		layout_set_collection(lw, collection);
+		if (current_file && g_list_find(lw->vf->list, current_file)) layout_image_set_fd(lw, current_file);
+		collection_unref(collection);
+		}
+	else if (image_get_fd(lw->image))
 		{
 		layout_set_fd(lw, image_get_fd(lw->image));
 		}
@@ -2429,34 +2695,30 @@ void layout_show_config_window(LayoutWindow *lw)
 
 	gtk_window_set_default_size(GTK_WINDOW(lc->configwindow), CONFIG_WINDOW_DEF_WIDTH, CONFIG_WINDOW_DEF_HEIGHT);
 	gtk_window_set_resizable(GTK_WINDOW(lc->configwindow), TRUE);
-	gtk_widget_set_margin_top(lc->configwindow, PREF_PAD_BORDER);
-	gtk_widget_set_margin_bottom(lc->configwindow, PREF_PAD_BORDER);
-	gtk_widget_set_margin_start(lc->configwindow, PREF_PAD_BORDER);
-	gtk_widget_set_margin_end(lc->configwindow, PREF_PAD_BORDER);
 
 	win_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
 	DEBUG_NAME(win_vbox);
+	gtk_widget_set_margin_top(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_bottom(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_start(win_vbox, PREF_PAD_BORDER);
+	gtk_widget_set_margin_end(win_vbox, PREF_PAD_BORDER);
 	gtk_window_set_child(GTK_WINDOW(lc->configwindow), win_vbox);
 
 	button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, PREF_PAD_BUTTON_GAP);
 	gtk_widget_set_halign(button_box, GTK_ALIGN_END);
 	gtk_widget_set_valign(button_box, GTK_ALIGN_END);
 
-	button = pref_button_new(nullptr, GQ_ICON_HELP, _("Help"),
-				 G_CALLBACK(layout_config_help_cb), lc);
-	gtk_box_append(GTK_BOX(button_box), button);
+	pref_button_new(button_box, GQ_ICON_HELP, _("Help"),
+	                G_CALLBACK(layout_config_help_cb), lc);
 
-	button = pref_button_new(nullptr, GQ_ICON_APPLY, _("Apply"),
-				 G_CALLBACK(layout_config_apply_cb), lc);
-	gtk_box_append(GTK_BOX(button_box), button);
+	pref_button_new(button_box, GQ_ICON_APPLY, _("Apply"),
+	                G_CALLBACK(layout_config_apply_cb), lc);
 
-	button = pref_button_new(nullptr, GQ_ICON_CANCEL, _("Cancel"),
-				 G_CALLBACK(layout_config_close_cb), lc);
-	gtk_box_append(GTK_BOX(button_box), button);
+	pref_button_new(button_box, GQ_ICON_CANCEL, _("Cancel"),
+	                G_CALLBACK(layout_config_close_cb), lc);
 
-	button = pref_button_new(nullptr, GQ_ICON_OK, "OK",
+	button = pref_button_new(button_box, GQ_ICON_OK, "OK",
 	                         G_CALLBACK(layout_config_ok_cb), lc);
-	gtk_box_append(GTK_BOX(button_box), button);
 	gtk_window_set_default_widget(GTK_WINDOW(lc->configwindow), button);
 
 	vbox = pref_frame_new(win_vbox, TRUE, nullptr, GTK_ORIENTATION_VERTICAL, PREF_PAD_SPACE);
@@ -2564,6 +2826,7 @@ void layout_close(LayoutWindow *lw)
 {
 	if (layout_window_count() > 1)
 		{
+		if (!layout_confirm_collection_leave(lw, [lw]() { layout_close(lw); }, FALSE)) return;
 		save_layout(lw);
 		layout_free(lw);
 		}
@@ -2808,7 +3071,7 @@ static LayoutWindow *layout_new(const LayoutOptions &lop)
 	return lw;
 }
 
-static void layout_write_attributes(const LayoutOptions &lop, GString *outstr, gint indent)
+static void layout_write_attributes(const LayoutOptions &lop, RcString &rc)
 {
 	WRITE_NL(); WRITE_CHAR(lop, id);
 
@@ -2843,6 +3106,8 @@ static void layout_write_attributes(const LayoutOptions &lop, GString *outstr, g
 	WRITE_SEPARATOR();
 
 	WRITE_NL(); WRITE_INT(lop, folder_window.vdivider_pos);
+	WRITE_SEPARATOR();
+	WRITE_NL(); WRITE_INT(lop, file_view_list.vdivider_pos);
 	WRITE_SEPARATOR();
 
 	WRITE_NL(); WRITE_INT_FULL("float_window.x", lop.float_window.rect.x);
@@ -2903,22 +3168,30 @@ static void layout_write_attributes(const LayoutOptions &lop, GString *outstr, g
 }
 
 
-void layout_write_config(LayoutWindow *lw, GString *outstr, gint indent)
+void layout_write_config(LayoutWindow *lw, RcString &rc)
 {
 	layout_sync_options_with_current_state(lw);
 	WRITE_NL(); WRITE_STRING("<layout");
-	layout_write_attributes(lw->options, outstr, indent + 1);
+	rc.indent++;
+	layout_write_attributes(lw->options, rc);
+	rc.indent--;
 	WRITE_STRING(">");
 
-	bar_sort_write_config(lw->bar_sort, outstr, indent + 1);
-	bar_write_config(lw->bar, outstr, indent + 1);
+	rc.indent++;
+	bar_sort_write_config(lw->bar_sort, rc);
+	bar_write_config(lw->bar, rc);
+	rc.indent--;
 
 	WRITE_SEPARATOR();
-	generic_dialog_windows_write_config(outstr, indent + 1);
+	rc.indent++;
+	generic_dialog_windows_write_config(rc);
+	rc.indent--;
 
 	WRITE_SEPARATOR();
-	layout_toolbar_write_config(lw, TOOLBAR_MAIN, outstr, indent + 1);
-	layout_toolbar_write_config(lw, TOOLBAR_STATUS, outstr, indent + 1);
+	rc.indent++;
+	layout_toolbar_write_config(lw, TOOLBAR_MAIN, rc);
+	layout_toolbar_write_config(lw, TOOLBAR_STATUS, rc);
+	rc.indent--;
 
 	WRITE_NL(); WRITE_STRING("</layout>");
 }

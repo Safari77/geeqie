@@ -26,6 +26,9 @@
 #include <cairo.h>
 #include <gdk/gdk.h>
 #include <graphene.h>
+#include <pango/pangocairo.h>
+
+#include "pixbuf-util.h"
 
 namespace
 {
@@ -795,14 +798,19 @@ static void gqv_cell_renderer_icon_snapshot(GtkCellRenderer *cell,
 
 		if (GdkRectangle draw_rect; gdk_rectangle_intersect(cell_area, &pix_rect, &draw_rect))
 			{
-			gdk_cairo_set_source_pixbuf(cr, pixbuf, pix_rect.x, pix_rect.y);
-			cairo_rectangle (cr,
-					draw_rect.x,
-					draw_rect.y,
-					draw_rect.width,
-					draw_rect.height);
+			cairo_surface_t *surface = pixbuf_to_cairo_surface(pixbuf);
+			if (surface)
+				{
+				cairo_set_source_surface(cr, surface, pix_rect.x, pix_rect.y);
+				cairo_rectangle (cr,
+						draw_rect.x,
+						draw_rect.y,
+						draw_rect.width,
+						draw_rect.height);
 
-			cairo_fill (cr);
+				cairo_fill (cr);
+				cairo_surface_destroy(surface);
+				}
 			}
 		}
 
@@ -826,7 +834,13 @@ static void gqv_cell_renderer_icon_snapshot(GtkCellRenderer *cell,
 
 		if (gdk_rectangle_intersect(cell_area, &pix_rect, nullptr))
 			{
-			gtk_render_layout(context, cr, pix_rect.x - text_rect.x, pix_rect.y, layout);
+			GdkRGBA color;
+			gtk_widget_get_color(widget, &color);
+			cairo_save(cr);
+			gdk_cairo_set_source_rgba(cr, &color);
+			cairo_move_to(cr, pix_rect.x - text_rect.x, pix_rect.y);
+			pango_cairo_show_layout(cr, layout);
+			cairo_restore(cr);
 			}
 		g_object_unref(layout);
 		}

@@ -2,6 +2,68 @@
 
 static const ActionDef view_file_actions[] =
 {
+	{"win.view-file-collection-append", nullptr, N_("Append from collection…"), vf_collection_append_action_cb,
+	 nullptr, ActionStateType::NONE, FALSE, nullptr, 0, nullptr},
+	{"win.view-file-collection-save-as", nullptr, N_("Save collection as…"), vf_collection_save_as_action_cb,
+	 nullptr, ActionStateType::NONE, FALSE, nullptr, 0, nullptr},
+	{"win.view-file-collection-sort", nullptr, N_("Change collection order"), vf_collection_sort_action_cb,
+	 G_VARIANT_TYPE_INT32, ActionStateType::NONE, FALSE, nullptr, 0, nullptr},
+	{"win.view-file-collection-randomize", nullptr, N_("Randomize collection order"), vf_collection_randomize_action_cb,
+	 nullptr, ActionStateType::NONE, FALSE, nullptr, 0, nullptr},
+	{"win.view-file-collection-go-to-original", nullptr, N_("Go to original"), vf_collection_go_to_original_action_cb,
+	 nullptr, ActionStateType::NONE, FALSE, nullptr, 0, nullptr},
+		{
+		"win.view-file-collection-edit-infotext",
+		nullptr,
+		N_("Edit info text"),
+		vf_collection_edit_infotext_action_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
+		"win.view-file-collection-save",
+		nullptr,
+		N_("Save collection"),
+		vf_collection_save_action_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
+		"win.view-file-collection-remove",
+		nullptr,
+		N_("Remove from collection"),
+		vf_collection_remove_action_cb,
+		nullptr,
+		ActionStateType::NONE,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
+		{
+		"win.view-file-collection-show-infotext",
+		nullptr,
+		N_("Show info text"),
+		vf_collection_show_infotext_action_cb,
+		nullptr,
+		ActionStateType::BOOLEAN,
+		FALSE,
+		nullptr,
+		0,
+		nullptr,
+		},
+
 		{
 		"win.view-file-collections",
 		nullptr,

@@ -476,6 +476,12 @@ GdkRectangle rt_overlay_get_position(const RendererTiles *rt, const OverlayData 
 	od_rect.y = od->y;
 	od_rect.width = gdk_pixbuf_get_width(od->pixbuf);
 	od_rect.height = gdk_pixbuf_get_height(od->pixbuf);
+	if (od->flags & OVL_DEVICE_SCALE)
+		{
+		const gint scale = gtk_widget_get_scale_factor(GTK_WIDGET(rt->pr));
+		od_rect.width /= scale;
+		od_rect.height /= scale;
+		}
 
 	if (od->flags & OVL_RELATIVE)
 		{
@@ -680,20 +686,17 @@ void rt_tile_rotate_90_clockwise(RendererTiles *rt, GdkPixbuf **tile, gint x, gi
 	GdkPixbuf *dest;
 	gint srs;
 	gint drs;
-	guchar *s_pix;
 	guchar *d_pix;
-	guchar *sp;
 	guchar *dp;
 	guchar *ip;
-	guchar *spi;
 	guchar *dpi;
 	gint i;
 	gint j;
 	gint tw = rt->tile_width;
 
 	srs = gdk_pixbuf_get_rowstride(src);
-	s_pix = gdk_pixbuf_get_pixels(src);
-	spi = s_pix + (x * COLOR_BYTES);
+	const guchar *s_pix = gdk_pixbuf_read_pixels(src);
+	const guchar *spi = s_pix + (x * COLOR_BYTES);
 
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
@@ -702,7 +705,7 @@ void rt_tile_rotate_90_clockwise(RendererTiles *rt, GdkPixbuf **tile, gint x, gi
 
 	for (i = y; i < y + h; i++)
 		{
-		sp = spi + (i * srs);
+		const guchar *sp = spi + (i * srs);
 		ip = dpi - (i * COLOR_BYTES);
 		for (j = x; j < x + w; j++)
 			{
@@ -722,20 +725,17 @@ void rt_tile_rotate_90_counter_clockwise(RendererTiles *rt, GdkPixbuf **tile, gi
 	GdkPixbuf *dest;
 	gint srs;
 	gint drs;
-	guchar *s_pix;
 	guchar *d_pix;
-	guchar *sp;
 	guchar *dp;
 	guchar *ip;
-	guchar *spi;
 	guchar *dpi;
 	gint i;
 	gint j;
 	gint th = rt->tile_height;
 
 	srs = gdk_pixbuf_get_rowstride(src);
-	s_pix = gdk_pixbuf_get_pixels(src);
-	spi = s_pix + (x * COLOR_BYTES);
+	const guchar *s_pix = gdk_pixbuf_read_pixels(src);
+	const guchar *spi = s_pix + (x * COLOR_BYTES);
 
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
@@ -744,7 +744,7 @@ void rt_tile_rotate_90_counter_clockwise(RendererTiles *rt, GdkPixbuf **tile, gi
 
 	for (i = y; i < y + h; i++)
 		{
-		sp = spi + (i * srs);
+		const guchar *sp = spi + (i * srs);
 		ip = dpi + (i * COLOR_BYTES);
 		for (j = x; j < x + w; j++)
 			{
@@ -764,11 +764,8 @@ void rt_tile_mirror_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gi
 	GdkPixbuf *dest;
 	gint srs;
 	gint drs;
-	guchar *s_pix;
 	guchar *d_pix;
-	guchar *sp;
 	guchar *dp;
-	guchar *spi;
 	guchar *dpi;
 	gint i;
 	gint j;
@@ -776,8 +773,8 @@ void rt_tile_mirror_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gi
 	gint tw = rt->tile_width;
 
 	srs = gdk_pixbuf_get_rowstride(src);
-	s_pix = gdk_pixbuf_get_pixels(src);
-	spi = s_pix + (x * COLOR_BYTES);
+	const guchar *s_pix = gdk_pixbuf_read_pixels(src);
+	const guchar *spi = s_pix + (x * COLOR_BYTES);
 
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
@@ -786,7 +783,7 @@ void rt_tile_mirror_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gi
 
 	for (i = y; i < y + h; i++)
 		{
-		sp = spi + (i * srs);
+		const guchar *sp = spi + (i * srs);
 		dp = dpi + (i * drs);
 		for (j = 0; j < w; j++)
 			{
@@ -806,9 +803,7 @@ void rt_tile_mirror_and_flip(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y
 	GdkPixbuf *dest;
 	gint srs;
 	gint drs;
-	guchar *s_pix;
 	guchar *d_pix;
-	guchar *sp;
 	guchar *dp;
 	guchar *dpi;
 	gint i;
@@ -817,7 +812,7 @@ void rt_tile_mirror_and_flip(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y
 	gint th = rt->tile_height;
 
 	srs = gdk_pixbuf_get_rowstride(src);
-	s_pix = gdk_pixbuf_get_pixels(src);
+	const guchar *s_pix = gdk_pixbuf_read_pixels(src);
 
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
@@ -826,7 +821,7 @@ void rt_tile_mirror_and_flip(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y
 
 	for (i = y; i < y + h; i++)
 		{
-		sp = s_pix + (i * srs) + (x * COLOR_BYTES);
+		const guchar *sp = s_pix + (i * srs) + (x * COLOR_BYTES);
 		dp = dpi - (i * drs) - (x * COLOR_BYTES);
 		for (j = 0; j < w; j++)
 			{
@@ -846,18 +841,15 @@ void rt_tile_flip_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gint
 	GdkPixbuf *dest;
 	gint srs;
 	gint drs;
-	guchar *s_pix;
 	guchar *d_pix;
-	guchar *sp;
 	guchar *dp;
-	guchar *spi;
 	guchar *dpi;
 	gint i;
 	gint th = rt->tile_height;
 
 	srs = gdk_pixbuf_get_rowstride(src);
-	s_pix = gdk_pixbuf_get_pixels(src);
-	spi = s_pix + (x * COLOR_BYTES);
+	const guchar *s_pix = gdk_pixbuf_read_pixels(src);
+	const guchar *spi = s_pix + (x * COLOR_BYTES);
 
 	dest = rt_get_spare_tile(rt);
 	drs = gdk_pixbuf_get_rowstride(dest);
@@ -866,7 +858,7 @@ void rt_tile_flip_only(RendererTiles *rt, GdkPixbuf **tile, gint x, gint y, gint
 
 	for (i = y; i < y + h; i++)
 		{
-		sp = spi + (i * srs);
+		const guchar *sp = spi + (i * srs);
 		dp = dpi - (i * drs);
 		memcpy(dp, sp, w * COLOR_BYTES);
 		}
@@ -1075,7 +1067,7 @@ void rt_tile_get_region_wide(gboolean ignore_alpha,
 	const gint src_height = gdk_pixbuf_get_height(src);
 	const gint src_channels = gdk_pixbuf_get_n_channels(src);
 	const gint src_rowstride = gdk_pixbuf_get_rowstride(src);
-	const guchar *src_pixels = gdk_pixbuf_get_pixels(src);
+	const guchar *src_pixels = gdk_pixbuf_read_pixels(src);
 
 	const gint dest_channels = gdk_pixbuf_get_n_channels(dest);
 	const gint dest_rowstride = gdk_pixbuf_get_rowstride(dest);
@@ -1318,12 +1310,17 @@ void rt_tile_render(RendererTiles *rt, ImageTile *it,
 		if (pr->func_post_process && (!pr->post_process_slow || !fast))
 			pr->func_post_process(pr, &it->pixbuf, x, y, w, h);
 
-		cairo_t *cr = cairo_create(it->surface);
-		cairo_rectangle (cr, x, y, w, h);
-		gdk_cairo_set_source_pixbuf(cr, it->pixbuf, 0, 0);
-		cairo_fill(cr);
+		cairo_surface_t *surface = pixbuf_to_cairo_surface(it->pixbuf);
+		if (surface)
+			{
+			cairo_t *cr = cairo_create(it->surface);
+			cairo_rectangle (cr, x, y, w, h);
+			cairo_set_source_surface(cr, surface, 0, 0);
+			cairo_fill(cr);
 
-		cairo_destroy (cr);
+			cairo_destroy (cr);
+			cairo_surface_destroy(surface);
+			}
 		}
 }
 
@@ -1980,8 +1977,21 @@ void rt_draw_cb(GtkDrawingArea *, cairo_t *cr, gint, gint, gpointer data)
 		auto *od = static_cast<OverlayData *>(work->data);
 		GdkRectangle od_rect = rt_overlay_get_position(rt, od);
 
-		gdk_cairo_set_source_pixbuf(cr, od->pixbuf, od_rect.x, od_rect.y);
-		cairo_paint(cr);
+		cairo_save(cr);
+		cairo_translate(cr, od_rect.x, od_rect.y);
+		if (od->flags & OVL_DEVICE_SCALE)
+			{
+			const gint scale = gtk_widget_get_scale_factor(GTK_WIDGET(rt->pr));
+			cairo_scale(cr, 1.0 / scale, 1.0 / scale);
+			}
+		cairo_surface_t *surface = pixbuf_to_cairo_surface(od->pixbuf);
+		if (surface)
+			{
+			cairo_set_source_surface(cr, surface, 0, 0);
+			cairo_paint(cr);
+			cairo_surface_destroy(surface);
+			}
+		cairo_restore(cr);
 		}
 }
 

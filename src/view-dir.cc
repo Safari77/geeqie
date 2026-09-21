@@ -82,6 +82,7 @@ PixmapFolders *folder_icons_new()
 	pf->link = create_folder_icon_with_emblem(GQ_ICON_LINK);
 
 	pf->read_only = create_folder_icon_with_emblem(GQ_ICON_READONLY);
+	pf->collection = g_themed_icon_new_with_default_fallbacks("folder-pictures");
 
 	return pf;
 }
@@ -96,6 +97,7 @@ void folder_icons_free(PixmapFolders *pf)
 	g_clear_object(&pf->deny);
 	g_clear_object(&pf->link);
 	g_clear_object(&pf->read_only);
+	g_clear_object(&pf->collection);
 
 	g_free(pf);
 }
@@ -107,6 +109,7 @@ static void vd_notify_cb(FileData *fd, NotifyType type, gpointer data);
 static void vd_destroy_cb(GtkWidget *widget, gpointer data)
 {
 	auto vd = static_cast<ViewDir *>(data);
+	(void)widget;
 
 	g_object_set_data(G_OBJECT(vd->view), VIEW_DIR_DATA_KEY, nullptr);
 	file_data_unregister_notify_func(vd_notify_cb, vd);
@@ -121,9 +124,12 @@ static void vd_destroy_cb(GtkWidget *widget, gpointer data)
 
 	switch (vd->type)
 		{
-		case DIRVIEW_LIST: vdlist_destroy_cb(widget, data); break;
-		case DIRVIEW_TREE: vdtree_destroy_cb(widget, data); break;
+		case DIRVIEW_LIST: vdlist_destroy_cb(vd->view, data); break;
+		case DIRVIEW_TREE: vdtree_destroy_cb(vd->view, data); break;
 		}
+	if (vd->collection_parent) g_object_unref(vd->view);
+	g_object_unref(vd->view);
+	g_free(vd->collection_path);
 
 	folder_icons_free(vd->pf);
 	file_data_list_free(vd->drop_list);
@@ -131,6 +137,31 @@ static void vd_destroy_cb(GtkWidget *widget, gpointer data)
 	g_clear_pointer(&vd->info, g_free);
 
 	delete vd;
+}
+
+gboolean vd_is_collection(FileData *fd)
+{
+	return fd && file_extension_match(fd->path, GQ_COLLECTION_EXT) && isfile(fd->path);
+}
+
+gboolean vd_read_directories(FileData *dir_fd, GList **list)
+{
+	const gboolean result = filelist_read(dir_fd, nullptr, list);
+	if (!result) return FALSE;
+
+	g_autofree gchar *path_fs = path_from_utf8(dir_fd->path);
+	GDir *directory = g_dir_open(path_fs, 0, nullptr);
+	if (!directory) return FALSE;
+	while (const gchar *name = g_dir_read_name(directory))
+		{
+		if (!options->file_filter.show_hidden_files && name[0] == '.') continue;
+		g_autofree gchar *name_utf8 = path_to_utf8(name);
+		if (!file_extension_match(name_utf8, GQ_COLLECTION_EXT)) continue;
+		g_autofree gchar *filename = g_build_filename(dir_fd->path, name_utf8, nullptr);
+		if (isfile(filename)) *list = g_list_prepend(*list, file_data_new_simple(filename));
+		}
+	g_dir_close(directory);
+	return result;
 }
 
 void vd_set_select_func(ViewDir *vd,
@@ -162,8 +193,50 @@ void vd_refresh(ViewDir *vd)
 	switch (vd->type)
 	{
 	case DIRVIEW_LIST: vdlist_refresh(vd); break;
-	case DIRVIEW_TREE: vdtree_refresh(vd); break;
+	case DIRVIEW_TREE:
+		vdtree_refresh(vd);
+		vdtree_set_collection(vd, vd->collection_path);
+		break;
 	}
+}
+
+void vd_set_collection(ViewDir *vd, const gchar *path)
+{
+	if (vd->type == DIRVIEW_TREE)
+		{
+		g_free(vd->collection_path);
+		vd->collection_path = g_strdup(path);
+		vdtree_set_collection(vd, path);
+		return;
+		}
+
+	const gboolean active = path != nullptr;
+	if (active == (vd->collection_parent != nullptr)) return;
+
+	if (active)
+		{
+		g_object_ref(vd->view);
+		GtkWidget *button = gtk_button_new();
+		GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+		gtk_box_append(GTK_BOX(row), gtk_image_new_from_icon_name(GQ_ICON_GO_UP));
+		gtk_box_append(GTK_BOX(row), gtk_label_new(".."));
+		gtk_button_set_child(GTK_BUTTON(button), row);
+		gtk_widget_add_css_class(button, "flat");
+		gtk_widget_set_hexpand(button, TRUE);
+		g_signal_connect_swapped(button, "clicked", G_CALLBACK(+[](ViewDir *vd)
+			{
+			if (vd->select_func) vd->select_func(vd, vd->dir_fd, vd->select_data);
+			}), vd);
+		vd->collection_parent = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+		gtk_box_append(GTK_BOX(vd->collection_parent), button);
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(vd->widget), vd->collection_parent);
+		}
+	else
+		{
+		gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(vd->widget), vd->view);
+		vd->collection_parent = nullptr;
+		g_object_unref(vd->view);
+		}
 }
 
 /* the calling stack is this:
@@ -616,7 +689,7 @@ void vd_pop_menu(ViewDir *vd, FileData *fd, GtkWidget *parent, gdouble x, gdoubl
 	gboolean rename_delete_active = FALSE;
 	gboolean new_folder_active = FALSE;
 
-	active = (fd != nullptr);
+	active = (fd != nullptr && !vd_is_collection(fd));
 	switch (vd->type)
 		{
 		case DIRVIEW_LIST:
@@ -642,6 +715,12 @@ void vd_pop_menu(ViewDir *vd, FileData *fd, GtkWidget *parent, gdouble x, gdoubl
 				};
 			}
 			break;
+		}
+
+	if (vd_is_collection(fd))
+		{
+		rename_delete_active = FALSE;
+		new_folder_active = FALSE;
 		}
 
 	g_autoptr(GtkBuilder) builder = gtk_builder_new_from_resource(GQ_RESOURCE_PATH_UI "/menu-dir-popup.ui");
@@ -846,6 +925,7 @@ static void vd_dnd_drop_update(ViewDir *vd, gint x, gint y)
 			}
 		}
 
+	if (vd_is_collection(fd)) fd = nullptr;
 	if (fd == vd->drop_fd) return;
 
 	if (vd->drop_fd != vd->click_fd)
@@ -1088,7 +1168,7 @@ void vd_activate_cb(GtkTreeView *tview, GtkTreePath *tpath, GtkTreeViewColumn *,
 	vd_select_row(vd, fd);
 }
 
-static void vd_gesture_release_cb(GtkGestureClick *gesture, gint, gdouble x, gdouble y, gpointer data)
+static void vd_gesture_release_cb(GtkGestureClick *gesture, gint n_press, gdouble x, gdouble y, gpointer data)
 {
 	auto *vd = static_cast<ViewDir *>(data);
 	const guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
@@ -1100,7 +1180,10 @@ static void vd_gesture_release_cb(GtkGestureClick *gesture, gint, gdouble x, gdo
 		}
 
 	if (vd->type == DIRVIEW_LIST)
+		{
+		vdlist_release_cb(vd, n_press, button, x, y);
 		return;
+		}
 
 	if (!vd->click_fd) return;
 
@@ -1180,7 +1263,7 @@ static void vd_gesture_press_cb(GtkGestureClick *gesture, gint, gdouble x, gdoub
 
 	switch (vd->type)
 	{
-	case DIRVIEW_LIST: vdlist_press_cb(vd, x, y); break;
+	case DIRVIEW_LIST: vdlist_press_cb(vd, button, x, y); break;
 	case DIRVIEW_TREE: ret = vdtree_press_cb(vd, widget, button, x, y); break;
 	}
 
@@ -1258,6 +1341,8 @@ ViewDir *vd_new(LayoutWindow *lw)
 		}
 
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(vd->widget), vd->view);
+	// Keep the view alive until directory cleanup has released its model data.
+	g_object_ref(vd->view);
 
 	vd_dnd_init(vd);
 
@@ -1265,9 +1350,13 @@ ViewDir *vd_new(LayoutWindow *lw)
 		{
 		g_signal_connect(G_OBJECT(vd->view), "row_activated", G_CALLBACK(vd_activate_cb), vd);
 		}
-	g_signal_connect(G_OBJECT(vd->view), "destroy",
+	g_signal_connect(G_OBJECT(vd->widget), "destroy",
 			 G_CALLBACK(vd_destroy_cb), vd);
 	GtkEventController *key_controller = gtk_event_controller_key_new();
+	if (vd->type == DIRVIEW_LIST)
+		{
+		gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
+		}
 	g_signal_connect(key_controller, "key-pressed", G_CALLBACK(vd_key_pressed_cb), vd);
 	gtk_widget_add_controller(vd->view, key_controller);
 

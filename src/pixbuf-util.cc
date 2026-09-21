@@ -195,6 +195,25 @@ GdkTexture *pixbuf_to_texture(GdkPixbuf *pixbuf)
 	                              gdk_pixbuf_get_rowstride(pixbuf));
 }
 
+cairo_surface_t *pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
+{
+	if (!pixbuf) return nullptr;
+
+	cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+	                                                     gdk_pixbuf_get_width(pixbuf),
+	                                                     gdk_pixbuf_get_height(pixbuf));
+	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+		{
+		cairo_surface_destroy(surface);
+		return nullptr;
+		}
+
+	g_autoptr(GdkTexture) texture = pixbuf_to_texture(pixbuf);
+	gdk_texture_download(texture, cairo_image_surface_get_data(surface), cairo_image_surface_get_stride(surface));
+	cairo_surface_mark_dirty(surface);
+	return surface;
+}
+
 GdkPixbuf *pixbuf_from_cairo_surface(cairo_surface_t *surface)
 {
 	if (!surface || cairo_surface_get_type(surface) != CAIRO_SURFACE_TYPE_IMAGE ||
@@ -256,6 +275,13 @@ GdkPixbuf *pixbuf_inline(const gchar *key)
 	GInputStream *in_stream;
 
 	if (!key) return nullptr;
+
+	if (strcmp(key, PIXBUF_INLINE_COLLECTION) == 0)
+		{
+		GtkIconTheme *icon_theme = gtk_icon_theme_get_for_display(gdk_display_get_default());
+		GdkPixbuf *pixbuf = icon_theme_load_pixbuf_copy(icon_theme, key, 48, GTK_ICON_LOOKUP_NONE);
+		if (pixbuf) return pixbuf;
+		}
 
 	GtkSettings *settings = gtk_settings_get_default();
 	g_autofree gchar *theme_name = nullptr;
@@ -661,116 +687,32 @@ void pixbuf_pixel_set(GdkPixbuf *pb, gint x, gint y, GqColor color)
  *-----------------------------------------------------------------------------
  */
 
-static void pixbuf_copy_font(GdkPixbuf *src, gint sx, gint sy,
-                             GdkPixbuf *dest, gint dx, gint dy,
-                             gint w, gint h, GqColor color)
+void pixbuf_draw_layout(GdkPixbuf *dest_pixbuf, PangoLayout *layout,
+                        gint x, gint y, GqColor color, gint scale)
 {
-	if (!src || !dest || sx < 0 || sy < 0 || dx < 0 || dy < 0) return;
+	const gint width = gdk_pixbuf_get_width(dest_pixbuf);
+	const gint height = gdk_pixbuf_get_height(dest_pixbuf);
+	cairo_surface_t *surface = pixbuf_to_cairo_surface(dest_pixbuf);
+	if (!surface) return;
 
-	if (sx + w > gdk_pixbuf_get_width(src)) return;
-	if (sy + h > gdk_pixbuf_get_height(src)) return;
+	cairo_t *cr = cairo_create(surface);
 
-	if (dx + w > gdk_pixbuf_get_width(dest)) return;
-	if (dy + h > gdk_pixbuf_get_height(dest)) return;
+	cairo_scale(cr, scale, scale);
+	/* Subpixel antialiasing assumes an opaque display background. */
+	cairo_font_options_t *font_options = cairo_font_options_create();
+	cairo_get_font_options(cr, font_options);
+	cairo_font_options_set_antialias(font_options, CAIRO_ANTIALIAS_GRAY);
+	cairo_set_font_options(cr, font_options);
+	cairo_font_options_destroy(font_options);
+	cairo_move_to(cr, x, y);
+	cairo_set_source_rgba(cr, color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0);
+	pango_cairo_update_layout(cr, layout);
+	pango_cairo_show_layout(cr, layout);
+	cairo_destroy(cr);
 
-	const gboolean s_alpha = gdk_pixbuf_get_has_alpha(src);
-	const gboolean d_alpha = gdk_pixbuf_get_has_alpha(dest);
-	const gint srs = gdk_pixbuf_get_rowstride(src);
-	const gint drs = gdk_pixbuf_get_rowstride(dest);
-	guchar *s_pix = gdk_pixbuf_get_pixels(src);
-	guchar *d_pix = gdk_pixbuf_get_pixels(dest);
-
-	const gint s_step = s_alpha ? 4 : 3;
-	const gint d_step = d_alpha ? 4 : 3;
-
-	for (gint i = 0; i < h; i++)
-		{
-		guchar *sp = s_pix + ((sy + i) * srs) + (sx * s_step);
-		guchar *dp = d_pix + ((dy + i) * drs) + (dx * d_step);
-		for (gint j = 0; j < w; j++)
-			{
-			if (*sp)
-				{
-				guint8 asub;
-
-				asub = color.a * sp[0] / 255;
-				dp[0] = (color.r * asub + dp[0] * (256 - asub)) >> 8;
-				asub = color.a * sp[1] / 255;
-				dp[1] = (color.g * asub + dp[1] * (256 - asub)) >> 8;
-				asub = color.a * sp[2] / 255;
-				dp[2] = (color.b * asub + dp[2] * (256 - asub)) >> 8;
-
-				if (d_alpha) dp[3] = std::max<guchar>(dp[3], color.a * ((sp[0] + sp[1] + sp[2]) / 3) / 255);
-				}
-
-			sp += s_step;
-			dp += d_step;
-			}
-		}
-}
-
-void pixbuf_draw_layout(GdkPixbuf *pixbuf, PangoLayout *layout,
-                        gint x, gint y, GqColor color)
-{
-	GdkPixbuf *buffer;
-	gint w;
-	gint h;
-	gint sx;
-	gint sy;
-	gint dw;
-	gint dh;
-	cairo_surface_t *source;
-	cairo_t *cr;
-
-	pango_layout_get_pixel_size(layout, &w, &h);
-	if (w < 1 || h < 1) return;
-
-	source = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-
-	cr = cairo_create (source);
-	cairo_set_source_rgb(cr, 0, 0, 0);
-	cairo_rectangle (cr, 0, 0, w, h);
-	cairo_fill (cr);
-	cairo_set_source_rgb(cr, 1, 1, 1);
-	pango_cairo_show_layout (cr, layout);
-	cairo_destroy (cr);
-
-	buffer = gdk_pixbuf_new_from_data (cairo_image_surface_get_data (source),
-	                                   GDK_COLORSPACE_RGB,
-	                                   cairo_image_surface_get_format (source) == CAIRO_FORMAT_ARGB32,
-	                                   8,
-	                                   cairo_image_surface_get_width (source),
-	                                   cairo_image_surface_get_height (source),
-	                                   cairo_image_surface_get_stride (source),
-	                                   nullptr,
-	                                   nullptr);
-
-	sx = 0;
-	sy = 0;
-	dw = gdk_pixbuf_get_width(pixbuf);
-	dh = gdk_pixbuf_get_height(pixbuf);
-
-	if (x < 0)
-		{
-		w += x;
-		sx = -x;
-		x = 0;
-		}
-
-	if (y < 0)
-		{
-		h += y;
-		sy = -y;
-		y = 0;
-		}
-
-	if (x + w > dw)	w = dw - x;
-	if (y + h > dh) h = dh - y;
-
-	pixbuf_copy_font(buffer, sx, sy, pixbuf, x, y, w, h, color);
-
-	g_object_unref(buffer);
-	cairo_surface_destroy(source);
+	g_autoptr(GdkPixbuf) src_pixbuf = pixbuf_from_cairo_surface(surface);
+	cairo_surface_destroy(surface);
+	if (src_pixbuf) gdk_pixbuf_copy_area(src_pixbuf, 0, 0, width, height, dest_pixbuf, 0, 0);
 }
 
 /*

@@ -26,9 +26,8 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <cstdio>
-#include <cstdlib>
 #include <string>
+#include <vector>
 
 #include <gio/gio.h>
 #include <glib-object.h>
@@ -86,8 +85,6 @@
 #include "view-dir.h"
 #include "view-file.h"
 #include "window.h"
-
-extern const ActionDef app_actions[];
 
 namespace
 {
@@ -300,7 +297,7 @@ bool layout_handle_user_defined_mouse_buttons(LayoutWindow *lw, guint button)
 
 		if (g_strstr_len(action_name, -1, ".desktop") != nullptr)
 			{
-			file_util_start_editor_from_filelist(action_name, layout_selection_list(lw), layout_get_path(lw), lw->window);
+			file_util_start_editor_from_filelist(action_name, layout_selection_list(lw), lw->vf && lw->vf->collection ? nullptr : layout_get_path(lw), lw->window);
 			}
 		else
 			{
@@ -377,11 +374,11 @@ static void layout_menu_clear_marks_cb(GSimpleAction *, GVariant *, gpointer)
 
 static void layout_menu_new_collection_cb(GSimpleAction *, GVariant *, gpointer)
 {
-	auto lw = get_current_layout();
-
-	layout_exit_fullscreen(lw);
-
-		collection_window_new(nullptr);
+	LayoutWindow *lw = layout_new_from_default();
+	CollectionData *collection = collection_new(nullptr);
+	collection->changed = TRUE;
+	layout_set_collection(lw, collection);
+	collection_unref(collection);
 }
 
 static void layout_menu_search_cb(GSimpleAction *, GVariant *, gpointer)
@@ -419,7 +416,7 @@ static void layout_menu_dir_cb(GSimpleAction *, GVariant *, gpointer)
 {
 	auto lw = get_current_layout();
 
-	if (lw->vd) vd_new_folder(lw->vd, lw->dir_fd);
+	if (lw->vd && (!lw->vf || !lw->vf->collection)) vd_new_folder(lw->vd, lw->dir_fd);
 }
 
 static void layout_menu_copy_cb(GSimpleAction *, GVariant *, gpointer)
@@ -973,14 +970,7 @@ static void open_file_cb(GFile *file, gpointer)
 
 		history_list_add_to_key("open_file", dirname, 0);
 
-		if (g_str_has_suffix(filename, GQ_COLLECTION_EXT))
-			{
-			collection_window_new(filename);
-			}
-		else
-			{
-			layout_set_path(get_current_layout(), filename);
-			}
+		layout_set_path(get_current_layout(), filename);
 		}
 }
 
@@ -991,14 +981,7 @@ static void open_recent_path(const gchar *file_name)
 		return;
 		}
 
-	if (g_str_has_suffix(file_name, GQ_COLLECTION_EXT))
-		{
-		collection_window_new(file_name);
-		}
-	else
-		{
-		layout_set_path(get_current_layout(), file_name);
-		}
+	layout_set_path(get_current_layout(), file_name);
 }
 
 struct OpenRecentDialogData
@@ -1185,6 +1168,7 @@ static void layout_menu_open_recent_file_cb(GSimpleAction *, GVariant *, gpointe
 	open_recent_dialog_update(dialog_data);
 
 	gtk_window_present(GTK_WINDOW(dialog_data->gd->dialog));
+	if (gtk_widget_get_first_child(dialog_data->list)) gtk_widget_grab_focus(dialog_data->list);
 }
 
 static void open_collection_cb(GFile *file, gpointer)
@@ -1203,7 +1187,7 @@ static void open_collection_cb(GFile *file, gpointer)
 
 		if (file_extension_match(filename, GQ_COLLECTION_EXT))
 			{
-			collection_window_new(filename);
+			layout_set_path(get_current_layout(), filename);
 			}
 		}
 }
@@ -1831,12 +1815,11 @@ static constexpr KeyboardMapScope keyboard_map_scopes[] =
 {
 	{ N_("Main Window"), "win.main-win-", "main_window" },
 	{ N_("Image View Window"), "win.image-win-", "image_view_window" },
-	{ N_("Collection Window"), "win.collection-win-", "collection_window" },
 	{ N_("Duplicates Window"), "win.dupe-win-", "duplicates_window" },
 	{ N_("Pan View Window"), "win.pan-win-", "pan_view_window" },
 	{ N_("Search Window"), "win.search-win-", "search_window" },
 	{ N_("Advanced EXIF Window"), "win.advanced-exif-win-", "advanced_exif_window" },
-	{ N_("View File Window"), "win.view-file-", "view_file_window" },
+	{ N_("Files Pane"), "win.view-file-", "view_file_window" },
 	{ N_("All Windows"), nullptr, "all_windows" },
 };
 
@@ -2612,9 +2595,26 @@ static void layout_menu_window_from_current_cb(GSimpleAction *, GVariant *, gpoi
 		}
 
 	auto *lw = static_cast<LayoutWindow *>(data);
+	CollectionData *collection = lw->vf ? lw->vf->collection : nullptr;
+	std::vector<LayoutWindow *> existing_windows;
+	if (collection)
+		{
+		collection_ref(collection);
+		layout_window_foreach([&existing_windows](LayoutWindow *window) { existing_windows.push_back(window); });
+		}
 	save_config_to_file(tmp_file_in, options, lw);
 	change_window_id(tmp_file_in, tmp_file_out);
-	load_config_from_file(tmp_file_out, FALSE);
+	if (load_config_from_file(tmp_file_out, FALSE) && collection)
+		{
+			LayoutWindow *new_window = nullptr;
+			layout_window_foreach([&](LayoutWindow *window)
+				{
+				if (!new_window && std::find(existing_windows.begin(), existing_windows.end(), window) == existing_windows.end())
+					new_window = window;
+				});
+			if (new_window) layout_set_collection(new_window, collection);
+		}
+	if (collection) collection_unref(collection);
 
 	unlink_file(tmp_file_in);
 	unlink_file(tmp_file_out);
@@ -2672,7 +2672,7 @@ void plugin_run_cb(GSimpleAction *, GVariant *parameter, gpointer user_data)
 
 	lw = get_current_layout();
 
-	file_util_start_editor_from_filelist(key, layout_selection_list(lw), layout_get_path(lw), lw->window);
+	file_util_start_editor_from_filelist(key, layout_selection_list(lw), lw->vf && lw->vf->collection ? nullptr : layout_get_path(lw), lw->window);
 
 
     /* run ed->exec, etc. */
@@ -2815,11 +2815,29 @@ void layout_actions_add_window(LayoutWindow *lw, GtkWidget *window)
 	register_actions_from_table(GTK_APPLICATION(app), window, get_main_actions(), get_keyfile_merged(), lw);
 }
 
+static void layout_menu_bar_use_sliding_submenus(GtkWidget *widget)
+{
+	/* Sliding submenus avoid focus and input-grab problems caused by nested popovers. */
+	if (GTK_IS_POPOVER_MENU(widget) &&
+	    gtk_popover_menu_get_flags(GTK_POPOVER_MENU(widget)) != GTK_POPOVER_MENU_SLIDING)
+		{
+		gtk_popover_menu_set_flags(GTK_POPOVER_MENU(widget), GTK_POPOVER_MENU_SLIDING);
+		}
+
+	for (GtkWidget *child = gtk_widget_get_first_child(widget);
+	     child;
+	     child = gtk_widget_get_next_sibling(child))
+		{
+		layout_menu_bar_use_sliding_submenus(child);
+		}
+}
+
 GtkWidget *layout_actions_menu_bar(LayoutWindow *lw)
 {
 	if (lw->menu_bar) return lw->menu_bar;
 
 	lw->menu_bar = gtk_popover_menu_bar_new_from_model(lw->menu_model);
+	layout_menu_bar_use_sliding_submenus(lw->menu_bar);
 
 	return g_object_ref(lw->menu_bar);
 }
@@ -3030,21 +3048,21 @@ void layout_toolbar_add_default(LayoutWindow *lw, ToolbarType type)
 }
 
 
-void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, GString *outstr, gint indent)
+void layout_toolbar_write_config(LayoutWindow *lw, ToolbarType type, RcString &rc)
 {
 	const gchar *name = toolbar_type_config_name(type);
 
 	WRITE_NL(); WRITE_FORMAT_STRING("<%s>", name);
-	indent++;
+	rc.indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 	for (GList *work = lw->toolbar_actions[type]; work; work = work->next)
 		{
-		auto action = static_cast<gchar *>(work->data);
+		auto *action = static_cast<gchar *>(work->data);
 		WRITE_NL(); WRITE_STRING("<toolitem ");
 		WRITE_CHAR_FULL("action", action);
 		WRITE_STRING("/>");
 		}
-	indent--;
+	rc.indent--;
 	WRITE_NL(); WRITE_FORMAT_STRING("</%s>", name);
 }
 
@@ -3706,78 +3724,6 @@ void register_main_window_actions(GtkApplication *app,  LayoutWindow *lw)
 
 	register_actions_from_table(app, lw->window, main_actions, accels_keyfile, lw);
 	layout_menu_new_window_update(lw);
-}
-
-GStrv get_tooltips()
-{
-	GPtrArray *array = g_ptr_array_new_with_free_func(g_free);
-
-	for (const auto & app_action : app_actions)
-		{
-		if (app_action.description)
-			{
-			g_ptr_array_add(array, g_strdup(app_action.description));
-			}
-		}
-
-	g_ptr_array_add(array, nullptr);  /* NULL terminate */
-
-	return (GStrv) g_ptr_array_free(array, FALSE);
-}
-
-struct ActionLine
-{
-	const char *action_name;
-	const char *description;
-};
-
-struct ActionLine2
-{
-	const char *action_name;
-};
-
-GStrv get_actions_for_toolbar()
-{
-	size_t n_app_actions = G_N_ELEMENTS(app_actions);
-
-	std::vector<ActionLine2> rows;
-	rows.reserve(n_app_actions);
-
-	size_t max_entry_len = 0;
-
-	for (size_t i = 0; i < n_app_actions; i++)
-		{
-		if (!app_actions[i].icon_name)
-			{
-			continue;
-			}
-
-		if (!app_actions[i].action_name || !app_actions[i].description || (g_strcmp0(app_actions[i].icon_name, GQ_ICON_MISSING_IMAGE) == 0) || app_actions[i].parameter_type || !app_actions[i].icon_name)
-			{
-			continue;
-			}
-
-		rows.push_back({ app_actions[i].action_name});
-
-		size_t len = strlen(app_actions[i].description);
-		max_entry_len = std::max(len, max_entry_len);
-		}
-
-	std::sort(rows.begin(), rows.end(), [](const ActionLine2 & a, const ActionLine2 & b)
-		{
-		return g_strcmp0(a.action_name, b.action_name) < 0;
-		});
-
-	GPtrArray *array = g_ptr_array_new_with_free_func(g_free);
-
-	for (const auto &row : rows)
-		{
-		g_ptr_array_add(array, g_strdup_printf("%s", row.action_name));
-		}
-
-	g_ptr_array_add(array, nullptr);
-
-	return (GStrv) g_ptr_array_free(array, FALSE);
 }
 
 const ActionDef *get_app_actions()

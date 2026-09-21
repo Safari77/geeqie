@@ -35,9 +35,11 @@ enum DirViewType : guint;
 enum FileViewType : guint;
 enum ImageSplitMode : gint;
 
+struct CollectionData;
 struct AnimationData;
 struct FullScreenData;
 struct ImageWindow;
+struct RcString;
 struct SlideShow;
 struct ViewDir;
 struct ViewFile;
@@ -94,6 +96,10 @@ struct LayoutOptions
 	struct {
 		gint vdivider_pos;
 	} folder_window;
+
+	struct {
+		gint vdivider_pos;
+	} file_view_list;
 
 	struct {
 		guint state;
@@ -186,6 +192,8 @@ GtkBuilder *builder;
 
 	GtkWidget *menu_tool_bar; /**< Combined menu and toolbar box */
 	GtkWidget *menu_bar; /**< referenced by lw, exist during whole lw lifetime */
+	GtkWidget *hamburger_menu_button;
+	GtkWidget *hamburger_menu_previous_focus;
 	GMenuModel *menu_model;
 	/* toolbar */
 
@@ -205,6 +213,7 @@ GtkBuilder *builder;
 	LayoutLocation file_location;
 
 	ViewFile *vf;
+	gpointer collection_confirm_data = nullptr;
 
 	GtkWidget *file_view;
 
@@ -255,7 +264,7 @@ gboolean layout_valid(LayoutWindow **lw);
 void layout_show_config_window(LayoutWindow *lw);
 
 void layout_sync_options_with_current_state(LayoutWindow *lw);
-void layout_write_config(LayoutWindow *lw, GString *outstr, gint indent);
+void layout_write_config(LayoutWindow *lw, RcString &rc);
 
 
 LayoutWindow *layout_find_by_image(ImageWindow *imd);
@@ -265,6 +274,8 @@ LayoutWindow *layout_find_by_layout_id(const gchar *id);
 const gchar *layout_get_path(LayoutWindow *lw);
 gboolean layout_set_path(LayoutWindow *lw, const gchar *path);
 gboolean layout_set_fd(LayoutWindow *lw, FileData *fd);
+gboolean layout_set_collection(LayoutWindow *lw, CollectionData *cd);
+gboolean layout_confirm_collection_leave(LayoutWindow *lw, const std::function<void()> &continuation, gboolean force);
 
 void layout_status_update_progress(LayoutWindow *lw, gdouble val, const gchar *text);
 void layout_status_update_info(LayoutWindow *lw, const gchar *text);

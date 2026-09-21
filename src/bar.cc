@@ -387,28 +387,6 @@ static void bar_expander_cb(GObject *object, GParamSpec *, gpointer)
 		gtk_widget_set_vexpand(GTK_WIDGET(expander), FALSE);
 		gtk_widget_set_visible(child, FALSE);
 		}
-
-	auto *image = static_cast<GtkImage *>(g_object_get_data(G_OBJECT(expander), "bar_expander_button_image"));
-	if (image)
-		{
-		gtk_image_set_from_icon_name(image, gtk_expander_get_expanded(expander) ? GQ_ICON_PAN_UP : GQ_ICON_PAN_DOWN);
-		}
-}
-
-static GtkWidget *bar_expander_label_widget_new(GtkWidget *expander, GtkWidget *title)
-{
-	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
-	GtkWidget *image = gtk_image_new_from_icon_name(gtk_expander_get_expanded(GTK_EXPANDER(expander)) ? GQ_ICON_PAN_UP : GQ_ICON_PAN_DOWN);
-
-	gtk_widget_set_tooltip_text(expander, _("Expand or collapse pane"));
-	gtk_box_append(GTK_BOX(box), image);
-	gtk_box_append(GTK_BOX(box), title);
-	gtk_widget_set_hexpand(title, TRUE);
-	gtk_widget_set_halign(title, GTK_ALIGN_FILL);
-
-	g_object_set_data(G_OBJECT(expander), "bar_expander_button_image", image);
-
-	return box;
 }
 
 static GtkWidget *bar_menu_add_button_new(GtkWidget *toolbar)
@@ -557,7 +535,7 @@ void bar_clear(GtkWidget *bar)
 		}
 }
 
-void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
+void bar_write_config(GtkWidget *bar, RcString &rc)
 {
 	if (!bar) return;
 
@@ -569,7 +547,7 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 	WRITE_INT(*bd, width);
 	WRITE_STRING(">");
 
-	indent++;
+	rc.indent++;
 	WRITE_NL(); WRITE_STRING("<clear/>");
 
 	for (GtkWidget *expander = gtk_widget_get_first_child(bd->vbox);
@@ -584,10 +562,10 @@ void bar_write_config(GtkWidget *bar, GString *outstr, gint indent)
 		pd->expanded = gtk_expander_get_expanded(GTK_EXPANDER(expander));
 
 		if (pd->pane_write_config)
-			pd->pane_write_config(widget, outstr, indent);
+			pd->pane_write_config(widget, rc);
 		}
 
-	indent--;
+	rc.indent--;
 	WRITE_NL(); WRITE_STRING("</bar>");
 }
 
@@ -616,10 +594,12 @@ void bar_add(GtkWidget *bar, GtkWidget *pane)
 
 	GtkWidget *expander = gtk_expander_new(nullptr);
 	DEBUG_NAME(expander);
-	gtk_widget_add_css_class(expander, "bar-pane-expander");
+	gtk_widget_set_tooltip_text(expander, _("Expand or collapse pane"));
 	if (pd && pd->title)
 		{
-		gtk_expander_set_label_widget(GTK_EXPANDER(expander), bar_expander_label_widget_new(expander, pd->title));
+		gtk_widget_set_hexpand(pd->title, TRUE);
+		gtk_widget_set_halign(pd->title, GTK_ALIGN_FILL);
+		gtk_expander_set_label_widget(GTK_EXPANDER(expander), pd->title);
 		}
 
 	gtk_box_append(GTK_BOX(bd->vbox), expander);
@@ -666,8 +646,7 @@ void bar_close(GtkWidget *bar)
 	bd = static_cast<BarData *>(g_object_get_data(G_OBJECT(bar), "bar_data"));
 	if (!bd) return;
 
-	/* @FIXME This causes a g_object_unref failed error on exit */
-	gtk_box_remove(GTK_BOX(gtk_widget_get_parent(bd->widget)), bd->widget);
+	widget_remove_from_parent(bd->widget);
 }
 
 static void bar_destroy(gpointer data)
@@ -770,14 +749,29 @@ GtkWidget *bar_new_from_config(LayoutWindow *lw, const gchar **attribute_names, 
 	return bar_update_from_config(bar, attribute_names, attribute_values, lw, TRUE);
 }
 
-GtkWidget *bar_pane_expander_title(const gchar *title)
+static bool bar_pane_common_event(GtkWidget *, GdkEvent *)
 {
-	GtkWidget *widget = gtk_label_new(title);
+	return false;
+}
 
-	pref_label_bold(widget, TRUE, FALSE);
-	gtk_label_set_ellipsize(GTK_LABEL(widget), PANGO_ELLIPSIZE_END);
+void bar_pane_common_init(PaneData &pane, const gchar *id, const gchar *title, gboolean expanded, PaneType type)
+{
+	pane.pane_event = bar_pane_common_event;
 
-	return widget;
+	pane.title = gtk_label_new(title);
+	pref_label_bold(pane.title, TRUE, FALSE);
+	gtk_label_set_ellipsize(GTK_LABEL(pane.title), PANGO_ELLIPSIZE_END);
+
+	pane.expanded = expanded;
+	pane.id = g_strdup(id);
+	pane.type = type;
+}
+
+void bar_pane_common_write_config(const PaneData &pane, RcString &rc)
+{
+	WRITE_CHAR(pane, id);
+	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(pane.title)));
+	WRITE_BOOL(pane, expanded);
 }
 
 gboolean bar_pane_translate_title(PaneType type, const gchar *id, gchar **title)

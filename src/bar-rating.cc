@@ -77,18 +77,14 @@ static void bar_pane_rating_set_fd(GtkWidget *pane, FileData *fd)
 	bar_pane_rating_update(prd);
 }
 
-static void bar_pane_rating_write_config(GtkWidget *pane, GString *outstr, gint indent)
+static void bar_pane_rating_write_config(GtkWidget *pane, RcString &rc)
 {
-	PaneRatingData *prd;
-
-	prd = static_cast<PaneRatingData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
+	auto *prd = static_cast<PaneRatingData *>(g_object_get_data(G_OBJECT(pane), "pane_data"));
 	if (!prd) return;
 
 	WRITE_NL();
 	WRITE_STRING("<pane_rating ");
-	WRITE_CHAR(prd->pane, id);
-	WRITE_CHAR_FULL("title", gtk_label_get_text(GTK_LABEL(prd->pane.title)));
-	WRITE_BOOL(prd->pane, expanded);
+	bar_pane_common_write_config(prd->pane, rc);
 	WRITE_STRING("/>");
 }
 
@@ -152,11 +148,7 @@ static GtkWidget *bar_pane_rating_new(const gchar *id, const gchar *title, gbool
 
 	prd->pane.pane_set_fd = bar_pane_rating_set_fd;
 	prd->pane.pane_write_config = bar_pane_rating_write_config;
-	prd->pane.title = bar_pane_expander_title(title);
-	prd->pane.id = g_strdup(id);
-	prd->pane.type = PANE_RATING;
-
-	prd->pane.expanded = expanded;
+	bar_pane_common_init(prd->pane, id, title, expanded, PANE_RATING);
 
 	prd->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, PREF_PAD_GAP);
 

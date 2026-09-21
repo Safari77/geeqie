@@ -149,24 +149,6 @@
         </listitem>
       </varlistentry>
     </variablelist>
-    <variablelist>
-      <varlistentry>
-        <term>
-          <guilabel>Collection preview</guilabel>
-        </term>
-        <listitem>
-          <para>
-            If thumbnail caching is enabled and you open the
-            <emphasis role="underline"><link linkend="GuideReferenceConfig">Collections folder</link></emphasis>
-            , 
-            Geeqie will display a preview of the collections as a thumbnail montage. This option limits the number of thumbnails displayed in each preview.
-            <note>
-              <para>ImageMagick is required for this feature.</para>
-            </note>
-          </para>
-        </listitem>
-      </varlistentry>
-    </variablelist>
   </section>
   <section id="StarRatingCharacters">
     <title>Star Rating</title>
@@ -259,10 +241,6 @@
     <note>
       <para>Geeqie must be restarted for changes to take effect.</para>
     </note>
-  </section>
-  <section id="AppImageUpdatesNotifications">
-    <title>AppImage updates notifications</title>
-    <para>Show a notification on start-up if the server has a newer version than the current. Requires an Internet connection. Displayed only if an AppImage is being run.</para>
   </section>
   <section id="PredefinedKeywordTree">
     <title>Show predefined keyword tree</title>
