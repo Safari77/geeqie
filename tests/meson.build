@@ -6,8 +6,10 @@ unit_test_sources = files(
 'filedata/filedata.cc',
 'filedata/filelist.cc',
 'filedata/ref.cc',
+'history-list.cc',
 'keyboard-shortcuts.cc',
 'layout-image-navigation.cc',
-'pixbuf-util.cc')
+'pixbuf-util.cc',
+'ui-tree-edit.cc')
 
 project_sources += unit_test_sources

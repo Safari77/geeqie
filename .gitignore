@@ -8,7 +8,7 @@
 # /subprojects
 /subprojects/.wraplock
 /subprojects/packagecache
-/subprojects/googletest-release-*
+/subprojects/googletest-*
 
 /build
 /debian/geeqie*
